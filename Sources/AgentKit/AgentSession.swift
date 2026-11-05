@@ -135,12 +135,15 @@ public struct AgentSessionConfig: Sendable {
     /// Extra writable roots for sandboxed modes (e.g. the main repo's .git dir, which worktrees write into).
     public var extraWritableRoots: [String]
     public var appendSystemPrompt: String?
+    /// Where the agent process runs (this Mac, or `ssh` into a cloud machine).
+    public var host: any ExecutionHost
 
     public init(
         cwd: String, model: String? = nil, effort: String? = nil, permissionMode: AgentPermissionMode = .bypass,
         resumeSessionID: String? = nil, environment: [String: String] = [:], extraWritableRoots: [String] = [],
-        appendSystemPrompt: String? = nil
+        appendSystemPrompt: String? = nil, host: any ExecutionHost = LocalHost.shared
     ) {
+        self.host = host
         self.cwd = cwd
         self.model = model
         self.effort = effort

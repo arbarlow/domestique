@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         // Everything below the UI, linked by the Xcode app target (Domestique.xcodeproj).
-        .library(name: "DomestiqueKit", targets: ["DQCore", "AgentKit", "GitKit", "GitHubKit", "ProcessKit"]),
+        .library(name: "DomestiqueKit", targets: ["DQCore", "AgentKit", "GitKit", "GitHubKit", "ProcessKit", "HostKit"]),
         // `swift run DomestiqueDev` runs the same UI sources without Xcode (no bundle; dev only).
         .executable(name: "DomestiqueDev", targets: ["DomestiqueDev"]),
         .executable(name: "dq", targets: ["dq"]),
@@ -25,19 +25,22 @@ let package = Package(
         .target(name: "GitHubKit", dependencies: ["DQCore"]),
         // Setup scripts, run tasks, logs, listening-port detection.
         .target(name: "ProcessKit", dependencies: ["DQCore"]),
+        // Cloud machines: boat.dev API, multiplexed SSH, port forwarding.
+        .target(name: "HostKit", dependencies: ["DQCore"]),
         // The macOS app.
         .executableTarget(
             name: "DomestiqueDev",
-            dependencies: ["DQCore", "AgentKit", "GitKit", "GitHubKit", "ProcessKit", "SwiftTerm"],
+            dependencies: ["DQCore", "AgentKit", "GitKit", "GitHubKit", "ProcessKit", "HostKit", "SwiftTerm"],
             path: "Sources/Domestique",
             exclude: ["Resources"]  // asset catalog (app icon) is compiled by the Xcode app target
         ),
         // CLI harness for poking the agent layer without the UI.
-        .executableTarget(name: "dq", dependencies: ["DQCore", "AgentKit"]),
+        .executableTarget(name: "dq", dependencies: ["DQCore", "AgentKit", "HostKit", "GitKit", "ProcessKit"]),
         .testTarget(name: "DQCoreTests", dependencies: ["DQCore"]),
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"]),
         .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
         .testTarget(name: "ProcessKitTests", dependencies: ["ProcessKit"]),
+        .testTarget(name: "HostKitTests", dependencies: ["HostKit"]),
     ]
 )

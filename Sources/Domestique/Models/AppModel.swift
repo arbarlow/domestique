@@ -4,6 +4,7 @@ import DQCore
 import Foundation
 import GitHubKit
 import GitKit
+import HostKit
 import Observation
 import ProcessKit
 
@@ -29,6 +30,23 @@ final class AppModel {
     }
     /// Usage left per provider, from rate-limit events (0...1 used), for the sidebar ring.
     var usage: [ProviderKind: UsageInfo] = [:]
+    /// Cloud machine status + actions (boat.dev).
+    @ObservationIgnored private(set) var cloud: CloudMachines!
+    /// Progress line for workspaces being created ("Cloning …").
+    var creationSteps: [UUID: String] = [:]
+    /// Brief confirmation shown at the bottom of the window.
+    var toast: String? {
+        didSet {
+            guard toast != nil else { return }
+            toastTask?.cancel()
+            toastTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled else { return }
+                self?.toast = nil
+            }
+        }
+    }
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
 
     func recordUsage(_ info: RateLimitInfo, for provider: ProviderKind) {
         usage[provider, default: UsageInfo()].merge(info)
@@ -47,6 +65,9 @@ final class AppModel {
         // Anything mid-creation when we last quit didn't finish.
         for i in state.workspaces.indices {
             switch state.workspaces[i].state {
+            case .creating where state.workspaces[i].path.hasPrefix(BoatHost.home):
+                // A cloud workspace whose sandbox/clone didn't finish before we quit.
+                state.workspaces[i].state = .failed("Creation was interrupted. Archive this workspace and create a new one.")
             case .creating, .settingUp: state.workspaces[i].state = .ready
             default: break
             }
@@ -54,6 +75,7 @@ final class AppModel {
         let loaded = state
         self.state = state
         lastDataVersion = Store.shared.dataVersion()
+        cloud = CloudMachines(app: self)
         Task {
             await Store.shared.markLoaded(loaded)
             self.scheduleSave()  // persists any launch fix-ups above
@@ -86,6 +108,7 @@ final class AppModel {
             let page = i + 1 < args.count ? args[i + 1] : "general"
             switch page {
             case "agents": settingsRoute = .agents
+            case "cloud": settingsRoute = .cloud
             case "repo": settingsRoute = state.repositories.first.map { .repo($0.id) } ?? .general
             default: settingsRoute = .general
             }
@@ -98,6 +121,15 @@ final class AppModel {
             selectedWorkspaceID = activeWorkspaces(in: repo).first?.id
         } else {
             await addRepository(path: path)
+        }
+        // `--new-workspace local|boat` creates a fresh workspace there (e.g. to try a cloud workspace).
+        if let n = args.firstIndex(of: "--new-workspace"), n + 1 < args.count,
+            let repo = selectedWorkspaceModel?.repo ?? state.repositories.first(where: {
+                URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path == path
+            })
+        {
+            let loc = WorkspaceLocation.all.first { $0.id == args[n + 1] } ?? .local
+            await createWorkspace(in: repo, location: loc)
         }
         if let p = args.firstIndex(of: "--prompt"), p + 1 < args.count, let model = selectedWorkspaceModel {
             model.selectedChat?.send(text: args[p + 1])
@@ -140,8 +172,12 @@ final class AppModel {
             composerFocusRequest += 1
             if let newValue, let ws = workspace(newValue) { selectedRepoID = ws.repoID }
             guard state.selectedWorkspaceID != newValue else { return }
+            if let old = state.selectedWorkspaceID { workspaceModels[old]?.supervisor?.isFocused = false }
             state.selectedWorkspaceID = newValue
-            if let newValue { updateWorkspace(newValue) { $0.hasUnread = false } }
+            if let newValue {
+                updateWorkspace(newValue) { $0.hasUnread = false }
+                workspaceModels[newValue]?.supervisor?.isFocused = true
+            }
             scheduleSave()
         }
     }
@@ -323,12 +359,17 @@ final class AppModel {
     // MARK: workspaces
 
     /// New workspace = fresh worktree branched from a just-fetched origin/<default>. Never from the local checkout.
-    func createWorkspace(in repo: Repository, provider: ProviderKind? = nil) async {
+    func createWorkspace(in repo: Repository, provider: ProviderKind? = nil, location: WorkspaceLocation? = nil) async {
+        let location = location ?? defaultLocation(for: repo)
         let used = Set(state.workspaces.filter { $0.repoID == repo.id }.map(\.name))
         let name = WorkspaceNames.next(excluding: used)
         let prefix = settings.branchPrefix.trimmingCharacters(in: .whitespaces)
         let branch = prefix.isEmpty ? name : "\(prefix)/\(name)"
-        let path = Paths.workspacesRoot.appendingPathComponent(repo.name).appendingPathComponent(name).path
+        let remote = location != .local
+        let path =
+            remote
+            ? "\(BoatHost.home)/\(repo.name)"
+            : Paths.workspacesRoot.appendingPathComponent(repo.name).appendingPathComponent(name).path
         let usedPorts = Set(state.workspaces.filter { !$0.isArchived }.map(\.portBase))
         let portBase = PortAllocator.allocate(used: usedPorts)
         let provider = provider ?? settings.defaultProvider
@@ -343,6 +384,21 @@ final class AppModel {
         scheduleSave()
 
         Trace.log("ws created, selected")
+        if remote {
+            do {
+                try await provisionBoatWorkspace(ws.id, repo: repo)
+                setCreationStep(ws.id, "Running setup")
+                let model = model(for: ws.id)
+                await model.loadConfigAsync()
+                await model.runSetup()
+                creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .ready }
+            } catch {
+                creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .failed(error.localizedDescription) }
+            }
+            return
+        }
         do {
             try await Git.fetch(repoPath: repo.path, branch: repo.defaultBranch)
             Trace.log("fetched")
@@ -372,13 +428,15 @@ final class AppModel {
         if let m = existingModel(for: ws.id) {
             await m.prepareForArchive()
         }
-        do {
+        if ws.isRemote {
+            await archiveRemote(ws)
+        } else { do {
             if FileManager.default.fileExists(atPath: ws.path) {
                 try await Git.removeWorktree(repoPath: repo.path, path: ws.path, force: true)
             }
         } catch {
             alert = AppAlert(title: "Couldn't remove worktree", message: error.localizedDescription)
-        }
+        } }
         workspaceModels[ws.id] = nil
         updateWorkspace(ws.id) { $0.state = .archived }
         if selectedWorkspaceID == ws.id {
@@ -389,7 +447,11 @@ final class AppModel {
     func deleteArchived(_ ws: Workspace) async {
         guard ws.isArchived else { return }
         for tab in ws.tabs { await Store.shared.deleteTranscript(tabID: tab.id) }
-        if let repo = repo(ws.repoID) { try? await Git.deleteBranch(repoPath: repo.path, branch: ws.branch) }
+        if ws.isRemote {
+            await deleteRemote(ws)
+        } else if let repo = repo(ws.repoID) {
+            try? await Git.deleteBranch(repoPath: repo.path, branch: ws.branch)
+        }
         state.workspaces.removeAll { $0.id == ws.id }
         scheduleSave()
     }
@@ -474,6 +536,9 @@ final class AppModel {
         Task.detached {
             await Store.shared.save(state)
             await CodexAppServer.shared.shutdown()
+            for server in CodexAppServer.remoteServers { await server.shutdown() }
+            // Drop SSH masters and port forwards; the sandboxes keep running (and auto-stop).
+            for host in Hosts.allBoatHosts { await host.ssh.closeMaster() }
             sem.signal()
         }
         _ = sem.wait(timeout: .now() + 2)
@@ -483,6 +548,7 @@ final class AppModel {
 enum SettingsRoute: Hashable {
     case general
     case agents
+    case cloud
     case repo(UUID)
 }
 

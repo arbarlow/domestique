@@ -117,7 +117,8 @@ public enum WorkspaceEnvironment {
             "DOMESTIQUE": "1",
             "DOMESTIQUE_WORKSPACE": workspace.name,
             "DOMESTIQUE_WORKSPACE_PATH": workspace.path,
-            "DOMESTIQUE_ROOT_PATH": repo.path,
+            // A cloud workspace has no main checkout on its machine: the clone is the root.
+            "DOMESTIQUE_ROOT_PATH": workspace.isRemote ? workspace.path : repo.path,
             "DOMESTIQUE_BRANCH": workspace.branch,
             "DOMESTIQUE_DEFAULT_BRANCH": repo.defaultBranch,
             "DOMESTIQUE_PORT": String(workspace.portBase),
@@ -125,7 +126,7 @@ public enum WorkspaceEnvironment {
         for i in 0..<portCount { env["DOMESTIQUE_PORT_\(i)"] = String(workspace.portBase + i) }
         // Compatibility: scripts written for Conductor read these names.
         env["CONDUCTOR_PORT"] = String(workspace.portBase)
-        env["CONDUCTOR_ROOT_PATH"] = repo.path
+        env["CONDUCTOR_ROOT_PATH"] = workspace.isRemote ? workspace.path : repo.path
         env["CONDUCTOR_WORKSPACE_PATH"] = workspace.path
         env["CONDUCTOR_WORKSPACE_NAME"] = workspace.name
         env["CONDUCTOR_DEFAULT_BRANCH"] = repo.defaultBranch

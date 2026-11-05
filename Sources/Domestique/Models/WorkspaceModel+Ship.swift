@@ -81,7 +81,8 @@ extension WorkspaceModel {
         guard let ws = workspace else { return }
         let key = "branch.\(ws.branch).gh-merge-base"
         let target = base
-        Task { try? await Shell.run("git", ["config", key, target], cwd: ws.path) }
+        let host = self.host
+        Task { try? await host.run("git", ["config", key, target], cwd: ws.path) }
     }
 
     /// Like Conductor: while the agent is opening the PR, look the branch up on GitHub every few
@@ -116,7 +117,7 @@ extension WorkspaceModel {
                 guard let ws = workspace else { return }
                 try? await Task.sleep(for: .milliseconds(400))
                 let ab = aheadBehind
-                let dirty = (try? await GitKitBridge.hasUncommitted(ws.path)) ?? false
+                let dirty = (try? await GitKitBridge.hasUncommitted(ws.path, host: self.host)) ?? false
                 if let ab, ab.ahead == 0, !dirty {
                     shipMessage = "Shipped to \(base) ✓"
                 } else if let ab, ab.ahead > 0 {
@@ -148,8 +149,8 @@ import GitKit
 
 /// Small indirection so this file doesn't depend on GitKit details elsewhere.
 enum GitKitBridge {
-    static func hasUncommitted(_ path: String) async throws -> Bool {
-        try await Git.hasUncommittedChanges(path: path)
+    static func hasUncommitted(_ path: String, host: any ExecutionHost) async throws -> Bool {
+        try await Git.hasUncommittedChanges(path: path, host: host)
     }
 }
 

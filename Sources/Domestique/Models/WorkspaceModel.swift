@@ -4,6 +4,7 @@ import DQCore
 import Foundation
 import GitHubKit
 import GitKit
+import HostKit
 import Observation
 import ProcessKit
 
@@ -76,6 +77,16 @@ final class WorkspaceModel {
     private(set) var terminals: [TerminalSession] = []
     var selectedTerminalID: UUID?
 
+    // Cloud: remote port -> local port forwarded to this Mac.
+    private(set) var forwards: [Int: Int] = [:]
+    private(set) var forwardErrors: [Int: String] = [:]
+    /// Ports the user turned off forwarding for (auto mode skips them).
+    var forwardingDisabled: Set<Int> = []
+    @ObservationIgnored private var forwardTask: Task<Void, Never>?
+    @ObservationIgnored private var lastSeen: [Int: Date] = [:]
+    private var remoteConfigExists = false
+    @ObservationIgnored private var stackStartPending = false
+
     // Right panel
     var panelTab: PanelTab = .changes
     var openedFile: OpenedFile?
@@ -89,6 +100,9 @@ final class WorkspaceModel {
     }
 
     var workspace: Workspace? { app.workspace(id) }
+    /// Where this workspace's code and processes live.
+    var host: any ExecutionHost { Hosts.host(for: workspace?.host) }
+    var isRemote: Bool { workspace?.host != nil }
     var repo: Repository? { workspace.flatMap { app.repo($0.repoID) } }
     var shipMode: ShipMode { workspace?.shipModeOverride ?? repo?.shipMode ?? .pullRequest }
 
@@ -191,6 +205,10 @@ final class WorkspaceModel {
     // MARK: config & tasks
 
     func loadConfig() {
+        if isRemote {
+            Task { await loadConfigAsync() }
+            return
+        }
         guard let ws = workspace, FileManager.default.fileExists(atPath: ws.path) else { return }
         do {
             let cfg = try RepoConfig.load(directory: ws.path)
@@ -208,24 +226,64 @@ final class WorkspaceModel {
         }
     }
 
+    /// Reads domestique.toml from wherever the workspace lives (the machine's clone first, then the
+    /// main checkout on this Mac).
+    func loadConfigAsync() async {
+        guard let ws = workspace else { return }
+        if !isRemote {
+            loadConfig()
+            return
+        }
+        let host = self.host
+        do {
+            var cfg: RepoConfig?
+            if let data = try await host.readFile(ws.path + "/" + RepoConfig.fileName, maxBytes: 1_000_000) {
+                remoteConfigExists = true
+                cfg = try RepoConfig.parse(toml: String(decoding: data, as: UTF8.self))
+            } else {
+                remoteConfigExists = false
+                cfg = repo.flatMap { try? RepoConfig.load(directory: $0.path) }
+            }
+            let resolved = cfg ?? RepoConfig()
+            config = resolved
+            configError = nil
+            if let supervisor {
+                supervisor.update(config: resolved)
+            } else {
+                await makeSupervisor(config: resolved)
+            }
+        } catch {
+            configError = error.localizedDescription
+        }
+    }
+
     private func makeSupervisor(config: RepoConfig) async {
         guard supervisor == nil, let ws = workspace else { return }
-        let login = await LoginEnvironment.shared.environment()
+        let host = self.host
+        // Remote tasks get only the workspace variables; the machine has its own PATH/HOME.
+        let login = host.isLocal ? await LoginEnvironment.shared.environment() : [:]
         // Re-check after the await: loadConfig and runSetup can race to create one.
         guard supervisor == nil else { return }
         let env = login.merging(environment) { $1 }
-        supervisor = TaskSupervisor(workspacePath: ws.path, config: config, environment: env)
+        let sup = TaskSupervisor(workspacePath: ws.path, config: config, environment: env, host: host)
+        sup.isFocused = app.selectedWorkspaceID == id
+        supervisor = sup
+        if !host.isLocal { startForwarding() }
     }
 
     var hasConfigFile: Bool {
         guard let ws = workspace else { return false }
+        if isRemote {
+            return remoteConfigExists || repo.map { FileManager.default.fileExists(atPath: $0.path + "/" + RepoConfig.fileName) } ?? false
+        }
         return FileManager.default.fileExists(atPath: ws.path + "/" + RepoConfig.fileName)
             || repo.map { FileManager.default.fileExists(atPath: $0.path + "/" + RepoConfig.fileName) } ?? false
     }
 
     func createConfigFile() {
         guard let ws = workspace else { return }
-        var path = ws.path + "/" + RepoConfig.fileName
+        // Cloud workspaces: the config lives in the main checkout on this Mac (the fallback they read).
+        var path = (isRemote ? (repo?.path ?? ws.path) : ws.path) + "/" + RepoConfig.fileName
         // Prefer an existing local-only config in the main checkout.
         if !FileManager.default.fileExists(atPath: path), let repo,
             FileManager.default.fileExists(atPath: repo.path + "/" + RepoConfig.fileName)
@@ -236,7 +294,7 @@ final class WorkspaceModel {
             try? RepoConfig.template.write(toFile: path, atomically: true, encoding: .utf8)
         }
         loadConfig()
-        openInEditor(path: path)
+        openLocally(path: path)
     }
 
     func runSetup() async {
@@ -249,7 +307,18 @@ final class WorkspaceModel {
     }
 
     func startDefaultStack() {
-        guard let supervisor, let config else { return }
+        guard let supervisor, let config else {
+            // Cloud workspaces read their config over SSH; run once it has arrived.
+            if isRemote, !stackStartPending {
+                stackStartPending = true
+                Task {
+                    await loadConfigAsync()
+                    stackStartPending = false
+                    if self.supervisor != nil, self.config != nil { self.startDefaultStack() }
+                }
+            }
+            return
+        }
         if let stack = config.stacks.first {
             if supervisor.isStackRunning(stack.id) {
                 supervisor.stopStack(stack.id)
@@ -296,17 +365,133 @@ final class WorkspaceModel {
             if let url = run.openURL, !run.ports.isEmpty, let port = url.port ?? run.ports.first,
                 seen.insert(port).inserted
             {
-                targets.append((0, OpenTarget(name: run.name, port: port, url: url)))
+                if let local = localURL(url, remotePort: port) {
+                    targets.append((0, OpenTarget(name: run.name, port: localPort(for: port) ?? port, url: local)))
+                }
             }
             for port in run.ports where seen.insert(port).inserted {
-                let url = URL(string: "http://localhost:\(port)")!
-                targets.append((webby ? 1 : 2, OpenTarget(name: run.name, port: port, url: url)))
+                guard let lp = localPort(for: port) else { continue }
+                let url = URL(string: "http://localhost:\(lp)")!
+                targets.append((webby ? 1 : 2, OpenTarget(name: run.name, port: lp, url: url)))
+            }
+        }
+        // Cloud: servers the agent started outside a task, once forwarded.
+        if isRemote {
+            for port in supervisor.remoteAppPorts where seen.insert(port).inserted {
+                guard let lp = forwards[port] else { continue }
+                targets.append((3, OpenTarget(name: "Port \(port)", port: lp, url: URL(string: "http://localhost:\(lp)")!)))
             }
         }
         return targets.sorted { ($0.score, $0.target.port) < ($1.score, $1.target.port) }.map(\.target)
     }
 
     var primaryOpenTarget: OpenTarget? { openTargets.first }
+
+    /// The port on this Mac that reaches `remotePort` (itself for local workspaces; nil until forwarded).
+    func localPort(for remotePort: Int) -> Int? { isRemote ? forwards[remotePort] : remotePort }
+
+    private func localURL(_ url: URL, remotePort: Int) -> URL? {
+        guard isRemote else { return url }
+        guard let lp = forwards[remotePort], var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        if c.host == nil || ["localhost", "127.0.0.1", "0.0.0.0"].contains(c.host!) { c.host = "localhost" }
+        c.port = lp
+        return c.url
+    }
+
+    // MARK: cloud: port forwarding
+
+    /// Keeps forwards in step with what listens on the machine: every port a task (or the agent)
+    /// opens is forwarded to the same port on this Mac, or the next free one.
+    private func startForwarding() {
+        forwardTask?.cancel()
+        forwardTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.syncForwards()
+                try? await Task.sleep(for: .seconds(1.5))
+            }
+        }
+    }
+
+    /// Ports worth forwarding: anything our runs own, plus anything new since the machine booted.
+    var forwardablePorts: [Int] {
+        guard let supervisor, isRemote else { return [] }
+        let owned = (supervisor.runs + supervisor.adhocRuns + [supervisor.setupRun].compactMap { $0 }).flatMap(\.ports)
+        return Array(Set(owned + supervisor.remoteAppPorts)).sorted()
+    }
+
+    private func syncForwards() async {
+        guard isRemote, let h = workspace?.host, let supervisor else { return }
+        let phase = app.cloud.status[h.machineID]?.phase
+        let ssh = Hosts.boatHost(h.machineID).ssh
+        guard phase == .running || phase == nil else {
+            if !forwards.isEmpty {
+                await ssh.cancelAllForwards()
+                forwards = [:]
+            }
+            return
+        }
+        let now = Date()
+        let auto = app.settings.boat.autoForwardPorts
+        let listening = Set(supervisor.remoteListening)
+        let wanted = Set(forwardablePorts).subtracting(forwardingDisabled).filter { auto || manualForwards.contains($0) }
+        for p in wanted { lastSeen[p] = now }
+        // Add new ones.
+        for remote in wanted.sorted() where forwards[remote] == nil {
+            let local = Self.pickLocalPort(preferred: remote, taken: Set(forwards.values))
+            do {
+                try await ssh.forward(local: local, remote: remote)
+                forwards[remote] = local
+                forwardErrors[remote] = nil
+            } catch {
+                forwardErrors[remote] = error.localizedDescription
+            }
+        }
+        // Drop ones that stopped listening for a while (a restarting dev server keeps its forward).
+        for (remote, local) in forwards where !listening.contains(remote) || forwardingDisabled.contains(remote) {
+            let gone = forwardingDisabled.contains(remote) || now.timeIntervalSince(lastSeen[remote] ?? .distantPast) > 15
+            if gone {
+                await ssh.cancelForward(local: local)
+                forwards[remote] = nil
+            }
+        }
+    }
+
+    /// Ports forwarded by hand when auto-forwarding is off.
+    var manualForwards: Set<Int> = []
+
+    func setForwarding(_ port: Int, enabled: Bool) {
+        if enabled {
+            forwardingDisabled.remove(port)
+            manualForwards.insert(port)
+        } else {
+            forwardingDisabled.insert(port)
+            manualForwards.remove(port)
+        }
+        Task { await syncForwards() }
+    }
+
+    /// Same port when it's free on this Mac, else the first free one above 20000.
+    static func pickLocalPort(preferred: Int, taken: Set<Int>) -> Int {
+        if !taken.contains(preferred), SSHConnection.isLocalPortFree(preferred) { return preferred }
+        var p = 20000 + (preferred % 10000)
+        while taken.contains(p) || !SSHConnection.isLocalPortFree(p) { p += 1 }
+        return p
+    }
+
+    /// The machine is about to stop (user action): stop runs/agents/terminals so nothing resumes it.
+    func machineWillStop() {
+        for c in chats.values { c.shutdown() }
+        supervisor?.shutdownNow()
+        for t in terminals { t.terminate() }
+        forwards = [:]
+    }
+
+    /// The machine came back (a resume): it has a new address, so reconnect what depends on it.
+    func machineDidStart() async {
+        if config == nil { await loadConfigAsync() }
+        supervisor?.probeNow()
+    }
 
     var canRunStack: Bool { !(config?.stacks.isEmpty ?? true) || (config?.tasks.contains { $0.kind == .service } ?? false) }
 
@@ -320,20 +505,22 @@ final class WorkspaceModel {
     // MARK: changes / files
 
     func refreshDiff() {
-        guard let ws = workspace, FileManager.default.fileExists(atPath: ws.path), !isLoadingDiff else { return }
+        guard let ws = workspace, !isLoadingDiff else { return }
+        guard isRemote ? remoteReady : FileManager.default.fileExists(atPath: ws.path) else { return }
         isLoadingDiff = true
         let path = ws.path
         let base = "origin/\(ws.baseBranch)"
+        let host = self.host
         Task {
             defer { self.isLoadingDiff = false }
             do {
-                let files = try await Git.diff(path: path, base: base)
+                let files = try await Git.diff(path: path, base: base, host: host)
                 self.diffFiles = files
                 self.diffError = nil
                 if let sel = self.selectedDiffPath, !files.contains(where: { $0.path == sel }) {
                     self.selectedDiffPath = nil
                 }
-                self.aheadBehind = try? await Git.aheadBehind(path: path, base: base)
+                self.aheadBehind = try? await Git.aheadBehind(path: path, base: base, host: host)
             } catch {
                 self.diffError = error.localizedDescription
             }
@@ -341,6 +528,14 @@ final class WorkspaceModel {
     }
 
     var diffStat: DiffStat { Git.diffStat(diffFiles) }
+
+    /// Cloud workspaces: only touch the machine once it's set up and running (never resume it just
+    /// to refresh a diff).
+    var remoteReady: Bool {
+        guard let ws = workspace, let h = ws.host else { return true }
+        guard case .ready = ws.state else { return false }
+        return app.cloud.status[h.machineID]?.phase == .running
+    }
 
     @ObservationIgnored private var diffRefreshTask: Task<Void, Never>?
 
@@ -355,10 +550,11 @@ final class WorkspaceModel {
     }
 
     func refreshFiles() {
-        guard let ws = workspace else { return }
+        guard let ws = workspace, remoteReady else { return }
         let path = ws.path
+        let host = self.host
         Task {
-            guard let list = try? await Git.listFiles(path: path) else { return }
+            guard let list = try? await Git.listFiles(path: path, host: host) else { return }
             let tree = await Task.detached { FileNode.tree(from: list) }.value
             self.files = list
             self.fileTree = tree
@@ -367,6 +563,12 @@ final class WorkspaceModel {
 
     func openInEditor(path: String? = nil) {
         guard let ws = workspace else { return }
+        if isRemote {
+            // The code lives on the machine: open a shell there instead.
+            newTerminal()
+            app.toast = "This workspace lives on boat.dev. Opened a terminal on the sandbox."
+            return
+        }
         let target = path ?? ws.path
         let editor = app.settings.editorCommand
         Task {
@@ -378,8 +580,20 @@ final class WorkspaceModel {
         }
     }
 
+    /// Open a file on this Mac with the editor command.
+    func openLocally(path: String) {
+        let editor = app.settings.editorCommand
+        Task {
+            do {
+                try await Shell.run(editor, [path], cwd: (path as NSString).deletingLastPathComponent)
+            } catch {
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
+        }
+    }
+
     func revealInFinder() {
-        guard let ws = workspace else { return }
+        guard let ws = workspace, !isRemote else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: ws.path)])
     }
 
@@ -443,9 +657,9 @@ final class WorkspaceModel {
         shipBusy = "Committing…"
         defer { shipBusy = nil }
         do {
-            try await Git.commitAll(path: ws.path, message: commitMessage.isEmpty ? title : commitMessage)
+            try await Git.commitAll(path: ws.path, message: commitMessage.isEmpty ? title : commitMessage, host: host)
             shipBusy = "Pushing…"
-            try await Git.push(path: ws.path, branch: ws.branch, setUpstream: true)
+            try await Git.push(path: ws.path, branch: ws.branch, setUpstream: true, host: host)
             shipBusy = "Opening pull request…"
             let pr = try await GitHubClient.shared.createPullRequest(
                 slug: slug, head: ws.branch, base: repo.defaultBranch, title: title, body: body, draft: draft)
@@ -467,8 +681,8 @@ final class WorkspaceModel {
         shipBusy = "Pushing…"
         defer { shipBusy = nil }
         do {
-            try await Git.commitAll(path: ws.path, message: commitMessage)
-            try await Git.push(path: ws.path, branch: ws.branch, setUpstream: true)
+            try await Git.commitAll(path: ws.path, message: commitMessage, host: host)
+            try await Git.push(path: ws.path, branch: ws.branch, setUpstream: true, host: host)
             shipMessage = nil
             refreshPR()
             refreshDiff()
@@ -530,7 +744,7 @@ final class WorkspaceModel {
         shipBusy = "Committing…"
         defer { shipBusy = nil }
         do {
-            try await Git.commitAll(path: ws.path, message: commitMessage)
+            try await Git.commitAll(path: ws.path, message: commitMessage, host: host)
             if let gate = config?.trunkGate, !gate.isEmpty, let supervisor {
                 for taskID in gate {
                     guard let task = supervisor.task(taskID) else { continue }
@@ -546,7 +760,7 @@ final class WorkspaceModel {
                 }
             }
             shipBusy = "Rebasing onto origin/\(repo.defaultBranch) and pushing…"
-            switch try await Git.trunkShip(path: ws.path, defaultBranch: repo.defaultBranch) {
+            switch try await Git.trunkShip(path: ws.path, defaultBranch: repo.defaultBranch, host: host) {
             case .pushed(let sha):
                 shipMessage = "Pushed \(sha.prefix(8)) to \(repo.defaultBranch)."
             case .nothingToShip:
@@ -574,7 +788,9 @@ final class WorkspaceModel {
     func newTerminal() {
         guard let ws = workspace else { return }
         let n = terminals.count + 1
-        let term = TerminalSession(title: "Terminal \(n)", cwd: ws.path, extraEnv: environment)
+        let term = TerminalSession(
+            title: isRemote ? "\(ws.host?.machineID ?? "sandbox") \(n)" : "Terminal \(n)", cwd: ws.path, extraEnv: environment,
+            host: host)
         terminals.append(term)
         selectedTerminalID = term.id
         dockTab = .terminal(term.id)
@@ -611,17 +827,22 @@ final class WorkspaceModel {
 
     func prepareForArchive() async {
         prPollTask?.cancel()
+        forwardTask?.cancel()
         for c in chats.values { c.shutdown() }
-        if let script = config?.archiveScript, let supervisor {
+        // Don't wake a stopped sandbox just to run the archive script.
+        let canRunArchive = !isRemote || remoteReady
+        if canRunArchive, let script = config?.archiveScript, let supervisor {
             let run = supervisor.runOneshot(name: "Archive", command: script)
             _ = await run.waitUntilFinished()
         }
         supervisor?.stopAll()
+        supervisor?.stopProbing()
         for t in terminals { t.terminate() }
         terminals.removeAll()
     }
 
     func shutdownNow() {
+        forwardTask?.cancel()
         for c in chats.values { c.shutdown() }
         supervisor?.shutdownNow()
         for t in terminals { t.terminate() }

@@ -64,6 +64,8 @@ public struct Repository: Codable, Sendable, Identifiable, Hashable {
     /// Shown instead of `name` when set. `name` stays the folder-safe id used for worktree paths.
     public var displayName: String?
     public var icon: RepoIcon?
+    /// Where new workspaces run (nil = this Mac).
+    public var defaultLocation: WorkspaceLocation?
 
     public var title: String { (displayName?.isEmpty == false ? displayName : nil) ?? name }
 
@@ -114,6 +116,8 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var selectedTabID: UUID?
     /// Unread marker: agent finished while user was elsewhere.
     public var hasUnread: Bool
+    /// The machine this workspace runs on. nil = a local worktree on this Mac.
+    public var host: WorkspaceHost?
 
     public init(
         id: UUID = UUID(), repoID: UUID, name: String, branch: String, path: String, baseBranch: String,
@@ -140,6 +144,63 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     }
 
     public var isArchived: Bool { if case .archived = state { true } else { false } }
+    public var isRemote: Bool { host != nil }
+    public var location: WorkspaceLocation { host?.provider.location ?? .local }
+}
+
+// MARK: - Where workspaces run
+
+/// Cloud machine providers. Only boat.dev today; the rest of the app talks to `CloudProviderID`.
+public enum CloudProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
+    case boat
+
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .boat: "boat.dev"
+        }
+    }
+    public var location: WorkspaceLocation { .cloud(self) }
+}
+
+/// A choice in "run new workspaces on…".
+public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
+    case local
+    case cloud(CloudProviderID)
+
+    public var id: String {
+        switch self {
+        case .local: "local"
+        case .cloud(let p): p.rawValue
+        }
+    }
+    public var displayName: String {
+        switch self {
+        case .local: "This Mac"
+        case .cloud(let p): p.displayName
+        }
+    }
+    public static var all: [WorkspaceLocation] { [.local] + CloudProviderID.allCases.map { .cloud($0) } }
+}
+
+/// A cloud machine a workspace lives on. One machine per workspace.
+public struct WorkspaceHost: Codable, Sendable, Hashable {
+    public var provider: CloudProviderID
+    /// Provider's machine id (boat: `bx_…`).
+    public var machineID: String
+    public var machineName: String?
+    /// Machine size it was created with (boat: small/default/large/xlarge).
+    public var machineType: String?
+
+    public init(provider: CloudProviderID, machineID: String, machineName: String? = nil, machineType: String? = nil) {
+        self.provider = provider
+        self.machineID = machineID
+        self.machineName = machineName
+        self.machineType = machineType
+    }
+
+    /// Matches `ExecutionHost.id`.
+    public var hostID: String { "\(provider.rawValue):\(machineID)" }
 }
 
 public struct ChatTab: Codable, Sendable, Identifiable, Hashable {

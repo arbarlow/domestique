@@ -17,11 +17,85 @@ public final class TaskSupervisor {
     /// Ad-hoc one-shots (archive script, trunk gate, ...), newest last.
     public private(set) var adhocRuns: [TaskRun] = []
 
-    public init(workspacePath: String, config: RepoConfig, environment: [String: String]) {
+    /// Where tasks run.
+    public let host: any ExecutionHost
+
+    /// Remote hosts only: every TCP port listening on the machine, from the last probe.
+    public private(set) var remoteListening: [Int] = []
+    /// Remote hosts only: ports already listening before Domestique started anything (system services).
+    public private(set) var remoteBaseline: Set<Int>?
+    /// Probe faster (the workspace is on screen).
+    @ObservationIgnored public var isFocused = false
+    @ObservationIgnored private var probeTask: Task<Void, Never>?
+
+    public init(
+        workspacePath: String, config: RepoConfig, environment: [String: String], host: any ExecutionHost = LocalHost.shared
+    ) {
         self.workspacePath = workspacePath
         self.config = config
         self.environment = environment
-        self.runs = config.tasks.map { TaskRun(config: $0, workspacePath: workspacePath, environment: environment) }
+        self.host = host
+        self.runs = config.tasks.map { TaskRun(config: $0, workspacePath: workspacePath, environment: environment, host: host) }
+        if !host.isLocal { startRemoteProbe() }
+    }
+
+    /// Ports listening on a remote host that Domestique (or the agent) started: everything not in the baseline.
+    public var remoteAppPorts: [Int] {
+        guard let base = remoteBaseline else { return [] }
+        return remoteListening.filter { !base.contains($0) }
+    }
+
+    // MARK: remote ports
+
+    private func startRemoteProbe() {
+        probeTask = Task { [weak self] in
+            var failures = 0
+            while !Task.isCancelled {
+                guard let self else { return }
+                let host = self.host
+                let result = await Task.detached { try? await RemotePortProbe.probe(host) }.value
+                if let result {
+                    failures = 0
+                    self.applyProbe(result)
+                } else {
+                    failures += 1
+                }
+                let waitingForReady = self.allRuns.contains { if case .running = $0.state { true } else { false } }
+                let seconds: Double =
+                    failures > 0 ? min(30, 3 * Double(failures))
+                    : (waitingForReady ? 1 : (self.isFocused ? 3 : 10))
+                try? await Task.sleep(for: .seconds(seconds))
+            }
+        }
+    }
+
+    /// Run a probe now (e.g. right after a task started).
+    public func probeNow() {
+        let host = self.host
+        guard !host.isLocal else { return }
+        Task {
+            if let result = try? await RemotePortProbe.probe(host) { self.applyProbe(result) }
+        }
+    }
+
+    private func applyProbe(_ r: RemotePortProbe.Result) {
+        if remoteBaseline == nil {
+            // First look at the machine: anything a Domestique run doesn't own is a system service.
+            let owned = Set(r.byRun.values.flatMap { $0 })
+            remoteBaseline = r.listening.subtracting(owned)
+        }
+        let sorted = r.listening.sorted()
+        if sorted != remoteListening { remoteListening = sorted }
+        for run in allRuns {
+            run.applyRemotePorts((r.byRun[run.remoteKey] ?? []).sorted(), listening: r.listening)
+        }
+    }
+
+    private var allRuns: [TaskRun] { runs + adhocRuns + [setupRun].compactMap { $0 } }
+
+    public func stopProbing() {
+        probeTask?.cancel()
+        probeTask = nil
     }
 
     public func task(_ id: String) -> TaskRun? { runs.first { $0.id == id } }
@@ -77,14 +151,17 @@ public final class TaskSupervisor {
     /// `script` as a one-shot "Setup" run. Returns true on success (or when there's nothing to run).
     @discardableResult
     public func runSetup(script: String?, copyFiles: [String], from rootPath: String) async -> Bool {
-        let copied = Self.copyFiles(copyFiles, from: rootPath, to: workspacePath)
+        let copied =
+            host.isLocal
+            ? Self.copyFiles(copyFiles, from: rootPath, to: workspacePath)
+            : await Self.uploadFiles(copyFiles, from: rootPath, to: workspacePath, host: host)
         let trimmed = script?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let notes = copied.map { "printf '%s\\n' \(Self.shellQuote("Copied \($0)"))" }
         guard !trimmed.isEmpty || !notes.isEmpty else { return true }
         let command = (notes + (trimmed.isEmpty ? [] : [trimmed])).joined(separator: "\n")
         let run = TaskRun(
             config: TaskConfig(id: "__setup", name: "Setup", command: command, kind: .oneshot),
-            workspacePath: workspacePath, environment: environment)
+            workspacePath: workspacePath, environment: environment, host: host)
         setupRun = run
         run.start()
         return await run.waitUntilFinished()
@@ -95,7 +172,7 @@ public final class TaskSupervisor {
     public func runOneshot(name: String, command: String) -> TaskRun {
         let run = TaskRun(
             config: TaskConfig(id: "__adhoc-\(UUID().uuidString.prefix(8))", name: name, command: command, kind: .oneshot),
-            workspacePath: workspacePath, environment: environment)
+            workspacePath: workspacePath, environment: environment, host: host)
         adhocRuns.append(run)
         if adhocRuns.count > 20 {
             adhocRuns.removeAll { !$0.state.isActive && adhocRuns.count > 20 }
@@ -113,7 +190,7 @@ public final class TaskSupervisor {
                 existing.update(config: t)
                 next.append(existing)
             } else {
-                next.append(TaskRun(config: t, workspacePath: workspacePath, environment: environment))
+                next.append(TaskRun(config: t, workspacePath: workspacePath, environment: environment, host: host))
             }
         }
         for removed in runs where !config.tasks.contains(where: { $0.id == removed.id }) {
@@ -139,6 +216,22 @@ public final class TaskSupervisor {
             guard fm.fileExists(atPath: src), !fm.fileExists(atPath: dst) else { continue }
             try? fm.createDirectory(atPath: (dst as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
             if (try? fm.copyItem(atPath: src, toPath: dst)) != nil { copied.append(rel) }
+        }
+        return copied
+    }
+
+    /// `copyFiles` for a remote host: local main checkout -> the machine (never overwriting).
+    static func uploadFiles(_ files: [String], from root: String, to dest: String, host: any ExecutionHost) async -> [String] {
+        var copied: [String] = []
+        for rel in expandGlobs(files, root: root) {
+            let src = (root as NSString).appendingPathComponent(rel)
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: src, isDirectory: &isDir), !isDir.boolValue,
+                let data = FileManager.default.contents(atPath: src)
+            else { continue }
+            let dst = (dest as NSString).appendingPathComponent(rel)
+            if await host.fileExists(dst) { continue }
+            if (try? await host.writeFile(dst, data: data)) != nil { copied.append(rel) }
         }
         return copied
     }

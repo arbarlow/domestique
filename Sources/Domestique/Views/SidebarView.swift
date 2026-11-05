@@ -136,6 +136,18 @@ private struct RepoSection: View {
                         Button("New workspace with Claude") { Task { await app.createWorkspace(in: repo, provider: .claude) } }
                         Button("New workspace with Codex") { Task { await app.createWorkspace(in: repo, provider: .codex) } }
                         Divider()
+                        ForEach(WorkspaceLocation.all) { loc in
+                            Button("New workspace on \(loc.displayName)") {
+                                Task { await app.createWorkspace(in: repo, location: loc) }
+                            }
+                        }
+                        Picker("Run new workspaces on", selection: Binding(
+                            get: { repo.defaultLocation ?? .local },
+                            set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
+                        )) {
+                            ForEach(WorkspaceLocation.all) { Text($0.displayName).tag($0) }
+                        }
+                        Divider()
                         Picker("Ship mode", selection: Binding(
                             get: { repo.shipMode },
                             set: { mode in app.updateRepo(repo.id) { $0.shipMode = mode } }
@@ -157,7 +169,10 @@ private struct RepoSection: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    IconButton(symbol: "plus", help: "New workspace from origin/\(repo.defaultBranch)", size: 12) {
+                    IconButton(
+                        symbol: "plus",
+                        help: "New workspace from origin/\(repo.defaultBranch) on \(app.defaultLocation(for: repo).displayName)", size: 12
+                    ) {
                         Task { await app.createWorkspace(in: repo) }
                     }
                 }
@@ -219,6 +234,7 @@ struct WorkspaceRow: View {
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                if workspace.isRemote, !workspace.isArchived { MachineGlyph(workspace: workspace) }
                 Spacer(minLength: 6)
                 if let model, !model.diffFiles.isEmpty {
                     DiffCount(additions: model.diffStat.additions, deletions: model.diffStat.deletions)
@@ -234,7 +250,7 @@ struct WorkspaceRow: View {
 
     private func title(_ model: WorkspaceModel?) -> String {
         switch workspace.state {
-        case .creating: return "Creating \(workspace.name)…"
+        case .creating: return workspace.isRemote || workspace.path.hasPrefix("/home/user") ? "Starting \(workspace.name) on boat.dev…" : "Creating \(workspace.name)…"
         case .settingUp: return "Setting up \(workspace.name)…"
         case .failed: return "\(workspace.name) (failed)"
         default:
@@ -613,8 +629,20 @@ struct WorkspaceContextMenu: View {
     var body: some View {
         let model = app.model(for: workspace.id)
         Button("New chat tab") { model.newTab() }
-        Button("Open in editor") { model.openInEditor() }
-        Button("Reveal in Finder") { model.revealInFinder() }
+        if workspace.isRemote {
+            if !workspace.isArchived {
+                Button("Open desktop") { app.cloud.openDesktop(workspace) }
+                if app.cloud.phase(for: workspace) == .stopped {
+                    Button("Start sandbox") { app.cloud.resume(workspace) }
+                } else if app.cloud.phase(for: workspace) == .running {
+                    Button("Stop sandbox") { app.cloud.stop(workspace) }
+                }
+            }
+            Button("Copy SSH command") { app.cloud.copySSHCommand(workspace) }
+        } else {
+            Button("Open in editor") { model.openInEditor() }
+            Button("Reveal in Finder") { model.revealInFinder() }
+        }
         Button("Copy branch name") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(workspace.branch, forType: .string)

@@ -57,6 +57,14 @@ struct RootView: View {
         .animation(.snappy(duration: 0.22), value: app.rightPanelVisible)
         .animation(.snappy(duration: 0.18), value: app.settingsRoute)
         .sheet(isPresented: $app.showGitHubPicker) { GitHubRepoPicker() }
+        .overlay(alignment: .bottom) {
+            if let toast = app.toast {
+                ToastView(text: toast)
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: app.toast)
         .alert(item: $app.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
         }

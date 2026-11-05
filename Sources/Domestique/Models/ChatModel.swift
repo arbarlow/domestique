@@ -143,8 +143,10 @@ final class ChatModel {
             permissionMode: tab.permissionMode,
             resumeSessionID: tab.providerSessionID,
             environment: env,
-            extraWritableRoots: [repo.path + "/.git"],
-            appendSystemPrompt: Self.systemPrompt(ws: ws, repo: repo)
+            // A cloud clone is self-contained; a local worktree writes into the main repo's .git.
+            extraWritableRoots: ws.isRemote ? [] : [repo.path + "/.git"],
+            appendSystemPrompt: Self.systemPrompt(ws: ws, repo: repo),
+            host: workspace.host
         )
         let s = AgentFactory.makeSession(provider: tab.provider, config: config)
         session = s
@@ -158,7 +160,17 @@ final class ChatModel {
     }
 
     static func systemPrompt(ws: Workspace, repo: Repository) -> String {
-        """
+        if let h = ws.host {
+            return """
+                You are working inside Domestique, in a \(h.provider.displayName) cloud sandbox (\(h.machineID), Ubuntu) with a clone of the "\(repo.name)" repository.
+                - Clone: \(ws.path)
+                - Branch: \(ws.branch) (branched from origin/\(repo.defaultBranch))
+                - This workspace owns ports \(ws.portBase)-\(ws.portBase + 9) ($DOMESTIQUE_PORT is the first). Use them for dev servers. Domestique forwards every port you listen on to the same port on the user's Mac, so http://localhost:<port> works for them as-is. Binding 127.0.0.1 is fine.
+                - Docker is available. You have sudo.
+                - The user previews, runs tasks, and ships (PR or push to \(repo.defaultBranch)) from the Domestique UI, so don't push or open PRs unless asked.
+                """
+        }
+        return """
         You are working inside Domestique, in an isolated git worktree for the "\(repo.name)" repository.
         - Worktree: \(ws.path)
         - Branch: \(ws.branch) (branched from origin/\(repo.defaultBranch))
@@ -194,11 +206,22 @@ final class ChatModel {
             do {
                 try await session.send(text, attachments: attachments)
             } catch {
-                self.upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: error.localizedDescription)))
+                self.upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: self.describe(error))))
                 self.isRunning = false
                 self.turnStartedAt = nil
             }
         }
+    }
+
+    /// Errors from a cloud machine get a hint about where to fix them.
+    func describe(_ error: Error) -> String {
+        let msg = error.localizedDescription
+        guard workspace.isRemote else { return msg }
+        let lower = msg.lowercased()
+        if lower.contains("401") || lower.contains("unauthorized") || lower.contains("not logged in") || lower.contains("login") {
+            return msg + "\n\nAgents on boat.dev sandboxes sign in with the Claude / ChatGPT accounts connected on boat.dev → Agents & Proxying (https://boat.dev/dashboard?tab=agents)."
+        }
+        return msg
     }
 
     func interrupt() {
@@ -304,6 +327,10 @@ final class ChatModel {
                 summary.durationMs = Int(Date().timeIntervalSince(start) * 1000)
             }
             upsert(TranscriptItem(id: "turn-\(UUID().uuidString)", kind: .turnSummary(summary)))
+            if summary.isError, workspace.isRemote, let m = summary.message {
+                let hinted = describe(AgentError(m))
+                if hinted != m { upsert(TranscriptItem(id: "error-\(UUID())", kind: .notice(text: String(hinted.dropFirst(m.count)).trimmingCharacters(in: .whitespacesAndNewlines)))) }
+            }
             isRunning = false
             status = nil
             turnStartedAt = nil
@@ -330,7 +357,8 @@ final class ChatModel {
             isRunning = true
             turnStartedAt = .now
         case .rateLimit(let info):
-            if let provider = tab?.provider {
+            // A sandbox's agents use the accounts connected on the provider, not this Mac's.
+            if let provider = tab?.provider, !workspace.isRemote {
                 workspace.app.recordUsage(info, for: provider)
             }
         case .exited(let message):
@@ -340,7 +368,7 @@ final class ChatModel {
             status = nil
             turnStartedAt = nil
             if let message {
-                upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: message)))
+                upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: describe(AgentError(message)))))
             }
             persistDirty()
         }

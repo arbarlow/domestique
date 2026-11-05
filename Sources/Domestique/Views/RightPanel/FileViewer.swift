@@ -1,3 +1,4 @@
+import DQCore
 import GitKit
 import SwiftUI
 
@@ -86,6 +87,24 @@ struct FileViewer: View {
             if file.isBinary { return .message("Binary file changed") }
             if file.isTooLarge { return .message("Diff too large to display") }
             return .diff(await Task.detached(priority: .userInitiated) { Self.diffRows(file, language: language) }.value)
+        }
+        if model.isRemote {
+            // On the cloud machine: read over SSH (no mtime to cache by).
+            let data: Data
+            do {
+                guard let d = try await model.host.readFile(path, maxBytes: 2_000_000) else { return .message("File not found") }
+                data = d
+            } catch let e as HostFileTooLarge {
+                return .message("File too large to preview (\(e.size / 1024) KB)")
+            } catch {
+                return .message("Couldn't read file: \(error.localizedDescription)")
+            }
+            return await Task.detached(priority: .userInitiated) { () -> Loaded in
+                if data.prefix(8000).contains(0) { return .message("Binary file") }
+                var lines = SyntaxHighlighter.highlightLines(String(decoding: data, as: UTF8.self), language: language)
+                if lines.count > 1, lines.last.map({ $0.characters.isEmpty }) == true { lines.removeLast() }
+                return .code(lines)
+            }.value
         }
         let attrs = try? FileManager.default.attributesOfItem(atPath: path)
         guard let attrs else { return .message("File not found") }

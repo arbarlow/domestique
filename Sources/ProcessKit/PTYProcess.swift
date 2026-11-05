@@ -39,10 +39,21 @@ final class PTYProcess: @unchecked Sendable {
 
     /// - Parameters:
     ///   - firstLineID: ids continue from here so a TaskRun's lines stay unique across restarts.
-    init(
+    convenience init(
         shell: String, command: String, cwd: String, environment: [String: String], firstLineID: Int,
         onBatch: @escaping @Sendable (LogBatch) -> Void, onExit: @escaping @Sendable (Int32) -> Void
     ) throws {
+        try self.init(
+            argv: [shell, "-c", command], cwd: cwd, environment: environment, firstLineID: firstLineID, onBatch: onBatch,
+            onExit: onExit)
+    }
+
+    /// Spawns `argv` (argv[0] must be an absolute path) under a PTY.
+    init(
+        argv: [String], cwd: String, environment: [String: String], firstLineID: Int,
+        onBatch: @escaping @Sendable (LogBatch) -> Void, onExit: @escaping @Sendable (Int32) -> Void
+    ) throws {
+        let shell = argv[0]
         self.onBatch = onBatch
         self.onExit = onExit
         self.nextID = firstLineID
@@ -81,7 +92,6 @@ final class PTYProcess: @unchecked Sendable {
         sigemptyset(&emptyMask)
         posix_spawnattr_setsigmask(&attr, &emptyMask)
 
-        let argv = [shell, "-c", command]
         let envp = environment.map { "\($0.key)=\($0.value)" }
         var childPID: pid_t = 0
         let rc = withCStrings(argv) { argvPtr in

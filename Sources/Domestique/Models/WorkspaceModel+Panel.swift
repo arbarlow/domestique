@@ -30,14 +30,14 @@ final class PanelGitState {
     private(set) var head: String?
     @ObservationIgnored private var refreshing = false
 
-    func refresh(path: String) {
-        guard !refreshing, FileManager.default.fileExists(atPath: path) else { return }
+    func refresh(path: String, host: any ExecutionHost = LocalHost.shared) {
+        guard !refreshing, !host.isLocal || FileManager.default.fileExists(atPath: path) else { return }
         refreshing = true
         Task {
             defer { self.refreshing = false }
-            let status = (try? await Git.status(path: path)) ?? []
+            let status = (try? await Git.status(path: path, host: host)) ?? []
             self.uncommitted = status.count
-            let r = try? await Shell.run("git", ["rev-list", "--count", "@{upstream}..HEAD"], cwd: path, check: false)
+            let r = try? await host.run("git", ["rev-list", "--count", "@{upstream}..HEAD"], cwd: path, check: false)
             if let r, r.succeeded, let n = Int(r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 self.unpushed = n
                 self.hasUpstream = true
@@ -74,7 +74,8 @@ extension WorkspaceModel {
     var gitState: PanelGitState { PanelGitState.of(self) }
 
     func refreshGitState() {
-        if let path = workspace?.path { gitState.refresh(path: path) }
+        guard remoteReady, let path = workspace?.path else { return }
+        gitState.refresh(path: path, host: host)
     }
 
     /// Refresh everything the right panel shows.

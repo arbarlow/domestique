@@ -58,9 +58,7 @@ public actor ClaudeSession: AgentSession {
 
     private func ensureProcess() async throws {
         if let process, process.isRunning { return }
-        let exe = try await LoginEnvironment.shared.resolve("claude")
-        var env = await LoginEnvironment.shared.environment()
-        env.merge(config.environment) { $1 }
+        var env = config.environment
         env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-swift"
 
         var args = [
@@ -80,7 +78,9 @@ public actor ClaudeSession: AgentSession {
         if let prompt = config.appendSystemPrompt, !prompt.isEmpty { args += ["--append-system-prompt", prompt] }
         for root in config.extraWritableRoots { args += ["--add-dir", root] }
 
-        let proc = LineProcess(executable: exe, arguments: args, cwd: config.cwd, environment: env)
+        try await config.host.prepare()
+        let cmd = try await config.host.command("claude", args, cwd: config.cwd, env: env, tty: false)
+        let proc = LineProcess(executable: cmd.executable, arguments: cmd.arguments, cwd: cmd.cwd, environment: cmd.environment)
         try proc.start { [weak self] status, stderr in
             Task { await self?.processExited(status: status, stderr: stderr) }
         }

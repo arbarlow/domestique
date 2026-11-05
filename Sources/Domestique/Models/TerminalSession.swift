@@ -16,11 +16,15 @@ final class TerminalSession: Identifiable {
     var isStarted: Bool { started }
     private let cwd: String
     private let extraEnv: [String: String]
+    @ObservationIgnored private let host: any ExecutionHost
+    /// Set when the shell couldn't start (e.g. the cloud machine didn't come up).
+    private(set) var startError: String?
 
-    init(title: String, cwd: String, extraEnv: [String: String]) {
+    init(title: String, cwd: String, extraEnv: [String: String], host: any ExecutionHost = LocalHost.shared) {
         self.title = title
         self.cwd = cwd
         self.extraEnv = extraEnv
+        self.host = host
         view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         view.nativeBackgroundColor = NSColor.textBackgroundColor
@@ -34,6 +38,10 @@ final class TerminalSession: Identifiable {
     func startIfNeeded() {
         guard !started else { return }
         started = true
+        if !host.isLocal {
+            startRemote()
+            return
+        }
         Task {
             var env = await LoginEnvironment.shared.environment()
             env.merge(extraEnv) { $1 }
@@ -44,6 +52,30 @@ final class TerminalSession: Identifiable {
             view.startProcess(
                 executable: shell, args: ["-l"], environment: pairs,
                 execName: "-" + (shell as NSString).lastPathComponent, currentDirectory: cwd)
+        }
+    }
+
+    /// `ssh -tt` into the machine, `cd` to the clone, login shell.
+    private func startRemote() {
+        let host = self.host
+        let cwd = self.cwd
+        var env = extraEnv
+        env["COLORTERM"] = "truecolor"
+        view.feed(text: "Connecting to \(host.displayName)…\r\n")
+        Task {
+            do {
+                try await host.prepare()
+                let cmd = try await host.command("bash", ["-l"], cwd: cwd, env: env, tty: true)
+                var local = cmd.environment
+                local["TERM"] = "xterm-256color"
+                view.startProcess(
+                    executable: cmd.executable, args: cmd.arguments, environment: local.map { "\($0.key)=\($0.value)" },
+                    execName: nil, currentDirectory: cmd.cwd)
+            } catch {
+                startError = error.localizedDescription
+                view.feed(text: "\r\nCouldn't connect: \(error.localizedDescription)\r\n")
+                exited = true
+            }
         }
     }
 

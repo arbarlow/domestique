@@ -31,6 +31,7 @@ struct SettingsPage: View {
                         switch route {
                         case .general: GeneralSettings()
                         case .agents: AgentSettings()
+                        case .cloud: CloudSettings()
                         case .repo(let id):
                             if let repo = app.repo(id) {
                                 RepoSettings(repo: repo)
@@ -59,6 +60,7 @@ private struct SettingsNav: View {
             VStack(alignment: .leading, spacing: 1) {
                 navRow(.general, "General", "slider.horizontal.3")
                 navRow(.agents, "Agents", "sparkles")
+                navRow(.cloud, "Cloud", "cloud")
                 Text("Repositories")
                     .font(Theme.small)
                     .foregroundStyle(Theme.text3)
@@ -306,6 +308,15 @@ private struct RepoSettings: View {
                         set: { m in app.updateRepo(repo.id) { $0.shipMode = m } }
                     )) {
                         ForEach(ShipMode.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                SettingsRow(title: "Run new workspaces on", subtitle: "This Mac (git worktree) or a cloud sandbox") {
+                    Picker("", selection: Binding(
+                        get: { app.repo(repo.id)?.defaultLocation ?? .local },
+                        set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
+                    )) {
+                        ForEach(WorkspaceLocation.all) { Text($0.displayName).tag($0) }
                     }
                     .labelsHidden().fixedSize()
                 }

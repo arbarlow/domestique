@@ -4,12 +4,25 @@ public struct ShellResult: Sendable {
     public var status: Int32
     public var stdout: String
     public var stderr: String
+    /// Raw stdout bytes (for binary-safe reads, e.g. `cat` over SSH).
+    public var stdoutData: Data = Data()
     public var succeeded: Bool { status == 0 }
+
+    public init(status: Int32, stdout: String, stderr: String, stdoutData: Data = Data()) {
+        self.status = status
+        self.stdout = stdout
+        self.stderr = stderr
+        self.stdoutData = stdoutData
+    }
 }
 
 public struct ShellError: Error, LocalizedError, Sendable {
     public var command: String
     public var result: ShellResult
+    public init(command: String, result: ShellResult) {
+        self.command = command
+        self.result = result
+    }
     public var errorDescription: String? {
         let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let out = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -38,6 +51,13 @@ public enum Shell {
     public static func runRaw(
         _ executablePath: String, _ args: [String], cwd: String?, env: [String: String], stdin: String? = nil
     ) async throws -> ShellResult {
+        try await runRaw(executablePath, args, cwd: cwd, env: env, stdinData: stdin.map { Data($0.utf8) })
+    }
+
+    /// Like `runRaw`, with binary stdin.
+    public static func runRaw(
+        _ executablePath: String, _ args: [String], cwd: String?, env: [String: String], stdinData: Data?
+    ) async throws -> ShellResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = args
@@ -47,7 +67,7 @@ public enum Shell {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        let inPipe: Pipe? = stdin != nil ? Pipe() : nil
+        let inPipe: Pipe? = stdinData != nil ? Pipe() : nil
         process.standardInput = inPipe ?? FileHandle.nullDevice
 
         return try await withCheckedThrowingContinuation { cont in
@@ -76,9 +96,9 @@ public enum Shell {
                 group.notify(queue: .global()) { cont.resume(throwing: error) }
                 return
             }
-            if let inPipe, let stdin {
+            if let inPipe, let stdinData {
                 DispatchQueue.global().async {
-                    inPipe.fileHandleForWriting.write(Data(stdin.utf8))
+                    inPipe.fileHandleForWriting.write(stdinData)
                     try? inPipe.fileHandleForWriting.close()
                 }
             }
@@ -87,7 +107,8 @@ public enum Shell {
                     returning: ShellResult(
                         status: process.terminationStatus,
                         stdout: String(decoding: outData, as: UTF8.self),
-                        stderr: String(decoding: errData, as: UTF8.self)
+                        stderr: String(decoding: errData, as: UTF8.self),
+                        stdoutData: outData
                     ))
             }
         }

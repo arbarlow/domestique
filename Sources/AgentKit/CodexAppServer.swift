@@ -9,10 +9,29 @@ protocol CodexThreadHandler: AnyObject, Sendable {
     func serverExited(message: String?) async
 }
 
-/// One shared `codex app-server` process (JSON-RPC over stdio) for every Codex tab.
-/// Uses the user's existing ChatGPT login from ~/.codex.
+/// One `codex app-server` process (JSON-RPC over stdio) per host, shared by every Codex tab on it.
+/// Locally it uses the user's existing ChatGPT login from ~/.codex; on a cloud machine, the provider's.
 public actor CodexAppServer {
-    public static let shared = CodexAppServer()
+    public static let shared = CodexAppServer(host: LocalHost.shared)
+
+    nonisolated(unsafe) private static var byHost: [String: CodexAppServer] = [:]
+    private static let registryLock = NSLock()
+
+    /// The app-server for `host` (started lazily).
+    public static func server(for host: any ExecutionHost) -> CodexAppServer {
+        if host.isLocal { return shared }
+        return registryLock.withLock {
+            if let s = byHost[host.id] { return s }
+            let s = CodexAppServer(host: host)
+            byHost[host.id] = s
+            return s
+        }
+    }
+
+    /// Every remote app-server started so far (shutdown).
+    public static var remoteServers: [CodexAppServer] { registryLock.withLock { Array(byHost.values) } }
+
+    private let host: any ExecutionHost
 
     private var process: LineProcess?
     private var readerTask: Task<Void, Never>?
@@ -25,7 +44,8 @@ public actor CodexAppServer {
     public nonisolated let rateLimits: AsyncStream<RateLimitInfo>
     private let rateLimitContinuation: AsyncStream<RateLimitInfo>.Continuation
 
-    init() {
+    init(host: any ExecutionHost) {
+        self.host = host
         (rateLimits, rateLimitContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
     }
 
@@ -45,11 +65,10 @@ public actor CodexAppServer {
     }
 
     private func start() async throws {
-        let exe = try await LoginEnvironment.shared.resolve("codex")
-        let env = await LoginEnvironment.shared.environment()
-        let proc = LineProcess(
-            executable: exe, arguments: ["app-server"], cwd: FileManager.default.homeDirectoryForCurrentUser.path,
-            environment: env)
+        try await host.prepare()
+        let home = host.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "/tmp"
+        let cmd = try await host.command("codex", ["app-server"], cwd: home, env: [:], tty: false)
+        let proc = LineProcess(executable: cmd.executable, arguments: cmd.arguments, cwd: cmd.cwd, environment: cmd.environment)
         try proc.start { [weak self] status, stderr in
             Task { await self?.exited(status: status, stderr: stderr) }
         }

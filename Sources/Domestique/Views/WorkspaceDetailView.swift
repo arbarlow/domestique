@@ -11,7 +11,16 @@ struct WorkspaceDetailView: View {
                 WorkspaceHeader(model: model, workspace: ws)
                 ChatTabBar(model: model, workspace: ws)
                 Hairline()
+                if ws.isRemote, ws.state == .ready { MachineBanner(workspace: ws) }
                 switch ws.state {
+                case .creating where ws.isRemote || ws.path.hasPrefix("/home/user"):
+                    ProgressPlaceholder(
+                        title: "Creating a boat.dev workspace",
+                        detail: app.creationSteps[ws.id] ?? "Starting a sandbox and cloning \(model.repo?.name ?? "the repo")")
+                case .settingUp where ws.isRemote:
+                    if let chat = model.selectedChat {
+                        ChatView(chat: chat, workspaceModel: model).id(chat.tabID)
+                    }
                 case .creating:
                     ProgressPlaceholder(title: "Creating worktree", detail: "Fetching origin/\(ws.baseBranch) and branching \(ws.branch)")
                 case .failed(let message):
@@ -68,6 +77,7 @@ private struct WorkspaceHeader: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             WorkspaceMenu(model: model, workspace: workspace)
+            if workspace.isRemote { MachineBadge(model: model, workspace: workspace) }
             Spacer(minLength: 12)
 
             if let target = model.primaryOpenTarget {
@@ -89,8 +99,17 @@ private struct WorkspaceHeader: View {
                     size: 11
                 ) { model.startDefaultStack() }
             }
-            IconButton(symbol: "chevron.left.forwardslash.chevron.right", help: "Open in editor (⇧⌘E)", size: 12) {
-                model.openInEditor()
+            if workspace.isRemote {
+                IconButton(symbol: "display", help: "Open the sandbox desktop", size: 12) {
+                    app.cloud.openDesktop(workspace)
+                }
+                IconButton(symbol: "terminal", help: "New terminal on the sandbox (⌃`)", size: 12) {
+                    model.newTerminal()
+                }
+            } else {
+                IconButton(symbol: "chevron.left.forwardslash.chevron.right", help: "Open in editor (⇧⌘E)", size: 12) {
+                    model.openInEditor()
+                }
             }
             IconButton(symbol: "sidebar.right", help: "Toggle panel (⌥⌘I)", active: app.rightPanelVisible) {
                 app.rightPanelVisible.toggle()
@@ -111,13 +130,18 @@ private struct WorkspaceMenu: View {
             Button("New chat tab") { model.newTab() }
             Button("New terminal") { model.newTerminal() }
             Divider()
-            Button("Open in editor") { model.openInEditor() }
-            Button("Reveal in Finder") { model.revealInFinder() }
+            if workspace.isRemote {
+                Button("Open desktop") { app.cloud.openDesktop(workspace) }
+                Button("Copy SSH command") { app.cloud.copySSHCommand(workspace) }
+            } else {
+                Button("Open in editor") { model.openInEditor() }
+                Button("Reveal in Finder") { model.revealInFinder() }
+            }
             Button("Copy branch name") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.branch, forType: .string)
             }
-            Button("Copy worktree path") {
+            Button(workspace.isRemote ? "Copy path on sandbox" : "Copy worktree path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.path, forType: .string)
             }

@@ -51,7 +51,7 @@ public actor CodexSession: AgentSession, CodexThreadHandler {
     // MARK: thread
 
     private func ensureThread() async throws -> String {
-        let server = CodexAppServer.shared
+        let server = CodexAppServer.server(for: config.host)
         if let threadID, attached { return threadID }
         var params: [String: JSONValue] = [
             "cwd": .string(config.cwd),
@@ -97,7 +97,7 @@ public actor CodexSession: AgentSession, CodexThreadHandler {
             input.append(["type": "localImage", "path": .string(url.path)])
         }
         if let turnID {
-            _ = try await CodexAppServer.shared.request(
+            _ = try await CodexAppServer.server(for: config.host).request(
                 "turn/steer", ["threadId": .string(tid), "expectedTurnId": .string(turnID), "input": .array(input)])
             return
         }
@@ -112,7 +112,7 @@ public actor CodexSession: AgentSession, CodexThreadHandler {
         if let effort = config.effort { params["effort"] = .string(effort) }
         emit(.turnStarted)
         do {
-            let result = try await CodexAppServer.shared.request("turn/start", .object(params))
+            let result = try await CodexAppServer.server(for: config.host).request("turn/start", .object(params))
             if let id = result["turn"]?["id"]?.string { turnID = id }
         } catch {
             emit(.turnEnded(TurnSummary(isError: true, message: error.localizedDescription)))
@@ -122,7 +122,7 @@ public actor CodexSession: AgentSession, CodexThreadHandler {
 
     public func interrupt() async {
         guard let threadID, let turnID else { return }
-        _ = try? await CodexAppServer.shared.request(
+        _ = try? await CodexAppServer.server(for: config.host).request(
             "turn/interrupt", ["threadId": .string(threadID), "turnId": .string(turnID)])
     }
 
@@ -151,8 +151,8 @@ public actor CodexSession: AgentSession, CodexThreadHandler {
 
     public func shutdown() async {
         if let threadID {
-            await CodexAppServer.shared.unregister(threadID: threadID)
-            _ = try? await CodexAppServer.shared.request("thread/unsubscribe", ["threadId": .string(threadID)])
+            await CodexAppServer.server(for: config.host).unregister(threadID: threadID)
+            _ = try? await CodexAppServer.server(for: config.host).request("thread/unsubscribe", ["threadId": .string(threadID)])
         }
         attached = false
         for (_, c) in decisions { c.resume(returning: .decision(.deny(message: nil))) }

@@ -71,6 +71,18 @@ Define setup scripts, long-running tasks and one-shot checks in a small `domesti
 
 <img src="docs/assets/screenshot-run.png" alt="The run dock streaming API and Web task logs while three agents report back" width="100%">
 
+### ☁️ Cloud workspaces (boat.dev)
+
+Run a workspace on a cloud sandbox instead of this Mac. Pick **This Mac** or **boat.dev** per repository (Repository settings → *Run new workspaces on*), or use <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> for a one-off cloud workspace.
+
+- Each workspace gets its own [boat.dev](https://boat.dev) sandbox with the repo cloned to `/home/user/<repo>`, on a fresh branch from `origin/<default>`, with your git identity.
+- Claude Code, Codex, setup scripts, the run stack and terminals all run **on the sandbox**, over one multiplexed SSH connection per machine. Diffs, files and shipping work the same as local workspaces.
+- **Ports are forwarded automatically**: anything the stack or the agent listens on shows up at the same `localhost` port on your Mac, so **Open :port** just works. You can also copy a private or public HTTPS URL for any port.
+- The header badge shows machine status and auto-stop time, with actions to open the desktop (60fps, in your browser), extend or disable auto-stop, stop or start the machine, and copy the SSH command. A stopped sandbox doesn't bill, and it restarts by itself when you send a message, run the stack or open a terminal.
+- Archiving a workspace stops its sandbox, which is kept for 14 days. Deleting the workspace deletes the sandbox.
+
+Setup: sign in once with `boat login` (Domestique reuses the CLI's login), or paste an API key in **Settings → Cloud**. Agents in sandboxes use the Claude/ChatGPT accounts you connect on boat.dev's **Agents & Proxying** page. If boat.dev's GitHub app can't access a repo, Domestique can give the sandbox your `gh` token (Settings → Cloud).
+
 ### 🚀 Ship it your way
 
 - **Pull requests:** create the PR, watch checks, merge or enable auto-merge, and **Fix CI**, which pulls the failing job logs into the chat for the agent.
@@ -197,7 +209,8 @@ Sources/
 ├── AgentKit/     Claude Code + Codex sessions, normalised into one event stream
 ├── GitKit/       worktrees, diffs, commit/push, trunk ship
 ├── GitHubKit/    PRs, checks, merge, failing-job logs
-├── ProcessKit/   PTY processes, ANSI logs, port detection
+├── ProcessKit/   PTY processes, ANSI logs, port detection (local and remote)
+├── HostKit/      cloud machines: boat.dev API, multiplexed SSH, port forwarding
 ├── DQCore/       models, SQLite store, TOML config, shell helpers
 └── dq/           CLI harness for the agent layer
 ```
@@ -232,7 +245,8 @@ Tests use real processes, real ports, and a real bare `origin` with real worktre
 These are ideas, not promises, and we'd love your input on them:
 
 - [ ] Signed, notarised release builds and auto-update
-- [ ] Containerised / remote execution hosts for workspaces
+- [x] Cloud workspaces on boat.dev
+- [ ] More cloud providers behind the same `ExecutionHost` interface
 - [ ] More agents behind the same `AgentSession` interface
 - [ ] Richer review: inline comments on diffs sent back to the agent
 - [ ] Linear / GitHub Issues as workspace starting points

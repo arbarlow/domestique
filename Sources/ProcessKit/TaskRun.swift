@@ -88,6 +88,10 @@ public final class TaskRun: Identifiable {
 
     @ObservationIgnored private let workspacePath: String
     @ObservationIgnored private var environment: [String: String]
+    /// Where the command runs. Remote runs are `ssh -tt … -- cmd` under the same local PTY.
+    @ObservationIgnored public let host: any ExecutionHost
+    /// File-safe id for this run's markers on a remote host.
+    @ObservationIgnored nonisolated public let remoteKey: String
     @ObservationIgnored private var process: PTYProcess?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var stopRequested = false
@@ -99,7 +103,10 @@ public final class TaskRun: Identifiable {
 
     /// - Parameters:
     ///   - environment: full environment (login env + workspace vars). `config.env` is expanded against it and merged on top.
-    public init(config: TaskConfig, workspacePath: String, environment: [String: String]) {
+    public init(
+        config: TaskConfig, workspacePath: String, environment: [String: String],
+        host: any ExecutionHost = LocalHost.shared
+    ) {
         self.id = config.id
         self.name = config.name
         self.kind = config.kind
@@ -107,6 +114,8 @@ public final class TaskRun: Identifiable {
         self.config = config
         self.workspacePath = workspacePath
         self.environment = environment
+        self.host = host
+        self.remoteKey = String(config.id.map { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" ? $0 : "_" })
         recomputeDerived()
     }
 
@@ -128,10 +137,18 @@ public final class TaskRun: Identifiable {
         let env = mergedEnvironment()
         let cwd = config.cwd.map { ($0 as NSString).isAbsolutePath ? $0 : (workspacePath as NSString).appendingPathComponent($0) }
             ?? workspacePath
+        if !host.isLocal {
+            startRemote(env: env, cwd: cwd, generation: gen)
+            return
+        }
         let shell = Self.shell(from: env)
+        spawn(argv: [shell, "-c", command], cwd: cwd, env: env, generation: gen, pollLocalPorts: true)
+    }
+
+    private func spawn(argv: [String], cwd: String, env: [String: String], generation gen: Int, pollLocalPorts: Bool) {
         do {
             let proc = try PTYProcess(
-                shell: shell, command: command, cwd: cwd, environment: env, firstLineID: gen << 32,
+                argv: argv, cwd: cwd, environment: env, firstLineID: gen << 32,
                 onBatch: { [weak self] batch in
                     Task { @MainActor in self?.apply(batch, generation: gen) }
                 },
@@ -140,20 +157,74 @@ public final class TaskRun: Identifiable {
                 })
             process = proc
             state = .running(pid: proc.pid)
-            startPolling(pid: proc.pid, generation: gen)
+            if pollLocalPorts { startPolling(pid: proc.pid, generation: gen) }
         } catch {
-            spawnError = error.localizedDescription
-            appendSystemLine("Failed to start: \(error.localizedDescription)")
-            state = .failed(exitCode: -1)
-            endedAt = .now
-            resumeWaiters(false)
+            failToStart(error.localizedDescription)
+        }
+    }
+
+    private func failToStart(_ message: String) {
+        spawnError = message
+        appendSystemLine("Failed to start: \(message)")
+        state = .failed(exitCode: -1)
+        endedAt = .now
+        resumeWaiters(false)
+    }
+
+    /// Directory on a remote host holding each run's session id (for ports and stop).
+    public static let remoteRunDir = "/tmp/domestique/runs"
+
+    private func startRemote(env: [String: String], cwd: String, generation gen: Int) {
+        let marker = "\(Self.remoteRunDir)/\(remoteKey).sid"
+        // Record our session id (the whole remote process tree shares it), then run the command
+        // in this login shell. sshd hangs the session up when the local ssh goes away.
+        let script = "mkdir -p \(Self.remoteRunDir) && ps -o sid= -p $$ | tr -d ' ' > \(marker)\n\(command)"
+        let host = self.host
+        Task { [weak self] in
+            do {
+                try await host.prepare()
+                let cmd = try await host.shell(script, cwd: cwd, env: env, tty: true)
+                guard let self, gen == self.generation, self.state == .starting else { return }
+                if self.stopRequested {
+                    self.state = .stopped
+                    self.endedAt = .now
+                    self.resumeWaiters(true)
+                    return
+                }
+                self.spawn(argv: cmd.argv, cwd: cmd.cwd, env: cmd.environment, generation: gen, pollLocalPorts: false)
+            } catch {
+                guard let self, gen == self.generation else { return }
+                self.failToStart(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Ports a remote probe found for this run (and everything listening on the host, for ready_port).
+    public func applyRemotePorts(_ found: [Int], listening: Set<Int>) {
+        guard state.isActive else { return }
+        if found != ports { ports = found }
+        if case .running = state, let readyPort, found.contains(readyPort) || listening.contains(readyPort) {
+            state = .ready
+        }
+    }
+
+    /// Kill this run's remote session (belt and braces: the SSH hang-up usually does it).
+    private func killRemoteSession(_ signal: String) {
+        let marker = "\(Self.remoteRunDir)/\(remoteKey).sid"
+        let host = self.host
+        let cwd = workspacePath
+        Task.detached {
+            _ = try? await host.runScript(
+                "s=$(cat \(marker) 2>/dev/null) && [ -n \"$s\" ] && pkill -\(signal) -s \"$s\"; true", cwd: cwd, check: false)
         }
     }
 
     /// SIGTERM to the process group, SIGKILL after 3s.
     public func stop() {
-        guard let process, state.isActive else { return }
+        guard state.isActive else { return }
         stopRequested = true
+        if !host.isLocal { killRemoteSession("TERM") }
+        guard let process else { return }  // remote run still connecting: start() sees stopRequested
         process.signalGroup(SIGTERM)
         killTask?.cancel()
         killTask = Task {
@@ -185,6 +256,7 @@ public final class TaskRun: Identifiable {
     public func killNow() {
         guard let process, state.isActive else { return }
         stopRequested = true
+        if !host.isLocal { killRemoteSession("KILL") }
         process.signalGroup(SIGKILL)
     }
 
@@ -229,7 +301,7 @@ public final class TaskRun: Identifiable {
         env["CLICOLOR_FORCE"] = "1"
         env["CLICOLOR"] = "1"
         env.removeValue(forKey: "NO_COLOR")
-        if env["PATH"] == nil { env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin" }
+        if host.isLocal, env["PATH"] == nil { env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin" }
         return env
     }
 

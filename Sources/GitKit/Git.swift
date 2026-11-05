@@ -19,16 +19,17 @@ public enum Git {
     ]
 
     @discardableResult
-    static func git(_ args: [String], cwd: String, check: Bool = true, env: [String: String] = [:]) async throws
-        -> ShellResult
-    {
-        try await Shell.run(
+    static func git(
+        _ args: [String], cwd: String, check: Bool = true, env: [String: String] = [:],
+        host: any ExecutionHost = LocalHost.shared
+    ) async throws -> ShellResult {
+        try await host.run(
             "git", ["-c", "core.quotePath=false", "-c", "color.ui=false"] + args, cwd: cwd,
             env: quietEnv.merging(env) { $1 }, check: check)
     }
 
-    static func output(_ args: [String], cwd: String) async throws -> String {
-        try await git(args, cwd: cwd).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    static func output(_ args: [String], cwd: String, host: any ExecutionHost = LocalHost.shared) async throws -> String {
+        try await git(args, cwd: cwd, host: host).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Repo info
@@ -70,12 +71,12 @@ public enum Git {
         return "main"
     }
 
-    public static func currentHead(path: String) async throws -> String {
-        try await output(["rev-parse", "HEAD"], cwd: path)
+    public static func currentHead(path: String, host: any ExecutionHost = LocalHost.shared) async throws -> String {
+        try await output(["rev-parse", "HEAD"], cwd: path, host: host)
     }
 
-    public static func currentBranch(path: String) async throws -> String {
-        try await output(["rev-parse", "--abbrev-ref", "HEAD"], cwd: path)
+    public static func currentBranch(path: String, host: any ExecutionHost = LocalHost.shared) async throws -> String {
+        try await output(["rev-parse", "--abbrev-ref", "HEAD"], cwd: path, host: host)
     }
 
     // MARK: - Clone
@@ -94,8 +95,8 @@ public enum Git {
 
     // MARK: - Fetch / worktrees
 
-    public static func fetch(repoPath: String, branch: String) async throws {
-        try await git(["fetch", "origin", branch, "--prune"], cwd: repoPath)
+    public static func fetch(repoPath: String, branch: String, host: any ExecutionHost = LocalHost.shared) async throws {
+        try await git(["fetch", "origin", branch, "--prune"], cwd: repoPath, host: host)
     }
 
     /// Creates `path` as a new worktree on a new `branch` starting at `base` (e.g. "origin/main").
@@ -135,8 +136,8 @@ public enum Git {
 
     // MARK: - Status
 
-    public static func status(path: String) async throws -> [FileStatus] {
-        let out = try await git(["status", "--porcelain=v2", "-z", "--untracked-files=all"], cwd: path).stdout
+    public static func status(path: String, host: any ExecutionHost = LocalHost.shared) async throws -> [FileStatus] {
+        let out = try await git(["status", "--porcelain=v2", "-z", "--untracked-files=all"], cwd: path, host: host).stdout
         return parsePorcelainV2(out)
     }
 
@@ -186,27 +187,28 @@ public enum Git {
         return result
     }
 
-    public static func hasUncommittedChanges(path: String) async throws -> Bool {
-        let out = try await git(["status", "--porcelain", "-z", "--untracked-files=normal"], cwd: path).stdout
+    public static func hasUncommittedChanges(path: String, host: any ExecutionHost = LocalHost.shared) async throws -> Bool {
+        let out = try await git(["status", "--porcelain", "-z", "--untracked-files=normal"], cwd: path, host: host).stdout
         return !out.isEmpty
     }
 
     // MARK: - Diff
 
     /// Working tree (committed + staged + unstaged + untracked) vs merge-base(HEAD, base).
-    public static func diff(path: String, base: String) async throws -> [FileDiff] {
-        let mb = try await git(["merge-base", "HEAD", base], cwd: path, check: false)
+    public static func diff(path: String, base: String, host: any ExecutionHost = LocalHost.shared) async throws -> [FileDiff] {
+        let mb = try await git(["merge-base", "HEAD", base], cwd: path, check: false, host: host)
         let from = mb.succeeded ? mb.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : base
         let out = try await git(
-            ["diff", "--no-color", "--no-ext-diff", "-M", "--src-prefix=a/", "--dst-prefix=b/", from], cwd: path
+            ["diff", "--no-color", "--no-ext-diff", "-M", "--src-prefix=a/", "--dst-prefix=b/", from], cwd: path,
+            host: host
         ).stdout
         var files = UnifiedDiffParser.parse(out).map(collapseIfHuge)
 
-        let untrackedOut = try await git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: path).stdout
+        let untrackedOut = try await git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: path, host: host).stdout
         let untracked = untrackedOut.split(separator: "\0").map(String.init)
         let tracked = Set(files.map(\.path))
         for rel in untracked where !tracked.contains(rel) {
-            files.append(untrackedDiff(root: path, relativePath: rel))
+            files.append(await untrackedDiff(root: path, relativePath: rel, host: host))
         }
         return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
@@ -219,14 +221,17 @@ public enum Git {
         return copy
     }
 
-    static func untrackedDiff(root: String, relativePath: String) -> FileDiff {
+    static func untrackedDiff(root: String, relativePath: String, host: any ExecutionHost = LocalHost.shared) async -> FileDiff {
         let full = (root as NSString).appendingPathComponent(relativePath)
-        let attrs = try? FileManager.default.attributesOfItem(atPath: full)
-        let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
-        if size > maxUntrackedFileBytes {
+        let data: Data
+        do {
+            guard let d = try await host.readFile(full, maxBytes: maxUntrackedFileBytes) else {
+                return FileDiff(path: relativePath, status: .added)
+            }
+            data = d
+        } catch is HostFileTooLarge {
             return FileDiff(path: relativePath, status: .added, isTooLarge: true)
-        }
-        guard let data = FileManager.default.contents(atPath: full) else {
+        } catch {
             return FileDiff(path: relativePath, status: .added)
         }
         if data.prefix(8000).contains(0) {
@@ -253,8 +258,8 @@ public enum Git {
             deletions: files.reduce(0) { $0 + $1.deletions })
     }
 
-    public static func aheadBehind(path: String, base: String) async throws -> AheadBehind {
-        let out = try await output(["rev-list", "--left-right", "--count", "\(base)...HEAD"], cwd: path)
+    public static func aheadBehind(path: String, base: String, host: any ExecutionHost = LocalHost.shared) async throws -> AheadBehind {
+        let out = try await output(["rev-list", "--left-right", "--count", "\(base)...HEAD"], cwd: path, host: host)
         let parts = out.split(whereSeparator: { $0 == "\t" || $0 == " " })
         guard parts.count == 2, let behind = Int(parts[0]), let ahead = Int(parts[1]) else {
             return AheadBehind(ahead: 0, behind: 0)
@@ -266,27 +271,27 @@ public enum Git {
 
     /// Stages everything and commits. Returns false when there was nothing to commit.
     @discardableResult
-    public static func commitAll(path: String, message: String) async throws -> Bool {
-        try await git(["add", "-A"], cwd: path)
-        let staged = try await git(["diff", "--cached", "--quiet"], cwd: path, check: false)
+    public static func commitAll(path: String, message: String, host: any ExecutionHost = LocalHost.shared) async throws -> Bool {
+        try await git(["add", "-A"], cwd: path, host: host)
+        let staged = try await git(["diff", "--cached", "--quiet"], cwd: path, check: false, host: host)
         if staged.status == 0 { return false }
-        try await git(["commit", "-q", "-F", "-"], cwd: path, stdin: message)
+        try await git(["commit", "-q", "-F", "-"], cwd: path, stdin: message, host: host)
         return true
     }
 
-    public static func push(path: String, branch: String, setUpstream: Bool, force: Bool = false) async throws {
+    public static func push(path: String, branch: String, setUpstream: Bool, force: Bool = false, host: any ExecutionHost = LocalHost.shared) async throws {
         var args = ["push"]
         if setUpstream { args.append("-u") }
         if force { args.append("--force-with-lease") }
         args += ["origin", "HEAD:refs/heads/\(branch)"]
-        try await git(args, cwd: path)
+        try await git(args, cwd: path, host: host)
     }
 
     // MARK: - Log
 
-    public static func log(path: String, range: String, limit: Int = 100) async throws -> [Commit] {
+    public static func log(path: String, range: String, limit: Int = 100, host: any ExecutionHost = LocalHost.shared) async throws -> [Commit] {
         let fmt = "%H%x1f%an%x1f%aI%x1f%s%x1f%b%x1e"
-        let r = try await git(["log", "--format=\(fmt)", "-n", String(limit), range], cwd: path, check: false)
+        let r = try await git(["log", "--format=\(fmt)", "-n", String(limit), range], cwd: path, check: false, host: host)
         guard r.succeeded else { return [] }
         let iso = ISO8601DateFormatter()
         return r.stdout.split(separator: "\u{1e}").compactMap { rec in
@@ -303,35 +308,35 @@ public enum Git {
 
     /// Rebases the current branch onto origin/<defaultBranch> and fast-forward pushes HEAD to it.
     /// Retries when someone else pushed in between. Uncommitted changes must be committed first.
-    public static func trunkShip(path: String, defaultBranch: String, maxAttempts: Int = 3) async throws
+    public static func trunkShip(path: String, defaultBranch: String, maxAttempts: Int = 3, host: any ExecutionHost = LocalHost.shared) async throws
         -> TrunkShipResult
     {
-        if try await hasUncommittedChanges(path: path) {
+        if try await hasUncommittedChanges(path: path, host: host) {
             throw GitError("Commit your changes before shipping to \(defaultBranch).")
         }
         let remoteRef = "origin/\(defaultBranch)"
         for _ in 0..<max(1, maxAttempts) {
-            try await fetch(repoPath: path, branch: defaultBranch)
-            let head = try await currentHead(path: path)
-            let remote = try await output(["rev-parse", remoteRef], cwd: path)
+            try await fetch(repoPath: path, branch: defaultBranch, host: host)
+            let head = try await currentHead(path: path, host: host)
+            let remote = try await output(["rev-parse", remoteRef], cwd: path, host: host)
             if head == remote { return .nothingToShip }
-            let isAncestor = try await git(["merge-base", "--is-ancestor", "HEAD", remoteRef], cwd: path, check: false)
+            let isAncestor = try await git(["merge-base", "--is-ancestor", "HEAD", remoteRef], cwd: path, check: false, host: host)
             if isAncestor.succeeded { return .nothingToShip }
 
-            let rebase = try await git(["rebase", remoteRef], cwd: path, check: false)
+            let rebase = try await git(["rebase", remoteRef], cwd: path, check: false, host: host)
             if !rebase.succeeded {
-                let conflicted = try await git(["diff", "--name-only", "--diff-filter=U"], cwd: path, check: false)
+                let conflicted = try await git(["diff", "--name-only", "--diff-filter=U"], cwd: path, check: false, host: host)
                 let files = conflicted.stdout.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
-                try await git(["rebase", "--abort"], cwd: path, check: false)
+                try await git(["rebase", "--abort"], cwd: path, check: false, host: host)
                 if files.isEmpty {
                     throw GitError(command: "git rebase \(remoteRef)", result: rebase)
                 }
                 return .conflict(files: files)
             }
 
-            let push = try await git(["push", "origin", "HEAD:refs/heads/\(defaultBranch)"], cwd: path, check: false)
+            let push = try await git(["push", "origin", "HEAD:refs/heads/\(defaultBranch)"], cwd: path, check: false, host: host)
             if push.succeeded {
-                return .pushed(sha: try await currentHead(path: path))
+                return .pushed(sha: try await currentHead(path: path, host: host))
             }
             let err = push.stderr.lowercased()
             if err.contains("non-fast-forward") || err.contains("fetch first") || err.contains("rejected") {
@@ -344,20 +349,21 @@ public enum Git {
 
     // MARK: - Files
 
-    public static func listFiles(path: String) async throws -> [String] {
-        let out = try await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd: path).stdout
-        let files = Set(out.split(separator: "\0").map(String.init))
+    public static func listFiles(path: String, host: any ExecutionHost = LocalHost.shared) async throws -> [String] {
+        let out = try await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd: path, host: host).stdout
         // Files deleted in the working tree still show as cached; drop them.
-        return files.filter { FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent($0)) }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let deleted = try await git(["ls-files", "-z", "--deleted"], cwd: path, host: host).stdout
+        let gone = Set(deleted.split(separator: "\0").map(String.init))
+        let files = Set(out.split(separator: "\0").map(String.init)).subtracting(gone)
+        return files.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 }
 
 extension Git {
     @discardableResult
-    static func git(_ args: [String], cwd: String, stdin: String) async throws -> ShellResult {
-        try await Shell.run(
+    static func git(_ args: [String], cwd: String, stdin: String, host: any ExecutionHost = LocalHost.shared) async throws -> ShellResult {
+        try await host.run(
             "git", ["-c", "core.quotePath=false", "-c", "color.ui=false"] + args, cwd: cwd, env: quietEnv,
-            stdin: stdin, check: true)
+            stdin: Data(stdin.utf8), check: true)
     }
 }

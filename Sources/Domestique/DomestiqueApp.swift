@@ -91,6 +91,11 @@ struct AppCommands: Commands {
                 Task { await app.createWorkspace(in: repo) }
             }
             .keyboardShortcut("n", modifiers: .command)
+            Button("New Cloud Workspace (boat.dev)") {
+                let repo = app.selectedWorkspaceModel?.repo ?? app.repositories.first
+                if let repo { Task { await app.createWorkspace(in: repo, location: .cloud(.boat)) } } else { app.promptAddRepository() }
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
             Button("New Chat Tab") { app.selectedWorkspaceModel?.newTab() }
                 .keyboardShortcut("t", modifiers: .command)
             Button("Previous Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(-1) }

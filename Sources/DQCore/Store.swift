@@ -64,7 +64,45 @@ public struct AppSettings: Codable, Sendable, Hashable {
         return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath, isDirectory: true)
     }
 
+    /// boat.dev defaults. Optional so settings saved before cloud support still decode.
+    public var boatSettings: BoatSettings?
+
+    public var boat: BoatSettings {
+        get { boatSettings ?? BoatSettings() }
+        set { boatSettings = newValue }
+    }
+
     public init() {}
+}
+
+/// Defaults for new boat.dev workspaces.
+public struct BoatSettings: Codable, Sendable, Hashable {
+    /// small / default / large / xlarge.
+    public var machineType: String = "default"
+    /// Auto-stop after this many minutes from start/resume; nil = never (paid plans only).
+    public var autoStopMinutes: Int? = 120
+    /// Named boat environment (repos, secrets, AI credentials). nil = the account default.
+    public var environment: String?
+    /// When boat's own GitHub access can't clone a repo, give the sandbox your local `gh` token.
+    public var shareGitHubToken: Bool = true
+    /// Forward every port the stack listens on to the same port on this Mac.
+    public var autoForwardPorts: Bool = true
+    /// Archiving a workspace stops its sandbox (resumable for 14 days); deleting it deletes the sandbox.
+    public var deleteOnArchive: Bool = false
+
+    public init() {}
+
+    // Tolerant decoding: fields added later fall back to their defaults.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = BoatSettings()
+        machineType = try c.decodeIfPresent(String.self, forKey: .machineType) ?? d.machineType
+        autoStopMinutes = try c.decodeIfPresent(Int.self, forKey: .autoStopMinutes)
+        environment = try c.decodeIfPresent(String.self, forKey: .environment)
+        shareGitHubToken = try c.decodeIfPresent(Bool.self, forKey: .shareGitHubToken) ?? d.shareGitHubToken
+        autoForwardPorts = try c.decodeIfPresent(Bool.self, forKey: .autoForwardPorts) ?? d.autoForwardPorts
+        deleteOnArchive = try c.decodeIfPresent(Bool.self, forKey: .deleteOnArchive) ?? d.deleteOnArchive
+    }
 }
 
 /// Persistence: one SQLite database (`domestique.sqlite` in the app-support folder) shared by every
