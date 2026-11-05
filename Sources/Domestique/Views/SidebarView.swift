@@ -302,7 +302,8 @@ private struct SidebarFooter: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Add repository")
-            Spacer()
+            UpdateButton(updater: app.updater)
+            Spacer(minLength: 4)
             ForEach([ProviderKind.claude, .codex], id: \.self) { p in
                 if let u = app.usage[p] { UsageRing(provider: p, usage: u) }
             }
@@ -312,6 +313,136 @@ private struct SidebarFooter: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 44)
+    }
+}
+
+/// Bottom-left pill shown when a newer build is out: icon + the newest release's title (its changelog headline).
+/// Clicking opens the list of what's new and the restart button.
+private struct UpdateButton: View {
+    let updater: Updater
+    @State private var showDetails = false
+    @State private var hovering = false
+
+    var body: some View {
+        if let newest = updater.newest {
+            Button { showDetails.toggle() } label: {
+                HStack(spacing: 6) {
+                    UpdateStatusIcon(phase: updater.phase)
+                    Text(newest.title)
+                        .font(Theme.smallMedium)
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.leading, 6)
+                .padding(.trailing, 9)
+                .frame(height: 24)
+                .background(Capsule().fill(hovering || showDetails ? Theme.selected : Theme.hover))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .help(help(newest))
+            .popover(isPresented: $showDetails, arrowEdge: .top) { UpdateDetails(updater: updater) }
+            .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+        }
+    }
+
+    private func help(_ newest: AppRelease) -> String {
+        switch updater.phase {
+        case .ready: "Build \(newest.build) is ready to install"
+        case .failed: "Update failed. Click for details"
+        default: "Build \(newest.build) is available"
+        }
+    }
+}
+
+private struct UpdateStatusIcon: View {
+    let phase: Updater.Phase
+
+    var body: some View {
+        switch phase {
+        case .checking, .downloading, .installing:
+            Spinner(size: 11)
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.warning)
+        default:
+            Image(systemName: "arrow.down.circle.fill").font(.system(size: 12)).foregroundStyle(Theme.running)
+        }
+    }
+}
+
+private struct UpdateDetails: View {
+    let updater: Updater
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update available").font(Theme.uiMedium).foregroundStyle(Theme.text)
+                if let newest = updater.newest {
+                    Text(verbatim: "Build \(newest.build) · you have build \(updater.currentBuild)")
+                        .font(Theme.small).foregroundStyle(Theme.text3)
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(updater.available) { release in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(release.title).font(Theme.ui).foregroundStyle(Theme.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(subtitle(release)).font(Theme.tiny).foregroundStyle(Theme.text3)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Hairline()
+            footer
+        }
+        .padding(14)
+        .frame(width: 320)
+    }
+
+    @ViewBuilder private var footer: some View {
+        if case .failed(let message) = updater.phase {
+            Text(message).font(Theme.small).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true)
+        }
+        HStack(spacing: 8) {
+            if let url = updater.newest?.htmlURL {
+                Button("Release notes") { NSWorkspace.shared.open(url) }.buttonStyle(.softCompact)
+            }
+            Spacer()
+            switch updater.phase {
+            case .ready:
+                Button("Restart to Update") { updater.installAndRelaunch() }.buttonStyle(.softProminent)
+            case .checking, .downloading:
+                progress("Downloading…")
+            case .installing:
+                progress("Restarting…")
+            case .failed, .idle:
+                Button("Try Again") { updater.downloadNewest() }.buttonStyle(.soft)
+            }
+        }
+        if case .ready = updater.phase {
+            Text("Restarting stops running agents and tasks.").font(Theme.tiny).foregroundStyle(Theme.text3)
+        }
+    }
+
+    private func progress(_ label: String) -> some View {
+        HStack(spacing: 6) {
+            Spinner(size: 11)
+            Text(label).font(Theme.small).foregroundStyle(Theme.text2)
+        }
+        .frame(height: 28)
+    }
+
+    private func subtitle(_ release: AppRelease) -> String {
+        guard let date = release.publishedAt else { return "Build \(release.build)" }
+        return "Build \(release.build) · \(date.formatted(.relative(presentation: .named)))"
     }
 }
 

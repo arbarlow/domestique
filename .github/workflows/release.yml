@@ -18,7 +18,10 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to a commit: this job can publish releases, and every install auto-updates from them.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+        with:
+          fetch-depth: 0  # full history + tags, for the changelog since the previous build
 
       - name: Select newest Xcode
         run: |
@@ -52,9 +55,20 @@ jobs:
         run: |
           TAG="build-${{ github.run_number }}"
           SHORT="$(git rev-parse --short HEAD)"
+          # The release title is what the in-app updater shows as the update's headline, so use the commit
+          # subject (the squashed PR title). The build number lives in the tag.
           SUBJECT="$(git log -1 --format=%s)"
+          PREV="$(git describe --tags --abbrev=0 --match 'build-*' HEAD^ 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then
+            CHANGES="$(git log --no-merges --format='- %s (%h)' "$PREV..HEAD")"
+          else
+            CHANGES="$(git log -1 --format='- %s (%h)')"
+          fi
           cat > notes.md <<NOTES
-          Automatic build of \`${SHORT}\`: ${SUBJECT}
+          ## What's changed
+          ${CHANGES}
+
+          Build ${{ github.run_number }} of \`${SHORT}\`.
 
           **Install:** download \`Domestique.zip\`, unzip, and move \`Domestique.app\` to /Applications.
           This build is ad-hoc signed (not notarized), so the first time run:
@@ -62,9 +76,11 @@ jobs:
           \`\`\`sh
           xattr -dr com.apple.quarantine /Applications/Domestique.app
           \`\`\`
+
+          After that, Domestique updates itself: a button appears at the bottom of the sidebar when a new build is out.
           NOTES
           gh release create "$TAG" Domestique.zip Domestique.zip.sha256 \
             --target "$GITHUB_SHA" \
-            --title "Domestique build ${{ github.run_number }} (${SHORT})" \
+            --title "$SUBJECT" \
             --notes-file notes.md \
             --latest

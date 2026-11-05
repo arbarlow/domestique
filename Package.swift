@@ -37,6 +37,7 @@ let package = Package(
         .testTarget(name: "DQCoreTests", dependencies: ["DQCore"]),
         .testTarget(name: "AgentKitTests", dependencies: ["AgentKit"]),
         .testTarget(name: "GitKitTests", dependencies: ["GitKit"]),
+        .testTarget(name: "GitHubKitTests", dependencies: ["GitHubKit"]),
         .testTarget(name: "ProcessKitTests", dependencies: ["ProcessKit"]),
     ]
 )

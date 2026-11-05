@@ -7,7 +7,7 @@ public actor GitHubClient {
 
     private let restBase = URL(string: "https://api.github.com")!
     private let graphQLURL = URL(string: "https://api.github.com/graphql")!
-    private let session: URLSession
+    let session: URLSession
     private var cachedToken: String?
 
     public init() {

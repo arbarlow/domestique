@@ -62,6 +62,22 @@ struct AppCommands: Commands {
     let app: AppModel
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                Task {
+                    await app.updater.check(userInitiated: true)
+                    guard app.updater.available.isEmpty else { return }  // the sidebar button takes it from here
+                    if case .failed(let message) = app.updater.phase {
+                        app.alert = AppAlert(title: "Couldn't check for updates", message: message)
+                        app.updater.dismissError()
+                    } else {
+                        app.alert = AppAlert(
+                            title: "Domestique is up to date", message: "Build \(app.updater.currentBuild) is the latest.")
+                    }
+                }
+            }
+            .disabled(!app.updater.isEnabled)
+        }
         // Settings open inside the main window, not as a separate one.
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { app.settingsRoute = app.settingsRoute == nil ? .general : nil }

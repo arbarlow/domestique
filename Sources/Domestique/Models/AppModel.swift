@@ -29,6 +29,8 @@ final class AppModel {
     }
     /// Usage left per provider, from rate-limit events (0...1 used), for the sidebar ring.
     var usage: [ProviderKind: UsageInfo] = [:]
+    /// Checks GitHub Releases for newer CI builds; drives the sidebar's update button.
+    let updater = Updater()
 
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var hasPendingSave = false
@@ -52,6 +54,7 @@ final class AppModel {
             self.scheduleSave()  // persists any launch fix-ups above
         }
         startSync()
+        updater.start()
         Task { await loadCodexModels() }
         Task { await loadClaudeModels() }
         Task { [weak self] in
