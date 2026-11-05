@@ -239,10 +239,52 @@ private struct AgentSettings: View {
             }
             ProviderDefaults(provider: .claude, model: $app.settings.defaultClaudeModel, effort: $app.settings.defaultClaudeEffort)
             ProviderDefaults(provider: .codex, model: $app.settings.defaultCodexModel, effort: $app.settings.defaultCodexEffort)
+            SettingsSection(
+                title: "Ship prompts",
+                footer: "What the agent is told when you ship from the panel. {base} and {branch} are filled in for you; edit freely, or reset to the built-in prompt."
+            ) {
+                ForEach(ShipPromptKind.allCases) { ShipPromptEditor(kind: $0) }
+            }
             Text("Domestique runs your own `claude` and `codex` with their existing logins (Claude subscription / ChatGPT). It never sees the tokens.")
                 .font(Theme.small)
                 .foregroundStyle(Theme.text3)
         }
+    }
+}
+
+private struct ShipPromptEditor: View {
+    @Environment(AppModel.self) private var app
+    let kind: ShipPromptKind
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(kind.displayName).font(Theme.ui).foregroundStyle(Theme.text)
+                    Text(kind.summary).font(Theme.small).foregroundStyle(Theme.text3)
+                }
+                Spacer(minLength: 12)
+                if app.settings.isShipPromptCustomized(kind) {
+                    Button("Reset") { app.settings.setShipPromptTemplate(kind, nil) }
+                        .buttonStyle(.softCompact)
+                }
+            }
+            TextEditor(text: Binding(
+                get: { app.settings.shipPromptTemplate(kind) },
+                set: { app.settings.setShipPromptTemplate(kind, $0) }
+            ))
+            .font(Theme.mono)
+            .scrollContentBackground(.hidden)
+            .padding(6)
+            .frame(minHeight: 110)
+            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
+            Text(kind.placeholders.map { "\($0.token) \($0.meaning)" }.joined(separator: " · "))
+                .font(Theme.small)
+                .foregroundStyle(Theme.text3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 

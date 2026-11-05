@@ -27,52 +27,32 @@ extension WorkspaceModel {
         }
     }
 
+    private func shipPromptContext(_ ws: Workspace) -> ShipPromptContext {
+        let checks = (config?.trunkGate ?? []).compactMap { config?.task($0)?.command }
+        return ShipPromptContext(base: base, branch: ws.branch, prNumber: prStatus?.pr.number, checks: checks)
+    }
+
     func agentCreatePR() {
         guard let ws = workspace else { return }
         shipMessage = nil
         agentShip = .createPR
         recordGhMergeBase()
         watchForPullRequest()
-        sendToAgent(
-            """
-            Ship this work as a pull request:
-            1. Look at `git status` and the diff against origin/\(base). Commit everything that belongs to this change with clear commit message(s). Don't commit secrets, build output or unrelated files.
-            2. Push the branch `\(ws.branch)` to origin (set upstream).
-            3. Open a pull request into `\(base)` with `gh pr create`: a concise title, and a description of what changed, why, and how it was tested.
-            4. Reply with the PR URL.
-            """)
+        sendToAgent(app.settings.shipPrompt(.createPR, shipPromptContext(ws)))
     }
 
     func agentCommitAndPush() {
         guard let ws = workspace else { return }
         shipMessage = nil
         agentShip = .updatePR
-        let pr = prStatus.map { " to update PR #\($0.pr.number)" } ?? ""
-        sendToAgent(
-            """
-            Commit the remaining changes with clear commit message(s) and push `\(ws.branch)` to origin\(pr). Don't force-push. Reply with what you pushed.
-            """)
+        sendToAgent(app.settings.shipPrompt(.push, shipPromptContext(ws)))
     }
 
     func agentShipToTrunk() {
+        guard let ws = workspace else { return }
         shipMessage = nil
         agentShip = .trunk
-        var gate = ""
-        if let ids = config?.trunkGate, !ids.isEmpty {
-            let commands = ids.compactMap { config?.task($0) }.map { "`\($0.command)`" }
-            if !commands.isEmpty {
-                gate = "\n3. Run these checks and only continue if they pass: \(commands.joined(separator: ", "))."
-            }
-        }
-        let n = gate.isEmpty ? 3 : 4
-        sendToAgent(
-            """
-            Ship this work straight to `\(base)` (trunk-based, no pull request):
-            1. Commit everything that belongs to this change with clear commit message(s). Don't commit secrets, build output or unrelated files.
-            2. `git fetch origin && git rebase origin/\(base)`; if there are conflicts, resolve them preserving both sides' intent.\(gate)
-            \(n). `git push origin HEAD:\(base)` (never force). If it's rejected because origin moved, fetch, rebase and retry.
-            \(n + 1). Reply with the commit(s) you pushed.
-            """)
+        sendToAgent(app.settings.shipPrompt(.trunk, shipPromptContext(ws)))
     }
 
     /// `gh pr create` takes its default base from this git config key (same trick as T3 Code),

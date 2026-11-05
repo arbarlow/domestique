@@ -175,7 +175,7 @@ final class ChatModel {
         - Worktree: \(ws.path)
         - Branch: \(ws.branch) (branched from origin/\(repo.defaultBranch))
         - This workspace owns ports \(ws.portBase)-\(ws.portBase + 9) ($DOMESTIQUE_PORT is the first). Use them for any dev servers so parallel workspaces don't collide.
-        - The user previews, runs tasks, and ships (PR or push to \(repo.defaultBranch)) from the Domestique UI, so don't push or open PRs unless asked.
+        - The user previews, runs tasks, and ships (a pull request, or a push straight to the default branch) from the Domestique UI, so don't push or open PRs unless asked.
         """
     }
 

@@ -56,6 +56,8 @@ public struct AppSettings: Codable, Sendable, Hashable {
     public var editorCommand: String = "cursor"
     /// Where "Clone from GitHub" puts repos (nil = Paths.defaultCloneRoot). `~` is expanded.
     public var cloneDirectory: String?
+    /// Custom ship instructions keyed by `ShipPromptKind.rawValue`; missing = built-in default.
+    public var shipPrompts: [String: String]?
 
     public var cloneRoot: URL {
         guard let dir = cloneDirectory?.trimmingCharacters(in: .whitespaces), !dir.isEmpty else {
