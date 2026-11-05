@@ -45,7 +45,7 @@ final class PanelGitState {
                 self.unpushed = nil
                 self.hasUpstream = false
             }
-            let h = try? await Shell.run("git", ["rev-parse", "HEAD"], cwd: path, check: false)
+            let h = try? await host.run("git", ["rev-parse", "HEAD"], cwd: path, check: false)
             self.head = h.flatMap { $0.succeeded ? $0.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil }
         }
     }
