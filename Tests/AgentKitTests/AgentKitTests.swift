@@ -61,3 +61,19 @@ import Testing
         #expect(models[0].defaultEffort == "high")
     }
 }
+
+@Suite struct RateLimitTests {
+    @Test func claudeKeepsEveryWindow() throws {
+        let json = #"""
+            {"status":"allowed","isUsingOverage":false,"overageStatus":"rejected","overageDisabledReason":"out_of_credits",
+             "unifiedWindows":{"seven_day":{"utilization":0.15,"resetsAt":1794344400,"status":"allowed"},
+                               "five_hour":{"utilization":0.42,"resetsAt":1794300000,"status":"allowed"},
+                               "seven_day_opus":{"utilization":0.3,"resetsAt":1794344400}}}
+            """#
+        let info = try #require(ClaudeSession.rateLimit(try JSONValue.parse(Data(json.utf8))))
+        #expect(info.windows.map(\.id) == ["five_hour", "seven_day", "seven_day_opus"])
+        #expect(info.windows.map(\.label) == ["Current session", "Weekly · all models", "Weekly · Opus"])
+        #expect(info.worst?.id == "five_hour")
+        #expect(info.overageDisabledReason == "out_of_credits")
+    }
+}

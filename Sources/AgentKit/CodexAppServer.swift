@@ -148,13 +148,18 @@ public actor CodexAppServer {
         }
         if method == "account/rateLimits/updated" {
             let limits = msg["params"]?["rateLimits"]
-            let windows = [limits?["primary"], limits?["secondary"]].compactMap { $0 }
-            if let worst = windows.max(by: { ($0["usedPercent"]?.double ?? 0) < ($1["usedPercent"]?.double ?? 0) }) {
-                rateLimitContinuation.yield(
-                    RateLimitInfo(
-                        usedFraction: (worst["usedPercent"]?.double ?? 0) / 100,
-                        window: RateLimitInfo.windowLabel(minutes: worst["windowDurationMins"]?.int),
-                        resetsAt: worst["resetsAt"]?.double.map { Date(timeIntervalSince1970: $0) }))
+            var windows: [RateLimitWindow] = []
+            for key in ["primary", "secondary"] {
+                guard let w = limits?[key], let pct = w["usedPercent"]?.double else { continue }
+                let mins = w["windowDurationMins"]?.int
+                windows.append(
+                    RateLimitWindow(
+                        id: key, label: RateLimitInfo.windowLabel(minutes: mins),
+                        duration: RateLimitInfo.duration(minutes: mins), usedFraction: pct / 100,
+                        resetsAt: w["resetsAt"]?.double.map { Date(timeIntervalSince1970: $0) }))
+            }
+            if !windows.isEmpty {
+                rateLimitContinuation.yield(RateLimitInfo(windows: windows, plan: limits?["planType"]?.string))
             }
             return
         }

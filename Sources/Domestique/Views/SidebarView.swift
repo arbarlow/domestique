@@ -1,3 +1,4 @@
+import AgentKit
 import DQCore
 import GitHubKit
 import SwiftUI
@@ -446,23 +447,162 @@ private struct UpdateDetails: View {
     }
 }
 
-/// Codex-style usage ring: "Weekly · 82% left".
+/// Codex-style usage ring for the most-used window. Hover (or click to pin) for every window's details.
 struct UsageRing: View {
     let provider: ProviderKind
     let usage: UsageInfo
 
+    @State private var hovering = false
+    @State private var showDetails = false
+    @State private var pinned = false
+    @State private var hoverTask: Task<Void, Never>?
+
     var body: some View {
-        ZStack {
-            Circle().stroke(Theme.hairline, lineWidth: 2.5)
-            Circle()
-                .trim(from: 0, to: max(0.02, 1 - usage.usedFraction))
-                .stroke(usage.usedFraction > 0.85 ? Theme.warning : Theme.text2, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            ProviderIcon(provider: provider, size: 7)
+        Button {
+            pinned.toggle()
+            showDetails = pinned
+        } label: {
+            ZStack {
+                Circle().stroke(Theme.hairline, lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: max(0.02, 1 - usage.usedFraction))
+                    .stroke(
+                        UsageDetails.tint(usage.usedFraction),
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                ProviderIcon(provider: provider, size: 7)
+            }
+            .frame(width: 18, height: 18)
+            .frame(width: 26, height: 26)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovering || showDetails ? Theme.hover : .clear))
+            .contentShape(Rectangle())
         }
-        .frame(width: 18, height: 18)
-        .frame(width: 26, height: 26)
-        .help("\(provider.displayName) · \(usage.windowLabel) · \(Int(((1 - usage.usedFraction) * 100).rounded()))% left")
+        .buttonStyle(.plain)
+        .onHover { inside in
+            hovering = inside
+            hoverTask?.cancel()
+            guard !pinned else { return }
+            hoverTask = Task {
+                try? await Task.sleep(for: .milliseconds(inside ? 250 : 150))
+                guard !Task.isCancelled else { return }
+                showDetails = inside
+            }
+        }
+        .popover(isPresented: $showDetails, arrowEdge: .top) {
+            UsageDetails(provider: provider, usage: usage)
+        }
+        .onChange(of: showDetails) { _, open in if !open { pinned = false } }
+        .accessibilityLabel(
+            "\(provider.displayName) usage, \(Int(((1 - usage.usedFraction) * 100).rounded())) percent left")
+    }
+}
+
+/// Per-window breakdown: session, weekly, weekly per-model, with reset times.
+private struct UsageDetails: View {
+    let provider: ProviderKind
+    let usage: UsageInfo
+
+    static func tint(_ used: Double) -> Color {
+        used >= 0.9 ? Theme.removed : used > 0.75 ? Theme.warning : Theme.text2
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 7) {
+                    ProviderIcon(provider: provider, size: 12)
+                    Text("\(provider.displayName) usage").font(Theme.uiMedium).foregroundStyle(Theme.text)
+                    Spacer(minLength: 8)
+                    if let plan = usage.plan {
+                        Text(plan.capitalized).font(Theme.tiny).foregroundStyle(Theme.text3)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(usage.windows) { w in row(w, now: context.date) }
+                }
+
+                if let note = overageNote {
+                    Text(note).font(Theme.tiny).foregroundStyle(usage.usingOverage ? Theme.warning : Theme.text3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Hairline()
+                Text(footer(now: context.date)).font(Theme.tiny).foregroundStyle(Theme.text3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(width: 280)
+    }
+
+    private func row(_ w: RateLimitWindow, now: Date) -> some View {
+        let used = UsageInfo.used(w, now: now)
+        let pct = Int((used * 100).rounded())
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(w.label).font(Theme.smallMedium).foregroundStyle(Theme.text)
+                if let d = w.duration {
+                    Text(d).font(Theme.tiny).foregroundStyle(Theme.text3)
+                }
+                Spacer(minLength: 8)
+                Text("\(pct)% used").font(Theme.monoDigits).foregroundStyle(Self.tint(used))
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.hairline)
+                    Capsule().fill(Self.tint(used))
+                        .frame(width: max(used > 0 ? 4 : 0, geo.size.width * min(1, used)))
+                }
+            }
+            .frame(height: 5)
+            if let reset = resetText(w, now: now) {
+                Text(reset).font(Theme.tiny).foregroundStyle(Theme.text3)
+            }
+        }
+    }
+
+    private func resetText(_ w: RateLimitWindow, now: Date) -> String? {
+        if w.status == "rejected", let r = w.resetsAt, r > now {
+            return "Limit reached · resets \(Self.when(r, now: now))"
+        }
+        guard let r = w.resetsAt else { return nil }
+        if r <= now { return "Reset \(r.formatted(.relative(presentation: .named, unitsStyle: .wide)))" }
+        return "Resets \(Self.when(r, now: now))"
+    }
+
+    /// "in 3h 12m" for soon, "Fri 09:00" for later in the week.
+    static func when(_ date: Date, now: Date) -> String {
+        let secs = date.timeIntervalSince(now)
+        if secs < 24 * 3600 {
+            let mins = max(1, Int(secs / 60))
+            let h = mins / 60, m = mins % 60
+            return h > 0 ? "in \(h)h \(m)m" : "in \(m)m"
+        }
+        return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+            + " (in \(Int((secs / 86400).rounded())) days)"
+    }
+
+    private var overageNote: String? {
+        if usage.usingOverage { return "Using extra usage — limits reached, now drawing on overage." }
+        guard provider == .claude, let status = usage.overageStatus else { return nil }
+        if status == "rejected" || status == "disabled" {
+            switch usage.overageDisabledReason {
+            case "out_of_credits": return "Extra usage unavailable: out of credits."
+            case let reason?: return "Extra usage unavailable (\(reason.replacingOccurrences(of: "_", with: " ")))."
+            case nil: return "Extra usage unavailable."
+            }
+        }
+        return "Extra usage available once limits are reached."
+    }
+
+    private func footer(now: Date) -> String {
+        let ago =
+            now.timeIntervalSince(usage.updatedAt) < 60
+            ? "just now" : usage.updatedAt.formatted(.relative(presentation: .named))
+        let partial = provider == .claude ? " Windows appear as \(provider.displayName) reports them." : ""
+        return "Updated \(ago), from the last \(provider.displayName) turn.\(partial)"
     }
 }
 

@@ -218,18 +218,24 @@ public actor ClaudeSession: AgentSession {
         _ = try? await control(["subtype": "set_model", "model": value])
     }
 
-    /// Picks the most-used unified window from a rate_limit_event.
+    /// All unified windows from a rate_limit_event.
     static func rateLimit(_ info: JSONValue?) -> RateLimitInfo? {
         guard let info else { return nil }
-        var best: RateLimitInfo?
+        var windows: [RateLimitWindow] = []
         for (key, w) in info["unifiedWindows"]?.object ?? [:] {
             guard let used = w["utilization"]?.double else { continue }
-            let candidate = RateLimitInfo(
-                usedFraction: used, window: RateLimitInfo.windowLabel(key),
-                resetsAt: w["resetsAt"]?.double.map { Date(timeIntervalSince1970: $0) })
-            if best == nil || used > best!.usedFraction { best = candidate }
+            windows.append(
+                RateLimitWindow(
+                    id: key, label: RateLimitInfo.windowLabel(key), duration: RateLimitInfo.duration(key),
+                    usedFraction: used, resetsAt: w["resetsAt"]?.double.map { Date(timeIntervalSince1970: $0) },
+                    status: w["status"]?.string))
         }
-        return best
+        guard !windows.isEmpty else { return nil }
+        return RateLimitInfo(
+            windows: windows.sorted { ($0.order, $0.id) < ($1.order, $1.id) },
+            usingOverage: info["isUsingOverage"]?.bool ?? false,
+            overageStatus: info["overageStatus"]?.string,
+            overageDisabledReason: info["overageDisabledReason"]?.string)
     }
 
     public func setEffort(_ effort: String?) async {

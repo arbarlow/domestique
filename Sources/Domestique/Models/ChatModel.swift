@@ -331,8 +331,7 @@ final class ChatModel {
             turnStartedAt = .now
         case .rateLimit(let info):
             if let provider = tab?.provider {
-                workspace.app.usage[provider] = UsageInfo(
-                    usedFraction: info.usedFraction, windowLabel: info.window, resetsAt: info.resetsAt)
+                workspace.app.recordUsage(info, for: provider)
             }
         case .exited(let message):
             session = nil

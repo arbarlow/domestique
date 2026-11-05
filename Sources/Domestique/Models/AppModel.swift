@@ -29,6 +29,11 @@ final class AppModel {
     }
     /// Usage left per provider, from rate-limit events (0...1 used), for the sidebar ring.
     var usage: [ProviderKind: UsageInfo] = [:]
+
+    func recordUsage(_ info: RateLimitInfo, for provider: ProviderKind) {
+        usage[provider, default: UsageInfo()].merge(info)
+    }
+
     /// Checks GitHub Releases for newer CI builds; drives the sidebar's update button.
     let updater = Updater()
 
@@ -68,7 +73,7 @@ final class AppModel {
         Task { await handleLaunchArguments() }
         Task { [weak self] in
             for await info in CodexAppServer.shared.rateLimits {
-                self?.usage[.codex] = UsageInfo(usedFraction: info.usedFraction, windowLabel: info.window, resetsAt: info.resetsAt)
+                self?.recordUsage(info, for: .codex)
             }
         }
     }
@@ -481,10 +486,37 @@ enum SettingsRoute: Hashable {
     case repo(UUID)
 }
 
+/// Latest known usage per provider. Rate-limit events can be partial (Claude often only reports the window
+/// that's closest to its limit), so windows are merged by id and kept until replaced.
 struct UsageInfo: Equatable {
-    var usedFraction: Double
-    var windowLabel: String
-    var resetsAt: Date?
+    var windows: [RateLimitWindow] = []
+    var usingOverage = false
+    var overageStatus: String?
+    var overageDisabledReason: String?
+    var plan: String?
+    var updatedAt: Date = .now
+
+    mutating func merge(_ info: RateLimitInfo) {
+        for w in info.windows {
+            if let i = windows.firstIndex(where: { $0.id == w.id }) { windows[i] = w } else { windows.append(w) }
+        }
+        windows.sort { ($0.order, $0.id) < ($1.order, $1.id) }
+        usingOverage = info.usingOverage
+        overageStatus = info.overageStatus ?? overageStatus
+        overageDisabledReason = info.overageDisabledReason
+        plan = info.plan ?? plan
+        updatedAt = .now
+    }
+
+    /// Used fraction, treating a window whose reset time has passed as empty.
+    static func used(_ w: RateLimitWindow, now: Date = .now) -> Double {
+        if let r = w.resetsAt, r <= now { return 0 }
+        return w.usedFraction
+    }
+
+    /// The most-used window right now (drives the ring).
+    var worst: RateLimitWindow? { windows.max { Self.used($0) < Self.used($1) } }
+    var usedFraction: Double { worst.map { Self.used($0) } ?? 0 }
 }
 
 struct AppAlert: Identifiable {
