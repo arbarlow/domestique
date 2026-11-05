@@ -12,6 +12,10 @@ struct PanelHeader: View {
         HStack(spacing: 10) {
             if let pr = model.prStatus?.pr {
                 PRChip(number: pr.number, url: pr.url, state: pr.state, overall: model.prStatus?.overall)
+            } else if model.isPushedToTrunk {
+                Image(systemName: "arrow.up.to.line")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.merged)
             }
             Text(model.prStatusLine ?? model.panelStatusText)
                 .font(Theme.uiMedium)

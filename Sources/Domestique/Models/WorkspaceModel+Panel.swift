@@ -88,8 +88,16 @@ extension WorkspaceModel {
 
     var hasLocalChanges: Bool { gitState.uncommitted > 0 || (gitState.unpushed ?? 0) > 0 }
 
+    /// The work has been pushed to the base branch (recorded, or detected for a clean tree).
+    var isPushedToTrunk: Bool { workspace?.isPushedToTrunk == true || (shipMode == .trunk && isShippedToTrunk) }
+
+    /// Uncommitted changes or commits not yet on origin/<base>, i.e. something to push again.
+    var hasWorkSinceTrunkPush: Bool { gitState.uncommitted > 0 || (aheadBehind?.ahead ?? 0) > 0 }
+
     var primaryShipAction: PrimaryShipAction {
-        if shipMode == .trunk { return isShippedToTrunk ? .archive : .pushToTrunk }
+        // Pushed to trunk behaves like a merged PR: archive, unless there's new work to push.
+        if prStatus == nil, isPushedToTrunk, !hasWorkSinceTrunkPush { return .archive }
+        if shipMode == .trunk { return .pushToTrunk }
         guard slug != nil else { return .none }
         guard let pr = prStatus?.pr else { return .createPR }
         switch pr.state {
@@ -124,8 +132,12 @@ extension WorkspaceModel {
                 }
             }
         }
+        if isPushedToTrunk {
+            if gitState.uncommitted > 0 { return "Pushed to \(base) · uncommitted changes" }
+            if let n = aheadBehind?.ahead, n > 0 { return "Pushed to \(base) · \(n) new commit\(n == 1 ? "" : "s")" }
+            return "Pushed to \(base)"
+        }
         if gitState.uncommitted > 0 { return "Uncommitted changes" }
-        if shipMode == .trunk, isShippedToTrunk { return "Pushed to \(base)" }
         if let ab = aheadBehind, ab.ahead > 0 {
             return "\(ab.ahead) commit\(ab.ahead == 1 ? "" : "s") ahead of \(workspace?.baseBranch ?? "main")"
         }

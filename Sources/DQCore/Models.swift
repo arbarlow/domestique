@@ -118,6 +118,11 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var hasUnread: Bool
     /// The machine this workspace runs on. nil = a local worktree on this Mac.
     public var host: WorkspaceHost?
+    /// Last time this workspace's work was pushed straight to its base branch (trunk). Like a merged PR,
+    /// the work has landed, but it can still be pushed again. nil = never pushed to trunk.
+    public var trunkPushedAt: Date?
+    /// Commit that push put on the base branch.
+    public var trunkPushedCommit: String?
 
     public init(
         id: UUID = UUID(), repoID: UUID, name: String, branch: String, path: String, baseBranch: String,
@@ -144,6 +149,7 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     }
 
     public var isArchived: Bool { if case .archived = state { true } else { false } }
+    public var isPushedToTrunk: Bool { trunkPushedAt != nil }
     public var isRemote: Bool { host != nil }
     public var location: WorkspaceLocation { host?.provider.location ?? .local }
 }

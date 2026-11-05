@@ -292,12 +292,42 @@ private struct TrunkSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if model.isPushedToTrunk { pushed }
             GitStatusSection(model: model)
-            ShipHint(
-                text: "Push to \(model.base) asks the agent to commit with proper messages, rebase onto a fresh origin/\(model.base)\(gateText), resolve any conflicts and push. No pull request.",
-                action: "Push to \(model.base)", symbol: "arrow.up.to.line"
-            ) { model.agentShipToTrunk() }
+            if !model.isPushedToTrunk || model.hasWorkSinceTrunkPush {
+                ShipHint(
+                    text: model.isPushedToTrunk
+                        ? "There's new work since the last push. Push again to commit it, rebase onto a fresh origin/\(model.base)\(gateText) and push."
+                        : "Push to \(model.base) asks the agent to commit with proper messages, rebase onto a fresh origin/\(model.base)\(gateText), resolve any conflicts and push. No pull request.",
+                    action: model.isPushedToTrunk ? "Push again" : "Push to \(model.base)", symbol: "arrow.up.to.line"
+                ) { model.agentShipToTrunk() }
+            }
         }
+    }
+
+    /// Like a merged PR: the work has landed; archive it, or keep going and push again.
+    @ViewBuilder private var pushed: some View {
+        if let ws = model.workspace {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Pushed to \(model.base)", systemImage: "arrow.up.to.line")
+                    .font(Theme.uiMedium)
+                    .foregroundStyle(Theme.merged)
+                if let detail = pushedDetail(ws) {
+                    Text(detail).font(Theme.small).foregroundStyle(Theme.text3).textSelection(.enabled)
+                }
+                if !model.hasWorkSinceTrunkPush {
+                    Button("Archive workspace") { Task { await model.app.archive(ws) } }
+                        .buttonStyle(.softProminent)
+                }
+            }
+        }
+    }
+
+    private func pushedDetail(_ ws: Workspace) -> String? {
+        var parts: [String] = []
+        if let c = ws.trunkPushedCommit { parts.append(String(c.prefix(7))) }
+        if let at = ws.trunkPushedAt { parts.append(at.formatted(.relative(presentation: .named))) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var gateText: String {

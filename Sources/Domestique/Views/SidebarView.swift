@@ -280,6 +280,12 @@ struct WorkspaceGlyph: View {
                 Image(systemName: "hand.raised.fill").font(.system(size: 11)).foregroundStyle(Theme.warning)
             } else if model?.isAgentRunning == true {
                 Spinner(size: 11)
+            } else if workspace.prNumber == nil, workspace.isPushedToTrunk {
+                // Pushed straight to the base branch: shown like a merged PR.
+                Image(systemName: "arrow.up.to.line")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.merged)
+                    .help("Pushed to \(workspace.baseBranch)")
             } else {
                 Image(systemName: workspace.prNumber != nil ? "arrow.triangle.pull" : "arrow.triangle.branch")
                     .font(.system(size: 11.5))

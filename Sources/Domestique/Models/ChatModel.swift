@@ -302,6 +302,7 @@ final class ChatModel {
             // `gh pr create` prints the PR URL: link it right away.
             if case .tool(let call) = item.kind, call.name == "Bash", call.status != .running, !call.output.isEmpty {
                 workspace.noticePullRequestURL(in: call.output)
+                workspace.noticeTrunkPush(in: call.output)
             }
             // Keep the Changes panel live while the agent edits.
             if case .tool(let call) = item.kind, call.status != .running,

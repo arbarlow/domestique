@@ -98,13 +98,40 @@ extension WorkspaceModel {
                 try? await Task.sleep(for: .milliseconds(400))
                 let ab = aheadBehind
                 let dirty = (try? await GitKitBridge.hasUncommitted(ws.path, host: self.host)) ?? false
-                if let ab, ab.ahead == 0, !dirty {
+                let head = try? await self.host.run("git", ["rev-parse", "HEAD"], cwd: ws.path, check: false)
+                let headSHA = head.flatMap { $0.succeeded ? $0.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil }
+                let moved = headSHA.map { h in ws.baseCommit.map { !h.hasPrefix($0) && !$0.hasPrefix(h) } ?? true } ?? false
+                if let ab, ab.ahead == 0, moved {
+                    recordTrunkPush(commit: headSHA)
+                    shipMessage = dirty ? "Shipped to \(base) ✓ · some changes left uncommitted" : "Shipped to \(base) ✓"
+                } else if let ab, ab.ahead == 0, !dirty {
                     shipMessage = "Shipped to \(base) ✓"
                 } else if let ab, ab.ahead > 0 {
                     shipMessage = "\(ab.ahead) commit\(ab.ahead == 1 ? "" : "s") not on \(base) yet — check the agent's reply."
                 }
             }
         }
+    }
+
+    /// Mark the workspace as pushed to its base branch (shown like a merged PR).
+    func recordTrunkPush(commit: String?) {
+        app.updateWorkspace(id) {
+            $0.trunkPushedAt = .now
+            if let commit { $0.trunkPushedCommit = commit }
+        }
+    }
+
+    /// Spot a successful `git push … HEAD:<base>` in tool output ("   4cbebe8..f3ea39f  HEAD -> master").
+    func noticeTrunkPush(in text: String) {
+        guard text.contains("-> \(base)") else { return }
+        let pattern = "(?m)^\\s*\\+?[0-9a-f]{7,40}\\.\\.\\.?([0-9a-f]{7,40})\\s+\\S+\\s+->\\s+\(NSRegularExpression.escapedPattern(for: base))\\s*$"
+        guard let re = try? NSRegularExpression(pattern: pattern),
+            let m = re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+            let r = Range(m.range(at: 1), in: text)
+        else { return }
+        recordTrunkPush(commit: String(text[r]))
+        refreshDiff()
+        refreshGitState()
     }
 
     /// Spot a PR URL in tool output (e.g. from `gh pr create`) and link it immediately.
