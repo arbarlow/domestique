@@ -13,6 +13,7 @@ final class TerminalSession: Identifiable {
     @ObservationIgnored let view: LocalProcessTerminalView
     @ObservationIgnored private var delegateProxy: Proxy?
     @ObservationIgnored private var started = false
+    var isStarted: Bool { started }
     private let cwd: String
     private let extraEnv: [String: String]
 

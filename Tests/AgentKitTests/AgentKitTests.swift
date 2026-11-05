@@ -1,3 +1,4 @@
+import Foundation
 import DQCore
 import Testing
 
@@ -42,5 +43,21 @@ import Testing
             #"{"filePath":"/x/a.py","structuredPatch":[{"oldStart":1,"oldLines":1,"newStart":1,"newLines":1,"lines":["-a","+b"]}]}"#)
         let changes = ToolSummaries.claudeFileChanges(toolName: "Edit", input: "", result: result)
         #expect(changes == [FileChange(path: "/x/a.py", diff: "@@ -1,1 +1,1 @@\n-a\n+b\n")])
+    }
+}
+
+@Suite struct ClaudeModelTests {
+    @Test func defaultIsNamedAfterResolvedModel() throws {
+        let resp = try JSONValue.parse(Data(#"""
+            {"models":[
+              {"value":"default","resolvedModel":"claude-opus-5-5","displayName":"Default (recommended)","description":"Opus 5.5 · Best for everyday, complex tasks","supportedEffortLevels":["low","high"]},
+              {"value":"opus","resolvedModel":"claude-opus-5-5","displayName":"Opus 5.5","description":"For complex work"},
+              {"value":"claude-haiku-4-5-20251001","resolvedModel":"claude-haiku-4-5-20251001","displayName":"Haiku 4.5"}
+            ]}
+            """#.utf8))
+        let models = ClaudeSession.parseModels(resp)
+        #expect(models.map(\.displayName) == ["Opus 5.5", "Opus 5.5", "Haiku 4.5"])
+        #expect(models[0].isDefault && models[0].description == "Best for everyday, complex tasks")
+        #expect(models[0].defaultEffort == "high")
     }
 }

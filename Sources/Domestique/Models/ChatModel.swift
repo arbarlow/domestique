@@ -26,8 +26,21 @@ final class ChatModel {
     func task(forToolUse id: String) -> AgentTask? { tasks.values.first { $0.toolUseID == id } }
 
     func clearFinishedFromTray() {
+        trayClearTask?.cancel()
         let finished = Set(tasks.values.filter { !$0.isRunning }.map(\.id))
         trayTaskIDs.removeAll { finished.contains($0) }
+    }
+
+    /// Once every subagent in the tray has finished, hold the "all done" state briefly, then fade the tray
+    /// away. Results stay inline in the transcript on each Agent tool card. A new subagent cancels this.
+    private func scheduleTrayAutoClear() {
+        trayClearTask?.cancel()
+        guard !trayTasks.isEmpty, !trayTasks.contains(where: \.isRunning) else { return }
+        trayClearTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, let self, !self.trayTasks.contains(where: \.isRunning) else { return }
+            self.clearFinishedFromTray()
+        }
     }
     var draft = ""
     var attachments: [AgentAttachment] = []
@@ -39,6 +52,7 @@ final class ChatModel {
     @ObservationIgnored private var flushScheduled = false
     @ObservationIgnored private var dirty: Set<String> = []
     @ObservationIgnored private var lastCost: Double = 0
+    @ObservationIgnored private var trayClearTask: Task<Void, Never>?
 
     init(tabID: UUID, workspace: WorkspaceModel) {
         self.tabID = tabID
@@ -240,6 +254,7 @@ final class ChatModel {
         persistDirty()
         eventTask?.cancel()
         eventTask = nil
+        trayClearTask?.cancel()
         if let session { Task { await session.shutdown() } }
         session = nil
         isRunning = false
@@ -304,7 +319,12 @@ final class ChatModel {
                 trayTaskIDs.append(task.id)
             }
             tasks[task.id] = task
-            if !task.isRunning { recordTaskResult(task) }
+            if task.isRunning {
+                trayClearTask?.cancel()
+            } else {
+                recordTaskResult(task)
+                scheduleTrayAutoClear()
+            }
         case .autoTurnStarted(let reason):
             upsert(TranscriptItem(id: "trigger-\(UUID().uuidString)", kind: .trigger(text: reason)))
             isRunning = true

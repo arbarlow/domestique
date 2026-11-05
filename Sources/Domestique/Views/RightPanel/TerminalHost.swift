@@ -28,8 +28,9 @@ struct TerminalHost: NSViewRepresentable {
             view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         DispatchQueue.main.async {
+            let isNew = !session.isStarted
             session.startIfNeeded()
-            view.window?.makeFirstResponder(view)
+            if isNew { view.window?.makeFirstResponder(view) }
         }
     }
 }

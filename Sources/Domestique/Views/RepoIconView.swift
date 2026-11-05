@@ -66,6 +66,14 @@ enum RepoIconStyle {
         "envelope.fill", "map.fill", "house.fill", "airplane", "iphone",
     ]
 
+    /// A colour that represents the repo's icon: the average of an image icon, else its tile colour.
+    @MainActor static func tint(_ repo: Repository) -> Color {
+        let icon = repo.icon ?? RepoIcon(kind: .monogram)
+        if icon.kind == .image, let file = icon.imageFile, let c = RepoIconStore.averageColor(file) { return c }
+        if icon.kind == .emoji { return Theme.text2 }
+        return color(icon, name: repo.name)
+    }
+
     static func color(_ icon: RepoIcon, name: String) -> Color {
         if let hex = icon.colorHex, let c = Color(hex: hex) { return c }
         let h = name.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
@@ -83,6 +91,27 @@ enum RepoIconStore {
         guard let image = NSImage(contentsOf: Paths.icons.appendingPathComponent(file)) else { return nil }
         cache[file] = image
         return image
+    }
+
+    private static var averages: [String: Color] = [:]
+
+    /// Mean colour of an icon image (drawn into a 1×1 bitmap), cached.
+    static func averageColor(_ file: String) -> Color? {
+        if let hit = averages[file] { return hit }
+        guard let image = image(file),
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1, bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(x: 0, y: 0, width: 1, height: 1))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let c = rep.colorAt(x: 0, y: 0)?.usingColorSpace(.sRGB) else { return nil }
+        let color = Color(.sRGB, red: c.redComponent, green: c.greenComponent, blue: c.blueComponent)
+        averages[file] = color
+        return color
     }
 
     /// Resizes to 128×128 and stores it; returns the new file name.

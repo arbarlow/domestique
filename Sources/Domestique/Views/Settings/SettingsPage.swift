@@ -195,6 +195,15 @@ private struct GeneralSettings: View {
                     TextField("cursor", text: $app.settings.editorCommand).modifier(FieldStyle())
                 }
                 SettingsRow(title: "Worktrees") { PathValue(path: Paths.workspacesRoot.path) }
+                SettingsRow(title: "Clone location", subtitle: "Where Clone from GitHub puts repositories") {
+                    TextField(
+                        Paths.defaultCloneRoot.path.replacingOccurrences(
+                            of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"),
+                        text: Binding(
+                            get: { app.settings.cloneDirectory ?? "" },
+                            set: { app.settings.cloneDirectory = $0.isEmpty ? nil : $0 })
+                    ).modifier(FieldStyle())
+                }
                 SettingsRow(title: "Database", subtitle: "Shared by every running copy of Domestique") {
                     PathValue(path: Paths.database.path)
                 }
@@ -246,7 +255,7 @@ private struct ProviderDefaults: View {
         SettingsSection(title: provider.displayName) {
             SettingsRow(title: "Model") {
                 Picker("", selection: $model) {
-                    Text("Default").tag(String?.none)
+                    Text("Default · \(app.modelLabel(provider, nil))").tag(String?.none)
                     ForEach(app.pickableModels(for: provider)) { Text($0.displayName).tag(Optional($0.id)) }
                 }
                 .labelsHidden().fixedSize()

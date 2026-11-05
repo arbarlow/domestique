@@ -163,6 +163,54 @@ public actor GitHubClient {
             baseRefName: json["base"]?["ref"]?.string ?? "", nodeID: json["node_id"]?.string ?? "")
     }
 
+    static let openPullRequestsQuery = """
+        query($owner: String!, $name: String!, $first: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: OPEN, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
+              nodes {
+                number title url isDraft headRefName createdAt updatedAt additions deletions reviewDecision
+                author { login avatarUrl }
+                comments { totalCount }
+                commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+              }
+            }
+          }
+        }
+        """
+
+    /// Open PRs, most recently updated first.
+    public func openPullRequests(slug: String, first: Int = 30) async throws -> [PullRequestSummary] {
+        let parts = slug.split(separator: "/").map(String.init)
+        guard parts.count == 2 else { throw GitHubError(message: "Bad repo slug \(slug)") }
+        let json = try await graphQL(
+            Self.openPullRequestsQuery,
+            variables: ["owner": .string(parts[0]), "name": .string(parts[1]), "first": .number(Double(first))])
+        let nodes = json["data"]?["repository"]?["pullRequests"]?["nodes"]?.array ?? []
+        return nodes.compactMap(Self.pullRequestSummary(from:))
+    }
+
+    static func pullRequestSummary(from n: JSONValue) -> PullRequestSummary? {
+        guard let number = n["number"]?.int, let url = n["url"]?.string else { return nil }
+        let iso = ISO8601DateFormatter()
+        let rollup = n["commits"]?["nodes"]?.array?.first?["commit"]?["statusCheckRollup"]?["state"]?.string
+        let checks: ChecksOverall =
+            switch rollup {
+            case "SUCCESS": .passing
+            case "FAILURE", "ERROR": .failing
+            case "PENDING", "EXPECTED": .pending
+            default: .none
+            }
+        return PullRequestSummary(
+            number: number, title: n["title"]?.string ?? "", url: url, isDraft: n["isDraft"]?.bool ?? false,
+            headRefName: n["headRefName"]?.string ?? "", authorLogin: n["author"]?["login"]?.string,
+            authorAvatarURL: n["author"]?["avatarUrl"]?.string,
+            createdAt: n["createdAt"]?.string.flatMap { iso.date(from: $0) },
+            updatedAt: n["updatedAt"]?.string.flatMap { iso.date(from: $0) },
+            additions: n["additions"]?.int ?? 0, deletions: n["deletions"]?.int ?? 0,
+            comments: n["comments"]?["totalCount"]?.int ?? 0, reviewDecision: n["reviewDecision"]?.string,
+            checks: checks)
+    }
+
     // MARK: - Status
 
     static let statusQuery = """
@@ -379,6 +427,41 @@ public actor GitHubClient {
         var text = String(decoding: bytes[start...], as: UTF8.self)
         if let nl = text.firstIndex(of: "\n") { text = String(text[text.index(after: nl)...]) }
         return "…(truncated)\n" + text
+    }
+
+    // MARK: - Repositories
+
+    /// Repos the user owns, collaborates on, or can see through an org, most recently pushed first.
+    public func listRepositories(maxPages: Int = 5) async throws -> [GitHubRepo] {
+        var all: [GitHubRepo] = []
+        for page in 1...maxPages {
+            let json = try await rest(
+                "GET", "user/repos",
+                query: [
+                    URLQueryItem(name: "affiliation", value: "owner,collaborator,organization_member"),
+                    URLQueryItem(name: "sort", value: "pushed"),
+                    URLQueryItem(name: "direction", value: "desc"),
+                    URLQueryItem(name: "per_page", value: "100"),
+                    URLQueryItem(name: "page", value: "\(page)"),
+                ])
+            let items = json.array ?? []
+            all += items.compactMap(Self.repo(fromREST:))
+            if items.count < 100 { break }
+        }
+        return all
+    }
+
+    static func repo(fromREST json: JSONValue) -> GitHubRepo? {
+        guard let id = json["id"]?.int, let fullName = json["full_name"]?.string, let name = json["name"]?.string,
+            let cloneURL = json["clone_url"]?.string
+        else { return nil }
+        let pushed = json["pushed_at"]?.string.flatMap { ISO8601DateFormatter().date(from: $0) }
+        return GitHubRepo(
+            id: id, fullName: fullName, name: name, owner: json["owner"]?["login"]?.string ?? "",
+            description: json["description"]?.string, isPrivate: json["private"]?.bool ?? false,
+            isFork: json["fork"]?.bool ?? false, isArchived: json["archived"]?.bool ?? false,
+            defaultBranch: json["default_branch"]?.string ?? "main", cloneURL: cloneURL,
+            sshURL: json["ssh_url"]?.string ?? cloneURL, htmlURL: json["html_url"]?.string ?? "", pushedAt: pushed)
     }
 
     // MARK: - User

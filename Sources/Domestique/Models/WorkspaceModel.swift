@@ -141,10 +141,20 @@ final class WorkspaceModel {
             $0.tabs.append(tab)
             $0.selectedTabID = tab.id
         }
+        app.composerFocusRequest += 1
     }
 
     func selectTab(_ tabID: UUID) {
         app.updateWorkspace(id) { $0.selectedTabID = tabID }
+        app.composerFocusRequest += 1
+    }
+
+    /// Cycle to the previous (-1) or next (+1) chat tab, wrapping around.
+    func selectAdjacentTab(_ offset: Int) {
+        guard let ws = workspace, ws.tabs.count > 1 else { return }
+        let current = ws.tabs.firstIndex { $0.id == (ws.selectedTabID ?? ws.tabs.first?.id) } ?? 0
+        let next = ((current + offset) % ws.tabs.count + ws.tabs.count) % ws.tabs.count
+        selectTab(ws.tabs[next].id)
     }
 
     func closeTab(_ tabID: UUID) {

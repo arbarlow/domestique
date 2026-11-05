@@ -26,6 +26,8 @@ final class PanelGitState {
     /// Commits on HEAD not on its upstream; nil when the branch has never been pushed.
     private(set) var unpushed: Int?
     private(set) var hasUpstream = false
+    /// Current HEAD commit, to tell whether anything was committed since branching.
+    private(set) var head: String?
     @ObservationIgnored private var refreshing = false
 
     func refresh(path: String) {
@@ -43,6 +45,8 @@ final class PanelGitState {
                 self.unpushed = nil
                 self.hasUpstream = false
             }
+            let h = try? await Shell.run("git", ["rev-parse", "HEAD"], cwd: path, check: false)
+            self.head = h.flatMap { $0.succeeded ? $0.stdout.trimmingCharacters(in: .whitespacesAndNewlines) : nil }
         }
     }
 }
@@ -61,6 +65,8 @@ enum PrimaryShipAction: Equatable {
     case resolveConflicts
     case needsReview
     case pushToTrunk
+    /// Work has landed (PR merged/closed, or pushed to trunk): offer to archive the workspace.
+    case archive
     case none
 }
 
@@ -82,13 +88,22 @@ extension WorkspaceModel {
     var hasLocalChanges: Bool { gitState.uncommitted > 0 || (gitState.unpushed ?? 0) > 0 }
 
     var primaryShipAction: PrimaryShipAction {
-        if shipMode == .trunk { return .pushToTrunk }
+        if shipMode == .trunk { return isShippedToTrunk ? .archive : .pushToTrunk }
         guard slug != nil else { return .none }
         guard let pr = prStatus?.pr else { return .createPR }
         switch pr.state {
         case .open: return hasLocalChanges ? .commitAndPush : mergeAction
-        case .merged, .closed: return hasLocalChanges ? .createPR : .none
+        case .merged, .closed: return hasLocalChanges ? .createPR : .archive
         }
+    }
+
+    /// Trunk mode: nothing uncommitted, nothing ahead of origin/<base>, and HEAD has moved since we branched
+    /// (so there was work, and it's now on the base branch).
+    var isShippedToTrunk: Bool {
+        guard gitState.uncommitted == 0, let ab = aheadBehind, ab.ahead == 0,
+            let head = gitState.head, let baseCommit = workspace?.baseCommit, !baseCommit.isEmpty
+        else { return false }
+        return !head.hasPrefix(baseCommit) && !baseCommit.hasPrefix(head)
     }
 
     /// Short status for the panel header.
@@ -109,6 +124,7 @@ extension WorkspaceModel {
             }
         }
         if gitState.uncommitted > 0 { return "Uncommitted changes" }
+        if shipMode == .trunk, isShippedToTrunk { return "Pushed to \(base)" }
         if let ab = aheadBehind, ab.ahead > 0 {
             return "\(ab.ahead) commit\(ab.ahead == 1 ? "" : "s") ahead of \(workspace?.baseBranch ?? "main")"
         }

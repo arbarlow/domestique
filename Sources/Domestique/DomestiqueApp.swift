@@ -69,7 +69,7 @@ struct AppCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             Button("New Workspace") {
-                guard let repoID = app.selectedWorkspaceModel?.repo?.id ?? app.repositories.first?.id,
+                guard let repoID = app.selectedRepo?.id ?? app.repositories.first?.id,
                     let repo = app.repo(repoID)
                 else { return app.promptAddRepository() }
                 Task { await app.createWorkspace(in: repo) }
@@ -77,11 +77,17 @@ struct AppCommands: Commands {
             .keyboardShortcut("n", modifiers: .command)
             Button("New Chat Tab") { app.selectedWorkspaceModel?.newTab() }
                 .keyboardShortcut("t", modifiers: .command)
+            Button("Previous Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(-1) }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+            Button("Next Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(1) }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
             Button("New Terminal") { app.selectedWorkspaceModel?.newTerminal() }
                 .keyboardShortcut("`", modifiers: .control)
             Divider()
             Button("Add Repository…") { app.promptAddRepository() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("Clone from GitHub…") { app.showGitHubPicker = true }
+                .keyboardShortcut("o", modifiers: [.command, .option])
         }
         CommandGroup(after: .sidebar) {
             Button("Toggle Sidebar") { app.sidebarVisible.toggle() }

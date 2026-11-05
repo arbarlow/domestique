@@ -275,16 +275,75 @@ public actor ClaudeSession: AgentSession {
     }
 
     private func handleInitialize(_ resp: JSONValue) {
-        guard let models = resp["models"]?.array, !models.isEmpty else { return }
-        let options = models.compactMap { m -> ModelOption? in
+        let options = Self.parseModels(resp)
+        if !options.isEmpty { emit(.models(options)) }
+    }
+
+    /// Model list from an `initialize` response. The "default" entry is named after the model it
+    /// resolves to ("Opus 5.5") rather than "Default".
+    static func parseModels(_ resp: JSONValue) -> [ModelOption] {
+        let models = resp["models"]?.array ?? []
+        let nameByResolved = Dictionary(
+            models.compactMap { m -> (String, String)? in
+                guard m["value"]?.string != "default", let r = m["resolvedModel"]?.string, let n = m["displayName"]?.string
+                else { return nil }
+                return (r, n)
+            }, uniquingKeysWith: { a, _ in a })
+        return models.compactMap { m -> ModelOption? in
             guard let value = m["value"]?.string else { return nil }
             let efforts = (m["supportedEffortLevels"]?.array ?? []).compactMap(\.string)
+            var name = shortName(m["displayName"]?.string ?? value)
+            var description = m["description"]?.string
+            if value == "default" {
+                let fromDescription = description?.components(separatedBy: " · ").first
+                if let resolved = m["resolvedModel"]?.string.flatMap({ nameByResolved[$0] }) ?? fromDescription {
+                    name = resolved
+                }
+                if let d = description, let dot = d.range(of: " · ") { description = String(d[dot.upperBound...]) }
+            }
             return ModelOption(
-                id: value, displayName: Self.shortName(m["displayName"]?.string ?? value),
-                description: m["description"]?.string, efforts: efforts,
+                id: value, displayName: name, description: description, efforts: efforts,
                 defaultEffort: efforts.contains("high") ? "high" : efforts.last, isDefault: value == "default")
         }
-        if !options.isEmpty { emit(.models(options)) }
+    }
+
+    /// Asks the installed `claude` for its model list without starting a conversation.
+    public static func probeModels() async -> [ModelOption]? {
+        guard let exe = try? await LoginEnvironment.shared.resolve("claude") else { return nil }
+        var env = await LoginEnvironment.shared.environment()
+        env["CLAUDE_CODE_ENTRYPOINT"] = "sdk-swift"
+        let proc = LineProcess(
+            executable: exe, arguments: ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
+            cwd: NSTemporaryDirectory(), environment: env)
+        do { try proc.start { _, _ in } } catch { return nil }
+        defer {
+            proc.closeInput()
+            proc.terminate()
+        }
+        proc.write([
+            "type": "control_request", "request_id": "dq_probe",
+            "request": ["subtype": "initialize", "hooks": .null],
+        ])
+        let lines = proc.lines
+        return await withTaskGroup(of: [ModelOption]?.self) { group in
+            group.addTask {
+                for await line in lines {
+                    guard let msg = try? JSONValue.parse(line), msg["type"]?.string == "control_response",
+                        msg["response"]?["request_id"]?.string == "dq_probe"
+                    else { continue }
+                    let options = parseModels(msg["response"]?["response"] ?? .null)
+                    return options.isEmpty ? nil : options
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(20))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 
     // MARK: inbound

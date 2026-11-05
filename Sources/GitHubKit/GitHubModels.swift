@@ -161,3 +161,82 @@ public struct GitHubError: Error, LocalizedError, Sendable {
         return "GitHub: \(message)"
     }
 }
+
+/// A repository the signed-in user can access (for "Clone from GitHub").
+public struct GitHubRepo: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int
+    /// "owner/name"
+    public var fullName: String
+    public var name: String
+    public var owner: String
+    public var description: String?
+    public var isPrivate: Bool
+    public var isFork: Bool
+    public var isArchived: Bool
+    public var defaultBranch: String
+    public var cloneURL: String
+    public var sshURL: String
+    public var htmlURL: String
+    public var pushedAt: Date?
+
+    public init(
+        id: Int, fullName: String, name: String, owner: String, description: String?, isPrivate: Bool,
+        isFork: Bool, isArchived: Bool, defaultBranch: String, cloneURL: String, sshURL: String, htmlURL: String,
+        pushedAt: Date?
+    ) {
+        self.id = id
+        self.fullName = fullName
+        self.name = name
+        self.owner = owner
+        self.description = description
+        self.isPrivate = isPrivate
+        self.isFork = isFork
+        self.isArchived = isArchived
+        self.defaultBranch = defaultBranch
+        self.cloneURL = cloneURL
+        self.sshURL = sshURL
+        self.htmlURL = htmlURL
+        self.pushedAt = pushedAt
+    }
+}
+
+/// An open pull request as listed on a project's home page.
+public struct PullRequestSummary: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int { number }
+    public var number: Int
+    public var title: String
+    public var url: String
+    public var isDraft: Bool
+    public var headRefName: String
+    public var authorLogin: String?
+    public var authorAvatarURL: String?
+    public var createdAt: Date?
+    public var updatedAt: Date?
+    public var additions: Int
+    public var deletions: Int
+    public var comments: Int
+    /// APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or nil.
+    public var reviewDecision: String?
+    public var checks: ChecksOverall
+
+    public init(
+        number: Int, title: String, url: String, isDraft: Bool, headRefName: String, authorLogin: String?,
+        authorAvatarURL: String?, createdAt: Date?, updatedAt: Date?, additions: Int, deletions: Int, comments: Int,
+        reviewDecision: String?, checks: ChecksOverall
+    ) {
+        self.number = number
+        self.title = title
+        self.url = url
+        self.isDraft = isDraft
+        self.headRefName = headRefName
+        self.authorLogin = authorLogin
+        self.authorAvatarURL = authorAvatarURL
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.additions = additions
+        self.deletions = deletions
+        self.comments = comments
+        self.reviewDecision = reviewDecision
+        self.checks = checks
+    }
+}

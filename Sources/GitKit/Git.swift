@@ -78,6 +78,20 @@ public enum Git {
         try await output(["rev-parse", "--abbrev-ref", "HEAD"], cwd: path)
     }
 
+    // MARK: - Clone
+
+    /// Clones `url` into `path` (which must not exist yet). Prefers `gh repo clone` when `gh` is installed,
+    /// so the user's preferred protocol and credentials apply; falls back to plain `git clone`.
+    public static func clone(slug: String?, url: String, to path: String) async throws {
+        let parent = (path as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+        if let slug, (try? await LoginEnvironment.shared.resolve("gh")) != nil {
+            try await Shell.run("gh", ["repo", "clone", slug, path], cwd: parent, env: quietEnv)
+        } else {
+            try await git(["clone", url, path], cwd: parent)
+        }
+    }
+
     // MARK: - Fetch / worktrees
 
     public static func fetch(repoPath: String, branch: String) async throws {

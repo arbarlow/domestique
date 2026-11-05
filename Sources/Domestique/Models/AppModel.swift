@@ -2,6 +2,7 @@ import AgentKit
 import AppKit
 import DQCore
 import Foundation
+import GitHubKit
 import GitKit
 import Observation
 import ProcessKit
@@ -11,10 +12,14 @@ import ProcessKit
 final class AppModel {
     private(set) var state: AppState
     private var workspaceModels: [UUID: WorkspaceModel] = [:]
-    var modelsByProvider: [ProviderKind: [ModelOption]] = [.claude: ClaudeSession.fallbackModels]
+    var modelsByProvider: [ProviderKind: [ModelOption]] = AppModel.cachedModels()
     var alert: AppAlert?
+    /// Bumped whenever the user navigates to a chat (workspace or tab); the composer focuses itself on change.
+    var composerFocusRequest = 0
     /// In-app settings page; nil = closed.
     var settingsRoute: SettingsRoute?
+    /// "Clone from GitHub" sheet.
+    var showGitHubPicker = false
     // Layout (persisted)
     var sidebarVisible = UserDefaults.standard.object(forKey: "dq.sidebarVisible") as? Bool ?? true {
         didSet { UserDefaults.standard.set(sidebarVisible, forKey: "dq.sidebarVisible") }
@@ -48,6 +53,7 @@ final class AppModel {
         }
         startSync()
         Task { await loadCodexModels() }
+        Task { await loadClaudeModels() }
         Task { [weak self] in
             // Keep every open PR's checks fresh from launch, not only the workspace on screen.
             try? await Task.sleep(for: .seconds(2))
@@ -123,11 +129,36 @@ final class AppModel {
         get { state.selectedWorkspaceID }
         set {
             settingsRoute = nil
+            composerFocusRequest += 1
+            if let newValue, let ws = workspace(newValue) { selectedRepoID = ws.repoID }
             guard state.selectedWorkspaceID != newValue else { return }
             state.selectedWorkspaceID = newValue
             if let newValue { updateWorkspace(newValue) { $0.hasUnread = false } }
             scheduleSave()
         }
+    }
+
+    /// The project shown when no workspace is selected (its home page). Follows the selected workspace.
+    var selectedRepoID: UUID? = UserDefaults.standard.string(forKey: "dq.selectedRepoID").flatMap(UUID.init) {
+        didSet { UserDefaults.standard.set(selectedRepoID?.uuidString, forKey: "dq.selectedRepoID") }
+    }
+
+    /// The selected workspace's repo, else the selected project.
+    var selectedRepo: Repository? {
+        if let ws = selectedWorkspaceID.flatMap(workspace) { return repo(ws.repoID) }
+        return selectedRepoID.flatMap(repo)
+    }
+
+    /// Shows a project's home page (deselects any workspace).
+    func showProject(_ repo: Repository) {
+        selectedWorkspaceID = nil
+        selectedRepoID = repo.id
+    }
+
+    /// Back to the Domestique welcome page.
+    func showHome() {
+        selectedWorkspaceID = nil
+        selectedRepoID = nil
     }
 
     var selectedWorkspaceModel: WorkspaceModel? {
@@ -224,7 +255,7 @@ final class AppModel {
             let info = try await Git.repoInfo(path: path)
             if let existing = state.repositories.first(where: { $0.path == info.root }) {
                 // Already added: just jump to it.
-                selectedWorkspaceID = activeWorkspaces(in: existing).first?.id ?? selectedWorkspaceID
+                showProject(existing)
                 return
             }
             let name = URL(fileURLWithPath: info.root).lastPathComponent
@@ -232,10 +263,42 @@ final class AppModel {
             Trace.log("repo info ok")
             state.repositories.append(repo)
             scheduleSave()
-            if activeWorkspaces(in: repo).isEmpty { await createWorkspace(in: repo) }
+            showProject(repo)
         } catch {
             alert = AppAlert(title: "Couldn't add repository", message: error.localizedDescription)
         }
+    }
+
+    /// The already-added repository whose origin is this GitHub repo, if any.
+    func localRepository(for gh: GitHubRepo) -> Repository? {
+        state.repositories.first { $0.githubSlug?.lowercased() == gh.fullName.lowercased() }
+    }
+
+    /// Clones a GitHub repo into the clone root (<root>/<owner>/<name>), adds it, and shows its project page.
+    /// Already-added repos are just selected; an existing clone at the destination is reused.
+    func cloneFromGitHub(_ gh: GitHubRepo) async throws {
+        if let existing = localRepository(for: gh) {
+            showProject(existing)
+            return
+        }
+        let dest = settings.cloneRoot.appendingPathComponent(gh.owner).appendingPathComponent(gh.name).path
+        if FileManager.default.fileExists(atPath: dest) {
+            let info = try? await Git.repoInfo(path: dest)
+            guard let info, info.root == URL(fileURLWithPath: dest).resolvingSymlinksInPath().path || info.root == dest,
+                GitHubRemote.slug(from: info.remoteURL)?.lowercased() == gh.fullName.lowercased()
+            else {
+                throw GitHubError(message: "\(dest) already exists and isn't a clone of \(gh.fullName).")
+            }
+        } else {
+            do {
+                try await Git.clone(slug: gh.fullName, url: gh.cloneURL, to: dest)
+            } catch {
+                // Don't leave a half-cloned folder behind to trip up the next attempt.
+                try? FileManager.default.removeItem(atPath: dest)
+                throw error
+            }
+        }
+        await addRepository(path: dest)
     }
 
     func removeRepository(_ repo: Repository) {
@@ -245,6 +308,7 @@ final class AppModel {
             return
         }
         state.repositories.removeAll { $0.id == repo.id }
+        if selectedRepoID == repo.id { selectedRepoID = nil }
         scheduleSave()
     }
 
@@ -347,6 +411,16 @@ final class AppModel {
         return all.first { $0.isDefault } ?? all.first
     }
 
+    /// What to call a model in the UI: its real name ("Opus 5.5"), never just "Default" or "Claude".
+    func modelLabel(_ provider: ProviderKind, _ id: String?) -> String {
+        let all = models(for: provider)
+        guard let id else {
+            if let d = all.first(where: \.isDefault), d.displayName != "Default" { return d.displayName }
+            return provider.displayName
+        }
+        return all.first { $0.id == id }?.displayName ?? id
+    }
+
     /// Selectable models (the synthetic Claude "default" entry is represented by the Default row).
     func pickableModels(for provider: ProviderKind) -> [ModelOption] {
         models(for: provider).filter { $0.id != "default" }
@@ -355,6 +429,28 @@ final class AppModel {
     func updateModels(_ models: [ModelOption], for provider: ProviderKind) {
         guard !models.isEmpty, modelsByProvider[provider] != models else { return }
         modelsByProvider[provider] = models
+        if let data = try? JSONEncoder().encode(Dictionary(uniqueKeysWithValues: modelsByProvider.map { ($0.key.rawValue, $0.value) })) {
+            UserDefaults.standard.set(data, forKey: Self.modelsCacheKey)
+        }
+    }
+
+    private static let modelsCacheKey = "dq.models.v1"
+
+    /// Last-known model lists, so the picker shows real names before any provider has answered.
+    private static func cachedModels() -> [ProviderKind: [ModelOption]] {
+        var result: [ProviderKind: [ModelOption]] = [.claude: ClaudeSession.fallbackModels]
+        if let data = UserDefaults.standard.data(forKey: modelsCacheKey),
+            let cached = try? JSONDecoder().decode([String: [ModelOption]].self, from: data)
+        {
+            for (key, models) in cached {
+                if let p = ProviderKind(rawValue: key), !models.isEmpty { result[p] = models }
+            }
+        }
+        return result
+    }
+
+    private func loadClaudeModels() async {
+        if let models = await ClaudeSession.probeModels() { updateModels(models, for: .claude) }
     }
 
     private func loadCodexModels() async {

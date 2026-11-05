@@ -12,6 +12,10 @@ struct SidebarView: View {
             // Header: traffic lights live on the left of this row.
             HStack(spacing: 2) {
                 Spacer()
+                IconButton(
+                    symbol: "house", help: "Home",
+                    active: app.selectedWorkspaceID == nil && app.selectedRepoID == nil && app.settingsRoute == nil
+                ) { app.showHome() }
                 IconButton(symbol: "sidebar.left", help: "Hide sidebar (⌘\\)") { app.sidebarVisible = false }
             }
             .padding(.horizontal, 10)
@@ -74,7 +78,7 @@ struct SidebarView: View {
     }
 
     private func newWorkspace() {
-        let repo = app.selectedWorkspaceModel?.repo ?? app.repositories.first
+        let repo = app.selectedRepo ?? app.repositories.first
         guard let repo else { return app.promptAddRepository() }
         Task { await app.createWorkspace(in: repo) }
     }
@@ -89,10 +93,30 @@ private struct RepoSection: View {
     let toggleArchived: () -> Void
     @State private var hovering = false
 
+    /// This project's home page is on screen.
+    private var isHome: Bool {
+        app.selectedWorkspaceID == nil && app.selectedRepoID == repo.id && app.settingsRoute == nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 7) {
                 RepoIconView(repo: repo, size: 18)
+                    .overlay {
+                        // Hovering the icon turns it into the collapse toggle.
+                        if hovering {
+                            Button(action: toggleCollapsed) {
+                                Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Theme.text2)
+                                    .frame(width: 18, height: 18)
+                                    .background(RoundedRectangle(cornerRadius: 5).fill(Theme.sidebar))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(collapsed ? "Expand" : "Collapse")
+                        }
+                    }
                 Text(repo.title)
                     .font(Theme.uiMedium)
                     .foregroundStyle(Theme.text)
@@ -139,9 +163,13 @@ private struct RepoSection: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.rowRadius)
+                    .fill(isHome ? Theme.selected : hovering ? Theme.hover : .clear))
             .contentShape(Rectangle())
-            .onTapGesture(perform: toggleCollapsed)
+            .onTapGesture { app.showProject(repo) }
             .onHover { hovering = $0 }
+            .help("Open \(repo.title)")
 
             if !collapsed {
                 ForEach(app.activeWorkspaces(in: repo)) { ws in
@@ -262,7 +290,18 @@ private struct SidebarFooter: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            IconButton(symbol: "plus.rectangle.on.folder", help: "Add repository (⇧⌘O)") { app.promptAddRepository() }
+            Menu {
+                Button("Clone from GitHub…  ⌥⌘O") { app.showGitHubPicker = true }
+                Button("Add local repository…  ⇧⌘O") { app.promptAddRepository() }
+            } label: {
+                Image(systemName: "plus.rectangle.on.folder").font(.system(size: 13)).foregroundStyle(Theme.text2)
+                    .frame(width: 26, height: 26)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Add repository")
             Spacer()
             ForEach([ProviderKind.claude, .codex], id: \.self) { p in
                 if let u = app.usage[p] { UsageRing(provider: p, usage: u) }

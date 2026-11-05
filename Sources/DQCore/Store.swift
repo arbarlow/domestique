@@ -24,6 +24,11 @@ public enum Paths {
             .appendingPathComponent("Domestique/workspaces", isDirectory: true)
     }
 
+    /// Default home for repos cloned from GitHub: ~/Domestique/repos/<owner>/<name>.
+    public static var defaultCloneRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Domestique/repos", isDirectory: true)
+    }
+
     public static func ensure(_ url: URL) {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
@@ -49,6 +54,15 @@ public struct AppSettings: Codable, Sendable, Hashable {
     /// Prefix for new branches, e.g. "alex" -> alex/galibier.
     public var branchPrefix: String = NSUserName()
     public var editorCommand: String = "cursor"
+    /// Where "Clone from GitHub" puts repos (nil = Paths.defaultCloneRoot). `~` is expanded.
+    public var cloneDirectory: String?
+
+    public var cloneRoot: URL {
+        guard let dir = cloneDirectory?.trimmingCharacters(in: .whitespaces), !dir.isEmpty else {
+            return Paths.defaultCloneRoot
+        }
+        return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath, isDirectory: true)
+    }
 
     public init() {}
 }

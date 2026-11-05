@@ -133,11 +133,17 @@ struct ComposerView: View {
         .padding(.top, 2)
         .frame(maxWidth: Theme.contentWidth)
         .frame(maxWidth: .infinity)
-        .onAppear { focused = true }
+        .onAppear { focusSoon() }
+        .onChange(of: app.composerFocusRequest) { focusSoon() }
         .dropDestination(for: URL.self) { urls, _ in
             addImages(urls)
             return true
         }
+    }
+
+    /// Setting focus in the same pass the field is inserted is dropped by AppKit; defer a runloop turn.
+    private func focusSoon() {
+        DispatchQueue.main.async { focused = true }
     }
 
     private var placeholder: String {
@@ -227,56 +233,189 @@ private struct PermissionMenu: View {
     }
 }
 
-/// Provider + model picker. Switching provider is only possible before the first message.
+/// Provider + model picker with search. Switching provider is only possible before the first message.
 private struct ModelMenu: View {
     @Environment(AppModel.self) private var app
     let chat: ChatModel
+    @State private var open = false
 
     var body: some View {
         if let tab = chat.tab {
-            Menu {
-                ForEach(ProviderKind.allCases) { p in
-                    if p == tab.provider || !chat.hasMessages {
-                        Section(p.displayName) {
-                            Button {
-                                chat.setProvider(p)
-                                chat.setModel(nil)
-                            } label: {
-                                check(p == tab.provider && tab.model == nil, "Default · \(defaultName(p))")
-                            }
-                            ForEach(app.pickableModels(for: p)) { m in
-                                Button {
-                                    chat.setProvider(p)
-                                    chat.setModel(m.id)
-                                } label: {
-                                    check(p == tab.provider && tab.model == m.id, m.displayName)
-                                }
-                            }
-                        }
-                    }
-                }
+            Button {
+                open.toggle()
             } label: {
                 ComposerChip {
                     ProviderIcon(provider: tab.provider, size: 10)
-                    Text(modelName(tab)).foregroundStyle(Theme.text)
+                    Text(app.modelLabel(tab.provider, tab.model)).foregroundStyle(Theme.text)
                     Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.text3)
                 }
             }
-            .menuStyle(.button)
             .buttonStyle(.plain)
-            .menuIndicator(.hidden)
             .fixedSize()
             .help("Model")
+            .popover(isPresented: $open, arrowEdge: .top) {
+                ModelPickerList(chat: chat, tab: tab) { open = false }
+            }
+        }
+    }
+}
+
+private struct ModelPickerList: View {
+    @Environment(AppModel.self) private var app
+    let chat: ChatModel
+    let tab: ChatTab
+    let done: () -> Void
+    @State private var query = ""
+    @State private var highlighted: String?
+    @FocusState private var searchFocused: Bool
+
+    struct Entry: Identifiable {
+        var provider: ProviderKind
+        var modelID: String?  // nil = provider default
+        var name: String
+        var detail: String?
+        var tag: String
+        var id: String { "\(provider.rawValue):\(modelID ?? "")" }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Theme.text3)
+                TextField("Search models", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(Theme.ui)
+                    .focused($searchFocused)
+                    .onSubmit { if let e = highlightedEntry { pick(e) } }
+                    .onKeyPress(.downArrow) { moveHighlight(1); return .handled }
+                    .onKeyPress(.upArrow) { moveHighlight(-1); return .handled }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 7))
+            .padding(8)
+            Hairline()
+            let groups = grouped
+            if groups.isEmpty {
+                Text("No models match “\(query)”")
+                    .font(Theme.ui).foregroundStyle(Theme.text3)
+                    .frame(maxWidth: .infinity).padding(.vertical, 24)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(groups, id: \.0) { provider, entries in
+                                HStack(spacing: 5) {
+                                    ProviderIcon(provider: provider, size: 9)
+                                    Text(provider.displayName)
+                                }
+                                .font(Theme.smallMedium).foregroundStyle(Theme.text3)
+                                .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 3)
+                                ForEach(entries) { e in
+                                    row(e).id(e.id)
+                                }
+                            }
+                        }
+                        .padding(6)
+                    }
+                    .onChange(of: highlighted) { _, id in
+                        if let id { proxy.scrollTo(id) }
+                    }
+                }
+                .frame(maxHeight: 380)
+            }
+        }
+        .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear { searchFocused = true }
+        .onChange(of: query) { highlighted = nil }
+    }
+
+    private func row(_ e: Entry) -> some View {
+        let selected = e.provider == tab.provider && e.modelID == tab.model
+        let isHighlighted = highlightedEntry?.id == e.id
+        return Button {
+            pick(e)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                    .opacity(selected ? 1 : 0)
+                    .frame(width: 12)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(e.name).font(Theme.ui).foregroundStyle(Theme.text)
+                        Text(e.tag).font(Theme.monoSmall).foregroundStyle(Theme.text3).lineLimit(1)
+                    }
+                    if let d = e.detail, !d.isEmpty {
+                        Text(d).font(Theme.small).foregroundStyle(Theme.text2).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(isHighlighted ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { if $0 { highlighted = e.id } }
+    }
+
+    // MARK: data
+
+    private var entries: [Entry] {
+        ProviderKind.allCases.filter { $0 == tab.provider || !chat.hasMessages }.flatMap { p -> [Entry] in
+            let def = app.models(for: p).first(where: \.isDefault)
+            var list = [
+                Entry(
+                    provider: p, modelID: nil, name: app.modelLabel(p, nil),
+                    detail: def?.description, tag: "default")
+            ]
+            list += app.pickableModels(for: p).map {
+                Entry(provider: p, modelID: $0.id, name: $0.displayName, detail: $0.description, tag: $0.id)
+            }
+            return list
         }
     }
 
-    private func defaultName(_ p: ProviderKind) -> String {
-        app.models(for: p).first(where: \.isDefault).flatMap { $0.id == "default" ? nil : $0.displayName } ?? p.displayName
+    private var filtered: [Entry] {
+        let terms = query.lowercased().split(separator: " ").map(String.init)
+        guard !terms.isEmpty else { return entries }
+        return entries.filter { e in
+            let hay = [e.name, e.tag, e.detail ?? "", e.provider.displayName].joined(separator: " ").lowercased()
+            return terms.allSatisfy { hay.contains($0) }
+        }
     }
 
-    private func modelName(_ tab: ChatTab) -> String {
-        guard let id = tab.model else { return defaultName(tab.provider) }
-        return app.models(for: tab.provider).first { $0.id == id }?.displayName ?? id
+    private var grouped: [(ProviderKind, [Entry])] {
+        let list = filtered
+        return ProviderKind.allCases.compactMap { p in
+            let es = list.filter { $0.provider == p }
+            return es.isEmpty ? nil : (p, es)
+        }
+    }
+
+    private var highlightedEntry: Entry? {
+        let list = filtered
+        if let highlighted, let e = list.first(where: { $0.id == highlighted }) { return e }
+        if query.isEmpty { return list.first { $0.provider == tab.provider && $0.modelID == tab.model } ?? list.first }
+        return list.first
+    }
+
+    private func moveHighlight(_ delta: Int) {
+        let list = filtered
+        guard !list.isEmpty else { return }
+        let i = list.firstIndex { $0.id == highlightedEntry?.id } ?? 0
+        highlighted = list[max(0, min(list.count - 1, i + delta))].id
+    }
+
+    private func pick(_ e: Entry) {
+        if e.provider != tab.provider { chat.setProvider(e.provider) }
+        chat.setModel(e.modelID)
+        done()
     }
 }
 

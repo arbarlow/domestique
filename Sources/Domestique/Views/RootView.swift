@@ -28,8 +28,11 @@ struct RootView: View {
                     } else if let model {
                         WorkspaceDetailView(model: model)
                             .id(model.id)
+                    } else if let repo = app.selectedRepo {
+                        ProjectHomeView(repo: repo)
+                            .id(repo.id)
                     } else {
-                        EmptyStateView()
+                        WelcomeView()
                     }
                 }
                 .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
@@ -53,6 +56,7 @@ struct RootView: View {
         .animation(.snappy(duration: 0.22), value: app.sidebarVisible)
         .animation(.snappy(duration: 0.22), value: app.rightPanelVisible)
         .animation(.snappy(duration: 0.18), value: app.settingsRoute)
+        .sheet(isPresented: $app.showGitHubPicker) { GitHubRepoPicker() }
         .alert(item: $app.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
         }
@@ -61,42 +65,6 @@ struct RootView: View {
     private func clampedRight(total: CGFloat) -> CGFloat {
         let available = total - (app.sidebarVisible ? sidebarWidth : 0) - 380
         return max(300, min(rightWidth, available))
-    }
-}
-
-struct EmptyStateView: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                if !app.sidebarVisible {
-                    Spacer().frame(width: 76)
-                    IconButton(symbol: "sidebar.left", help: "Show sidebar") { app.sidebarVisible = true }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .headerBar()
-            Spacer()
-            VStack(spacing: 14) {
-                Image(systemName: "bicycle")
-                    .font(.system(size: 40, weight: .ultraLight))
-                    .foregroundStyle(Theme.text3)
-                Text(app.repositories.isEmpty ? "Add a repository to get started" : "Pick a workspace or start a new one")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(Theme.text)
-                Text("Every workspace is an isolated git worktree branched from a fresh origin.")
-                    .font(Theme.ui)
-                    .foregroundStyle(Theme.text2)
-                if app.repositories.isEmpty {
-                    Button("Add repository…") { app.promptAddRepository() }
-                        .buttonStyle(.softProminent)
-                        .padding(.top, 6)
-                }
-            }
-            Spacer()
-        }
     }
 }
 

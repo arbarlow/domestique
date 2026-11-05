@@ -128,6 +128,17 @@ struct PanelHeader: View {
             Label("Needs review", systemImage: "person.crop.circle.badge.questionmark")
                 .font(Theme.ui)
                 .foregroundStyle(Theme.text2)
+        case .archive:
+            if let ws = model.workspace {
+                Button {
+                    Task { await model.app.archive(ws) }
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .buttonStyle(.softProminent)
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .help("Archive this workspace (⇧⌘P)")
+            }
         case .none:
             EmptyView()
         }
