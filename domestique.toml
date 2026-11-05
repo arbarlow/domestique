@@ -1,0 +1,39 @@
+# domestique.toml: Domestique, developed in Domestique.
+#
+# ⌘R runs this branch's build of the app. It shares your real data (same SQLite database as
+# your installed Domestique, which is built to handle several instances at once).
+# Use "Run (sandboxed data)" to try a branch against a throwaway database instead.
+
+[setup]
+# Warm the build so the first ⌘R is quick. Runs once when a workspace is created.
+script = "swift build --product DomestiqueDev"
+
+[tasks.app]
+name = "Domestique (this branch)"
+command = "swift run DomestiqueDev"
+ready_pattern = "Build of product 'DomestiqueDev' complete|Build complete!"
+
+[tasks.app-sandboxed]
+name = "Run (sandboxed data)"
+# Fresh database, settings, SSH key and worktrees under .dq-dev/ in this workspace.
+command = "mkdir -p .dq-dev/home .dq-dev/workspaces && swift run DomestiqueDev"
+env = { DOMESTIQUE_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/home", DOMESTIQUE_WORKSPACES = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/workspaces" }
+ready_pattern = "Build of product 'DomestiqueDev' complete|Build complete!"
+
+[tasks.bundle]
+name = "Build & open .app"
+# The real app bundle (icon, Dock name), Debug config, from the Xcode project.
+command = "scripts/build-app.sh Debug && open build/Domestique.app"
+kind = "oneshot"
+
+[tasks.test]
+name = "Tests"
+command = "swift build && swift test"
+kind = "oneshot"
+
+[stacks.dev]
+name = "Run this branch"
+tasks = ["app"]
+
+[trunk]
+gate = ["test"]
