@@ -76,6 +76,11 @@ final class AppModel {
         self.state = state
         lastDataVersion = Store.shared.dataVersion()
         cloud = CloudMachines(app: self)
+        // Coming back to the app (e.g. after editing domestique.toml elsewhere): re-check the config.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.selectedWorkspaceModel?.reloadConfigIfChanged() }
+        }
         Task {
             await Store.shared.markLoaded(loaded)
             self.scheduleSave()  // persists any launch fix-ups above
@@ -177,6 +182,7 @@ final class AppModel {
             if let newValue {
                 updateWorkspace(newValue) { $0.hasUnread = false }
                 workspaceModels[newValue]?.supervisor?.isFocused = true
+                workspaceModels[newValue]?.reloadConfigIfChanged()
             }
             scheduleSave()
         }

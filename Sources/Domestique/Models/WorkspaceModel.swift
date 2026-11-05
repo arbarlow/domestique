@@ -184,6 +184,7 @@ final class WorkspaceModel {
     }
 
     func agentFinishedTurn(_ chat: ChatModel) {
+        reloadConfigIfChanged()  // the agent may have edited domestique.toml
         if app.selectedWorkspaceID != id { app.updateWorkspace(id) { $0.hasUnread = true } }
         refreshDiff()
         if prStatus != nil { refreshPR() }
@@ -214,15 +215,43 @@ final class WorkspaceModel {
             let cfg = try RepoConfig.load(directory: ws.path)
                 ?? repo.flatMap { try? RepoConfig.load(directory: $0.path) }
                 ?? RepoConfig()
-            config = cfg
-            configError = nil
-            if let supervisor {
-                supervisor.update(config: cfg)
-            } else {
-                Task { await self.makeSupervisor(config: cfg) }
-            }
+            applyConfig(cfg)
         } catch {
             configError = error.localizedDescription
+        }
+    }
+
+    /// Re-read domestique.toml (the workspace's, else the main checkout's) and apply it if it changed.
+    /// Called when the workspace is focused, the app comes to the front, before ⌘R and after agent
+    /// turns, so edits made anywhere show up without reopening anything. Cheap: one small file read.
+    func reloadConfigIfChanged() {
+        guard let ws = workspace, !ws.isArchived else { return }
+        switch ws.state {
+        case .ready, .settingUp: break
+        default: return
+        }
+        if isRemote {
+            guard remoteReady else { return }
+            Task { await loadConfigAsync() }
+        } else {
+            loadConfig()
+        }
+    }
+
+    /// Install a parsed config. No-op when nothing changed, so it's safe to call often.
+    /// Running tasks keep running; edits to them take effect on their next start.
+    private func applyConfig(_ cfg: RepoConfig) {
+        let previous = config
+        configError = nil
+        guard cfg != previous || supervisor == nil else { return }
+        config = cfg
+        if let supervisor {
+            supervisor.update(config: cfg)
+        } else {
+            Task { await self.makeSupervisor(config: cfg) }
+        }
+        if previous != nil, app.selectedWorkspaceID == id {
+            app.toast = "Reloaded \(RepoConfig.fileName)"
         }
     }
 
@@ -244,14 +273,7 @@ final class WorkspaceModel {
                 remoteConfigExists = false
                 cfg = repo.flatMap { try? RepoConfig.load(directory: $0.path) }
             }
-            let resolved = cfg ?? RepoConfig()
-            config = resolved
-            configError = nil
-            if let supervisor {
-                supervisor.update(config: resolved)
-            } else {
-                await makeSupervisor(config: resolved)
-            }
+            applyConfig(cfg ?? RepoConfig())
         } catch {
             configError = error.localizedDescription
         }
@@ -307,6 +329,8 @@ final class WorkspaceModel {
     }
 
     func startDefaultStack() {
+        // Pick up a just-edited domestique.toml before starting (local reads are synchronous).
+        if !isRemote { reloadConfigIfChanged() }
         guard let supervisor, let config else {
             // Cloud workspaces read their config over SSH; run once it has arrived.
             if isRemote, !stackStartPending {
