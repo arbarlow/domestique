@@ -1,0 +1,64 @@
+name: 🐛 Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this! Domestique is early, so every report helps.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add repo …
+        2. Create workspace …
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Claude agent
+        - Codex agent
+        - Workspaces / git worktrees
+        - Run stack / tasks / terminal
+        - Changes / diff / files panel
+        - PRs / checks / trunk shipping
+        - domestique.toml config
+        - UI / layout
+        - Other
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Permission mode
+      options:
+        - Full access
+        - Auto
+        - Ask
+        - Not relevant
+  - type: input
+    id: commit
+    attributes:
+      label: Domestique commit
+      description: Output of `git rev-parse --short HEAD`
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: macOS version, plus `claude --version` and/or `codex --version` if relevant
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or logs
+      description: For agent issues, running the same prompt through `.build/debug/dq chat …` is very helpful.

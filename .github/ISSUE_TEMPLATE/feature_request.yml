@@ -1,0 +1,31 @@
+name: 💡 Idea or feedback
+description: Suggest a feature, or tell us how you think something should work
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Domestique is new and **very open to changing how it works**. Feature ideas, workflow feedback, and
+        "I think this design decision is wrong" are all welcome here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the problem or friction, not just the solution. What's your workflow today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How do you think it should work?
+      description: Sketches, screenshots or examples from other tools are great.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd be interested in helping build this
