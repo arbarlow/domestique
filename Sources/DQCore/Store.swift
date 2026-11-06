@@ -105,6 +105,14 @@ public struct AppSettings: Codable, Sendable, Hashable {
         set { teamCarList = newValue }
     }
 
+    /// Leave This Mac's Team Car (and its agents) running after Domestique quits. nil = no: quitting stops it.
+    public var keepTeamCarRunningAfterQuit: Bool?
+
+    public var keepTeamCarRunning: Bool {
+        get { keepTeamCarRunningAfterQuit ?? false }
+        set { keepTeamCarRunningAfterQuit = newValue ? true : nil }
+    }
+
     /// The car new workspaces go to unless a repository says otherwise. nil = This Mac.
     public var defaultCar: SandboxProviderHome?
 

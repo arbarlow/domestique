@@ -833,8 +833,11 @@ final class AppModel {
     // MARK: lifecycle
 
     func shutdown() {
-        // Agents in Team Car keep running after the app quits; only the in-app ones stop.
-        for link in teamCarLinks { link.close() }
+        // Quitting stops This Mac's Team Car and its agents, unless Settings says to keep it running.
+        // Remote cars always keep going.
+        for link in teamCarLinks {
+            if link.isLocal, !settings.keepTeamCarRunning { link.stopServer() } else { link.close() }
+        }
         for m in workspaceModels.values { m.shutdownNow() }
         let state = self.state
         let sem = DispatchSemaphore(value: 0)

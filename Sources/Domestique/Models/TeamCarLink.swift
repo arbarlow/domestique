@@ -215,23 +215,35 @@ final class TeamCarLink {
         welcome = nil
         info = nil
         status = .starting
-        let socket = LocalTeamCar.socketPath
-        let lsof = Process()
-        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        lsof.arguments = ["-a", "-t", "-c", "teamcar", socket]
-        let out = Pipe()
-        lsof.standardOutput = out
-        if (try? lsof.run()) != nil {
-            lsof.waitUntilExit()
-            let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .split(whereSeparator: \.isNewline).compactMap { Int32($0) }
-            for pid in pids { kill(pid, SIGTERM) }
-            for _ in 0..<50 where pids.contains(where: { kill($0, 0) == 0 }) {
-                try? await Task.sleep(for: .milliseconds(100))
-            }
+        let pids = Self.signalLocalServer()
+        for _ in 0..<50 where pids.contains(where: { kill($0, 0) == 0 }) {
+            try? await Task.sleep(for: .milliseconds(100))
         }
         closed = false
         await connect()
+    }
+
+    /// This Mac only, on quit: hang up and stop the running Team Car (its agents stop too) without waiting.
+    func stopServer() {
+        guard isLocal else { return }
+        close()
+        Self.signalLocalServer()
+    }
+
+    /// SIGTERMs whatever teamcar process listens on This Mac's socket; returns the pids it signalled.
+    @discardableResult
+    nonisolated private static func signalLocalServer() -> [pid_t] {
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsof.arguments = ["-a", "-t", "-c", "teamcar", LocalTeamCar.socketPath]
+        let out = Pipe()
+        lsof.standardOutput = out
+        guard (try? lsof.run()) != nil else { return [] }
+        lsof.waitUntilExit()
+        let pids = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .split(whereSeparator: \.isNewline).compactMap { Int32($0) }
+        for pid in pids { kill(pid, SIGTERM) }
+        return pids
     }
 
     /// "Test connection" in Settings: handshake and server info, then hang up.

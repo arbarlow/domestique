@@ -83,6 +83,10 @@ private struct CarCard: View {
             }
             Hairline().padding(.leading, 14)
             facts
+            if link.isLocal {
+                Hairline().padding(.leading, 14)
+                keepRunning
+            }
             Hairline().padding(.leading, 14)
             CarTargets(link: link)
             if editing, case .remote(let cfg) = link.car {
@@ -136,7 +140,9 @@ private struct CarCard: View {
                 .joined(separator: " · ")
         }
         switch link.car {
-        case .local: return "Starts with Domestique and keeps agents working after it quits"
+        case .local:
+            return app.settings.keepTeamCarRunning
+                ? "Starts with Domestique and keeps agents working after it quits" : "Starts and stops with Domestique"
         case .remote: return "Remote Team Car"
         }
     }
@@ -177,6 +183,26 @@ private struct CarCard: View {
             .fixedSize()
             .help("More")
         }
+    }
+
+    private var keepRunning: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Keep running after Domestique quits").font(Theme.uiMedium).foregroundStyle(Theme.text)
+                Text(app.settings.keepTeamCarRunning
+                    ? "Agents keep working while Domestique is closed"
+                    : "Quitting Domestique stops Team Car and any agents still working")
+                    .font(Theme.small).foregroundStyle(Theme.text3)
+            }
+            Spacer(minLength: 12)
+            Toggle("", isOn: Binding(
+                get: { app.settings.keepTeamCarRunning },
+                set: { app.settings.keepTeamCarRunning = $0 }
+            ))
+            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private var facts: some View {
