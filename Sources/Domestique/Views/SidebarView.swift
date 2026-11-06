@@ -135,9 +135,12 @@ private struct RepoSection: View {
                     Menu {
                         Button("New workspace with Claude") { Task { await app.createWorkspace(in: repo, provider: .claude) } }
                         Button("New workspace with Codex") { Task { await app.createWorkspace(in: repo, provider: .codex) } }
+                        if repo.githubSlug != nil {
+                            Button("New workspace from pull request…") { app.pullRequestPickerRepo = repo }
+                        }
                         Divider()
-                        ForEach(WorkspaceLocation.all) { loc in
-                            Button("New workspace on \(loc.displayName)") {
+                        ForEach(app.workspaceLocations) { loc in
+                            Button("New workspace on \(app.locationName(loc))") {
                                 Task { await app.createWorkspace(in: repo, location: loc) }
                             }
                         }
@@ -145,7 +148,7 @@ private struct RepoSection: View {
                             get: { repo.defaultLocation ?? .local },
                             set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
                         )) {
-                            ForEach(WorkspaceLocation.all) { Text($0.displayName).tag($0) }
+                            ForEach(app.workspaceLocations) { Text(app.locationName($0)).tag($0) }
                         }
                         Divider()
                         Picker("Ship mode", selection: Binding(
@@ -169,11 +172,34 @@ private struct RepoSection: View {
                     .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    IconButton(
-                        symbol: "plus",
-                        help: "New workspace from origin/\(repo.defaultBranch) on \(app.defaultLocation(for: repo).displayName)", size: 12
-                    ) {
-                        Task { await app.createWorkspace(in: repo) }
+                    if let choices = app.newWorkspaceChoices(for: repo) {
+                        let def = app.defaultLocation(for: repo)
+                        Menu {
+                            Section("New workspace from origin/\(repo.defaultBranch) on") {
+                                ForEach(choices) { loc in
+                                    Button(loc == def ? "\(app.locationName(loc)) (default)" : app.locationName(loc)) {
+                                        Task { await app.createWorkspace(in: repo, location: loc) }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "plus").font(.system(size: 12)).foregroundStyle(Theme.text2)
+                                .frame(width: 26, height: 26)
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("New workspace from origin/\(repo.defaultBranch)…")
+                    } else {
+                        IconButton(
+                            symbol: "plus",
+                            help: "New workspace from origin/\(repo.defaultBranch) on \(app.locationName(app.defaultLocation(for: repo)))",
+                            size: 12
+                        ) {
+                            Task { await app.createWorkspace(in: repo) }
+                        }
                     }
                 }
             }
@@ -234,7 +260,10 @@ struct WorkspaceRow: View {
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if workspace.isRemote, !workspace.isArchived { MachineGlyph(workspace: workspace) }
+                if workspace.isSandbox, !workspace.isArchived { MachineGlyph(workspace: workspace) }
+                if let car = workspace.host, car.provider == .teamcar, !workspace.isArchived {
+                    TeamCarGlyph(name: car.machineName ?? "Team Car")
+                }
                 Spacer(minLength: 6)
                 if let model, !model.diffFiles.isEmpty {
                     DiffCount(additions: model.diffStat.additions, deletions: model.diffStat.deletions)
@@ -250,7 +279,11 @@ struct WorkspaceRow: View {
 
     private func title(_ model: WorkspaceModel?) -> String {
         switch workspace.state {
-        case .creating: return workspace.isRemote || workspace.path.hasPrefix("/home/user") ? "Starting \(workspace.name) on boat.dev…" : "Creating \(workspace.name)…"
+        case .creating:
+            if let car = workspace.host, car.provider == .teamcar {
+                return "Creating \(workspace.name) on \(car.machineName ?? "Team Car")…"
+            }
+            return workspace.isSandbox || workspace.path.hasPrefix("/home/user") ? "Starting \(workspace.name) on boat.dev…" : "Creating \(workspace.name)…"
         case .settingUp: return "Setting up \(workspace.name)…"
         case .failed: return "\(workspace.name) (failed)"
         default:
@@ -326,6 +359,7 @@ private struct SidebarFooter: View {
             .fixedSize()
             .help("Add repository")
             UpdateButton(updater: app.updater)
+            TeamCarStatusDot(link: app.teamCar)
             Spacer(minLength: 4)
             ForEach([ProviderKind.claude, .codex], id: \.self) { p in
                 if let u = app.usage[p] { UsageRing(provider: p, usage: u) }
@@ -336,6 +370,37 @@ private struct SidebarFooter: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 44)
+    }
+}
+
+/// A dot for the local Team Car: nothing while it's connected, otherwise a warning with the reason.
+private struct TeamCarStatusDot: View {
+    let link: TeamCarLink
+
+    var body: some View {
+        switch link.status {
+        case .disabled, .connected:
+            EmptyView()
+        case .starting:
+            ProgressView().controlSize(.mini).frame(width: 26, height: 26).help("Starting Team Car…")
+        case .unavailable(let why):
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.warning)
+                .frame(width: 26, height: 26)
+                .help("Team Car isn't connected: \(why)")
+        }
+    }
+}
+
+/// Marks a workspace that runs on a remote Team Car.
+struct TeamCarGlyph: View {
+    let name: String
+    var body: some View {
+        Image(systemName: "server.rack")
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.text3)
+            .help("Runs on \(name)")
     }
 }
 
@@ -635,7 +700,9 @@ struct WorkspaceContextMenu: View {
     var body: some View {
         let model = app.model(for: workspace.id)
         Button("New chat tab") { model.newTab() }
-        if workspace.isRemote {
+        if workspace.teamCarID != nil {
+            // Code lives on the car: nothing to open on this Mac.
+        } else if workspace.isSandbox {
             if !workspace.isArchived {
                 Button("Open desktop") { app.cloud.openDesktop(workspace) }
                 if app.cloud.phase(for: workspace) == .stopped {

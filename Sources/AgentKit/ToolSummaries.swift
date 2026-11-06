@@ -52,7 +52,8 @@ enum ToolSummaries {
             case "Bash": s("command") ?? input.prettyString
             default: input.prettyString
             }
-        return ToolCall(name: displayName, summary: summary, input: inputText)
+        let description = name == "Bash" ? s("description").flatMap { $0.isEmpty ? nil : $0 } : nil
+        return ToolCall(name: displayName, summary: summary, input: inputText, description: description)
     }
 
     static func firstString(in value: JSONValue) -> String? {

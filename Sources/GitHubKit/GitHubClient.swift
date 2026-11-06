@@ -168,7 +168,7 @@ public actor GitHubClient {
           repository(owner: $owner, name: $name) {
             pullRequests(states: OPEN, first: $first, orderBy: {field: UPDATED_AT, direction: DESC}) {
               nodes {
-                number title url isDraft headRefName createdAt updatedAt additions deletions reviewDecision
+                number title url isDraft headRefName baseRefName isCrossRepository createdAt updatedAt additions deletions reviewDecision
                 author { login avatarUrl }
                 comments { totalCount }
                 commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
@@ -202,7 +202,8 @@ public actor GitHubClient {
             }
         return PullRequestSummary(
             number: number, title: n["title"]?.string ?? "", url: url, isDraft: n["isDraft"]?.bool ?? false,
-            headRefName: n["headRefName"]?.string ?? "", authorLogin: n["author"]?["login"]?.string,
+            headRefName: n["headRefName"]?.string ?? "", baseRefName: n["baseRefName"]?.string ?? "",
+            isCrossRepository: n["isCrossRepository"]?.bool ?? false, authorLogin: n["author"]?["login"]?.string,
             authorAvatarURL: n["author"]?["avatarUrl"]?.string,
             createdAt: n["createdAt"]?.string.flatMap { iso.date(from: $0) },
             updatedAt: n["updatedAt"]?.string.flatMap { iso.date(from: $0) },

@@ -148,7 +148,29 @@ public enum BoatCredentialSource: Sendable, Hashable {
 /// boat.dev HTTP API (`https://boat.dev/api/v1`). Auth: an API key from Settings (Keychain),
 /// `BOAT_API_KEY`, or the token the `boat` CLI saved when you ran `boat login`.
 public actor BoatClient {
+    /// The original account (its key is the `api-key` Keychain item).
     public static let shared = BoatClient()
+
+    /// Keychain account holding the original provider's API key. Other sandbox providers each get
+    /// their own (`api-key.<provider id>`).
+    public static let defaultAccount = "api-key"
+
+    /// One client per Keychain account (sandbox provider).
+    public static func client(account: String?) -> BoatClient {
+        let account = account ?? defaultAccount
+        if account == defaultAccount { return shared }
+        return clientsLock.withLock {
+            if let c = clients[account] { return c }
+            let c = BoatClient(account: account)
+            clients[account] = c
+            return c
+        }
+    }
+    nonisolated(unsafe) private static var clients: [String: BoatClient] = [:]
+    private static let clientsLock = NSLock()
+
+    /// Which Keychain item this client's API key lives in.
+    public let account: String
 
     public static let dashboardURL = URL(string: "https://boat.dev/dashboard")!
     public static let agentsSetupURL = URL(string: "https://boat.dev/dashboard?tab=agents")!
@@ -172,7 +194,8 @@ public actor BoatClient {
     }()
     nonisolated(unsafe) private static let isoNoFraction = ISO8601DateFormatter()
 
-    public init() {
+    public init(account: String = BoatClient.defaultAccount) {
+        self.account = account
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 60
         session = URLSession(configuration: config)
@@ -182,19 +205,21 @@ public actor BoatClient {
 
     public static let keychainService = "dev.domestique.boat"
 
-    /// The key to use and where it came from; nil when there's none.
-    public nonisolated static func credential() -> (token: String, source: BoatCredentialSource)? {
-        if let k = Keychain.read(service: keychainService, account: "api-key"), !k.isEmpty { return (k, .keychain) }
+    /// The key to use and where it came from; nil when there's none. A provider's own key wins;
+    /// without one it falls back to `BOAT_API_KEY`, then the `boat login` session.
+    public nonisolated static func credential(account: String? = nil) -> (token: String, source: BoatCredentialSource)? {
+        if let k = Keychain.read(service: keychainService, account: account ?? defaultAccount), !k.isEmpty { return (k, .keychain) }
         if let k = ProcessInfo.processInfo.environment["BOAT_API_KEY"], !k.isEmpty { return (k, .environment) }
         if let k = cliToken() { return (k, .cli) }
         return nil
     }
 
-    public nonisolated static func saveAPIKey(_ key: String?) {
+    public nonisolated static func saveAPIKey(_ key: String?, account: String? = nil) {
+        let account = account ?? defaultAccount
         if let key, !key.isEmpty {
-            Keychain.write(service: keychainService, account: "api-key", value: key)
+            Keychain.write(service: keychainService, account: account, value: key)
         } else {
-            Keychain.delete(service: keychainService, account: "api-key")
+            Keychain.delete(service: keychainService, account: account)
         }
     }
 
@@ -216,6 +241,7 @@ public actor BoatClient {
     }
 
     public nonisolated static var isConfigured: Bool { credential() != nil }
+    public nonisolated static func isConfigured(account: String?) -> Bool { credential(account: account) != nil }
 
     // MARK: sandboxes
 
@@ -345,10 +371,10 @@ public actor BoatClient {
     }
 
     private func rawData(_ method: String, _ path: String, body: Data?, headers: [String: String] = [:]) async throws -> Data {
-        guard let (token, _) = Self.credential() else {
+        guard let (token, _) = Self.credential(account: account) else {
             throw BoatAPIError(
                 status: 401, code: "unauthorized",
-                message: "Not signed in to boat.dev. Add an API key in Settings → Cloud, or run `boat login`.")
+                message: "Not signed in to boat.dev. Add an API key in Settings → Sandbox Providers, or run `boat login`.")
         }
         var req = URLRequest(url: URL(string: baseURL.absoluteString + path)!)
         req.httpMethod = method

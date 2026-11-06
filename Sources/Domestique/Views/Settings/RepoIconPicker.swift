@@ -34,7 +34,8 @@ struct RepoIconPicker: View {
                             .font(.system(size: 18))
                             .frame(width: 60, height: 32)
                             .multilineTextAlignment(.center)
-                            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
+                            .background(Theme.field, in: RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border, lineWidth: 0.5))
                             .onChange(of: emoji) { _, v in
                                 guard let first = v.first else { return }
                                 update { $0.emoji = String(first) }
@@ -62,6 +63,7 @@ struct RepoIconPicker: View {
                 Circle()
                     .fill(Color(hex: hex) ?? .gray)
                     .frame(width: 20, height: 20)
+                    .overlay(Circle().strokeBorder(Theme.border, lineWidth: 0.5))  // keeps dark swatches visible on dark cards
                     .overlay(Circle().strokeBorder(Theme.text, lineWidth: selected ? 2 : 0).padding(-3))
                     .contentShape(Circle())
                     .onTapGesture { update { $0.colorHex = hex } }

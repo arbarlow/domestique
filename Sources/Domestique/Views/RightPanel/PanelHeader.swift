@@ -45,7 +45,7 @@ struct PanelHeader: View {
             } label: {
                 Label("Create PR", systemImage: "arrow.triangle.pull")
             }
-            .buttonStyle(.softProminent)
+            .buttonStyle(.soft)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Ask the agent to commit, push and open a pull request (⇧⌘P)")
         case .commitAndPush:
@@ -54,7 +54,7 @@ struct PanelHeader: View {
             } label: {
                 Label("Commit and push", systemImage: "arrow.up.circle")
             }
-            .buttonStyle(.softProminent)
+            .buttonStyle(.soft)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Ask the agent to commit and push to the PR branch (⇧⌘P)")
         case .pushToTrunk:
@@ -63,7 +63,7 @@ struct PanelHeader: View {
             } label: {
                 Label("Push to \(model.base)", systemImage: "arrow.up.to.line")
             }
-            .buttonStyle(.softProminent)
+            .buttonStyle(.soft)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Ask the agent to commit, rebase onto origin/\(model.base) and push (⇧⌘P)")
         case .merge:
@@ -73,10 +73,10 @@ struct PanelHeader: View {
                 } label: {
                     Label("Merge", systemImage: "arrow.triangle.merge")
                 }
-                .buttonStyle(.softProminent)
+                .buttonStyle(.softGo)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .help("\(mergeMethod.displayName) (⇧⌘P)")
-                MergeOptionsMenu(model: model, methodRaw: $mergeMethodRaw)
+                MergeOptionsMenu(model: model, methodRaw: $mergeMethodRaw, go: true)
             }
         case .mergeWhenReady:
             HStack(spacing: 4) {
@@ -85,10 +85,10 @@ struct PanelHeader: View {
                 } label: {
                     Label("Merge when ready", systemImage: "clock.arrow.circlepath")
                 }
-                .buttonStyle(.softProminent)
+                .buttonStyle(.softGo)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .help("Merge automatically once checks pass (⇧⌘P)")
-                MergeOptionsMenu(model: model, methodRaw: $mergeMethodRaw)
+                MergeOptionsMenu(model: model, methodRaw: $mergeMethodRaw, go: true)
             }
         case .waitingToMerge:
             Button {
@@ -105,7 +105,7 @@ struct PanelHeader: View {
                 } label: {
                     Label("Fix CI", systemImage: "wrench.and.screwdriver")
                 }
-                .buttonStyle(.softProminent)
+                .buttonStyle(.soft)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .help("Send the failing logs to the agent (⇧⌘P)")
                 MergeOptionsMenu(model: model, methodRaw: $mergeMethodRaw)
@@ -116,7 +116,7 @@ struct PanelHeader: View {
             } label: {
                 Label("Update branch", systemImage: "arrow.triangle.2.circlepath")
             }
-            .buttonStyle(.softProminent)
+            .buttonStyle(.soft)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Merge \(model.base) into the PR branch on GitHub (⇧⌘P)")
         case .resolveConflicts:
@@ -125,7 +125,7 @@ struct PanelHeader: View {
             } label: {
                 Label("Resolve conflicts", systemImage: "exclamationmark.triangle")
             }
-            .buttonStyle(.softProminent)
+            .buttonStyle(.soft)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Ask the agent to rebase onto \(model.base) and resolve conflicts (⇧⌘P)")
         case .needsReview:
@@ -139,7 +139,7 @@ struct PanelHeader: View {
                 } label: {
                     Label("Archive", systemImage: "archivebox")
                 }
-                .buttonStyle(.softProminent)
+                .buttonStyle(.soft)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .help("Archive this workspace (⇧⌘P)")
             }
@@ -199,6 +199,8 @@ struct PRChip: View {
 struct MergeOptionsMenu: View {
     let model: WorkspaceModel
     @Binding var methodRaw: String
+    /// Green to sit flush with a green Merge button.
+    var go = false
 
     var body: some View {
         Menu {
@@ -223,13 +225,14 @@ struct MergeOptionsMenu: View {
         } label: {
             Image(systemName: "chevron.down")
                 .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(go ? Color.white : Theme.text)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
         .frame(width: 24, height: 28)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.raised))
-        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 7).fill(go ? Theme.go : Theme.raised))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(go ? .clear : Theme.border, lineWidth: 0.5))
         .help("Merge options")
     }
 }

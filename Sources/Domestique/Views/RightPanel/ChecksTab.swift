@@ -93,7 +93,7 @@ private struct PRSection: View {
                         .font(Theme.uiMedium)
                         .foregroundStyle(Theme.merged)
                     Button("Archive workspace") { Task { await model.app.archive(ws) } }
-                        .buttonStyle(.softProminent)
+                        .buttonStyle(.soft)
                 }
             }
         }
@@ -190,9 +190,9 @@ private struct MergeControls: View {
                     } label: {
                         Label(method.displayName, systemImage: "arrow.triangle.merge")
                     }
-                    .buttonStyle(.softProminent)
+                    .buttonStyle(.softGo)
                     .disabled(model.shipBusy != nil)
-                    MergeOptionsMenu(model: model, methodRaw: $methodRaw)
+                    MergeOptionsMenu(model: model, methodRaw: $methodRaw, go: true)
                     Spacer()
                 default:
                     Button {
@@ -200,10 +200,10 @@ private struct MergeControls: View {
                     } label: {
                         Label("Merge when ready", systemImage: "clock.arrow.circlepath")
                     }
-                    .buttonStyle(.softProminent)
+                    .buttonStyle(action == .mergeWhenReady ? .softGo : .soft)
                     .disabled(model.shipBusy != nil || action == .resolveConflicts)
                     .help("Merges automatically once checks pass")
-                    MergeOptionsMenu(model: model, methodRaw: $methodRaw)
+                    MergeOptionsMenu(model: model, methodRaw: $methodRaw, go: action == .mergeWhenReady)
                     Spacer()
                 }
             }

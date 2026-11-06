@@ -13,15 +13,18 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
     public let displayName = "boat.dev"
 
     public let ssh: SSHConnection
+    /// The sandbox provider's API client (its account).
+    public let client: BoatClient
     private let state = State()
 
     /// Sourced by every remote command: per-sandbox settings Domestique writes (e.g. GH_TOKEN).
     public static let remoteEnvFile = "$HOME/.config/domestique/env.sh"
     public static let home = "/home/user"
 
-    init(machineID: String) {
+    init(machineID: String, account: String?) {
         self.machineID = machineID
         self.ssh = SSHConnection(alias: machineID)
+        self.client = BoatClient.client(account: account)
     }
 
     private actor State {
@@ -57,7 +60,7 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
     }
 
     private func doPrepare() async throws {
-        let client = BoatClient.shared
+        let client = self.client
         var sandbox = try await client.sandbox(machineID)
         await state.observer?(sandbox)
         switch sandbox.phase {
@@ -191,17 +194,22 @@ public enum Hosts {
     nonisolated(unsafe) private static var boat: [String: BoatHost] = [:]
     private static let lock = NSLock()
 
+    /// Builds hosts for remote Team Cars (set by the app, which knows their URLs and tokens).
+    nonisolated(unsafe) public static var teamCarResolver: (@Sendable (WorkspaceHost) -> (any ExecutionHost)?)?
+
     public static func host(for h: WorkspaceHost?) -> any ExecutionHost {
         guard let h else { return LocalHost.shared }
         switch h.provider {
-        case .boat: return boatHost(h.machineID)
+        case .boat: return boatHost(h.machineID, account: h.accountID)
+        case .teamcar: return teamCarResolver?(h) ?? UnavailableHost(name: h.machineName ?? "Team Car")
         }
     }
 
-    public static func boatHost(_ id: String) -> BoatHost {
+    /// - Parameter account: the sandbox provider's Keychain account (nil = the original one).
+    public static func boatHost(_ id: String, account: String? = nil) -> BoatHost {
         lock.withLock {
             if let b = boat[id] { return b }
-            let b = BoatHost(machineID: id)
+            let b = BoatHost(machineID: id, account: account)
             boat[id] = b
             return b
         }
@@ -209,4 +217,19 @@ public enum Hosts {
 
     /// Every boat host created so far (app shutdown).
     public static var allBoatHosts: [BoatHost] { lock.withLock { Array(boat.values) } }
+}
+
+/// Stands in for a remote Team Car that's no longer in Settings: every command fails with a clear message.
+final class UnavailableHost: ExecutionHost {
+    let id = "unavailable"
+    let isLocal = false
+    let displayName: String
+    init(name: String) { displayName = name }
+    private var error: HostError { HostError("\(displayName) isn't in Settings → Team Cars any more.") }
+    func prepare() async throws { throw error }
+    func command(_ executable: String, _ arguments: [String], cwd: String, env: [String: String], tty: Bool) async throws -> HostCommand { throw error }
+    func shell(_ script: String, cwd: String, env: [String: String], tty: Bool) async throws -> HostCommand { throw error }
+    func readFile(_ path: String, maxBytes: Int) async throws -> Data? { throw error }
+    func writeFile(_ path: String, data: Data) async throws { throw error }
+    func fileExists(_ path: String) async -> Bool { false }
 }

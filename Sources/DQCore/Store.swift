@@ -74,6 +74,37 @@ public struct AppSettings: Codable, Sendable, Hashable {
         set { boatSettings = newValue }
     }
 
+    /// Sandbox providers (Settings → Sandbox Providers). nil until migrated: the old single boat.dev
+    /// setup (`boatSettings` and the `api-key` Keychain item) becomes the first one.
+    public var sandboxProviderList: [SandboxProviderConfig]?
+
+    public var sandboxProviders: [SandboxProviderConfig] {
+        get { sandboxProviderList ?? [SandboxProviderConfig.legacy(boat)] }
+        set { sandboxProviderList = newValue }
+    }
+
+    /// The provider a sandbox workspace belongs to.
+    public func provider(for host: WorkspaceHost?) -> SandboxProviderConfig? {
+        sandboxProviders.first { $0.owns(host) }
+    }
+
+    /// Resolves a location to a provider; the old `.cloud(.boat)` means the first boat.dev provider.
+    public func provider(for location: WorkspaceLocation?) -> SandboxProviderConfig? {
+        switch location {
+        case .sandbox(let id): sandboxProviders.first { $0.id == id }
+        case .cloud(let kind): sandboxProviders.first { $0.kind == kind }
+        default: nil
+        }
+    }
+
+    /// Remote Team Cars (This Mac's is implicit). Optional so older settings still decode.
+    public var teamCarList: [TeamCarConfig]?
+
+    public var teamCars: [TeamCarConfig] {
+        get { teamCarList ?? [] }
+        set { teamCarList = newValue }
+    }
+
     public init() {}
 }
 
@@ -299,5 +330,15 @@ public enum WorkspaceNames {
             for c in climbs.shuffled() where !used.contains("\(c)-\(n)") { return "\(c)-\(n)" }
             n += 1
         }
+    }
+}
+
+extension SandboxProviderConfig {
+    /// Stable id for the provider made from pre-provider settings, so it's the same until saved.
+    public static let legacyID = UUID(uuidString: "B0A7DE70-0000-4000-8000-000000000001")!
+
+    /// The original single boat.dev setup as a provider.
+    public static func legacy(_ boat: BoatSettings) -> SandboxProviderConfig {
+        SandboxProviderConfig(id: legacyID, kind: .boat, name: "boat.dev", credentialAccount: "api-key", boat: boat)
     }
 }

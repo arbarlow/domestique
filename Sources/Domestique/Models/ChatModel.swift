@@ -2,6 +2,7 @@ import AgentKit
 import DQCore
 import Foundation
 import Observation
+import RaceRadioKit
 
 /// One chat tab: transcript + a lazily-started provider session.
 @MainActor
@@ -45,6 +46,15 @@ final class ChatModel {
     var draft = ""
     var attachments: [AgentAttachment] = []
 
+    /// A follow-up typed while the agent is mid-turn. It waits here (so the live turn stays expanded)
+    /// and goes out when the turn ends, unless the user steers it in now.
+    struct QueuedMessage: Identifiable {
+        let id = UUID()
+        var text: String
+        var attachments: [AgentAttachment]
+    }
+    private(set) var queued: [QueuedMessage] = []
+
     @ObservationIgnored private var index: [String: Int] = [:]
     @ObservationIgnored private var session: (any AgentSession)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -54,9 +64,20 @@ final class ChatModel {
     @ObservationIgnored private var lastCost: Double = 0
     @ObservationIgnored private var trayClearTask: Task<Void, Never>?
 
+    /// Local workspaces: the agent runs in Team Car as a rider with this tab's id; this model follows
+    /// its transcript and sends it requests. Cloud workspaces still run the agent in-app.
+    @ObservationIgnored let viaTeamCar: Bool
+    /// The Team Car this chat's rider lives on (This Mac's or a remote one).
+    @ObservationIgnored private let link: TeamCarLink?
+    @ObservationIgnored private var riderTask: Task<Void, Never>?
+    /// Items collected during the first replay (assigned in one go, not item by item).
+    @ObservationIgnored private var replayBuffer: [TranscriptItem]?
+
     init(tabID: UUID, workspace: WorkspaceModel) {
         self.tabID = tabID
         self.workspace = workspace
+        link = workspace.app.link(for: workspace.workspace)
+        viaTeamCar = link != nil
     }
 
     var tab: ChatTab? { workspace.workspace?.tabs.first { $0.id == tabID } }
@@ -77,6 +98,10 @@ final class ChatModel {
     func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
+        if viaTeamCar {
+            followRider()
+            return
+        }
         let id = tabID
         Task {
             let (stored, maxRow) = await Store.shared.transcriptItems(tabID: id, afterRowID: 0)
@@ -90,7 +115,7 @@ final class ChatModel {
 
     /// Pull items another instance saved for this tab (only while this instance isn't driving it).
     func syncFromStore() {
-        guard loaded, session == nil || !isRunning, pendingDeltas.isEmpty, dirty.isEmpty else { return }
+        guard !viaTeamCar, loaded, session == nil || !isRunning, pendingDeltas.isEmpty, dirty.isEmpty else { return }
         let id = tabID
         let after = lastRowID
         Task {
@@ -179,13 +204,56 @@ final class ChatModel {
         """
     }
 
-    func send() {
+    /// Send the composer's draft. Mid-turn it's queued for when the turn ends; `steer` sends it now.
+    func send(steer: Bool = false) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return }
         let files = attachments
         draft = ""
         attachments = []
-        send(text: text, attachments: files)
+        if isRunning, !steer {
+            queued.append(QueuedMessage(text: text, attachments: files))
+        } else {
+            send(text: text, attachments: files)
+        }
+    }
+
+    /// Send a queued follow-up into the running turn right away.
+    func steer(_ id: UUID) {
+        guard let i = queued.firstIndex(where: { $0.id == id }) else { return }
+        let m = queued.remove(at: i)
+        send(text: m.text, attachments: m.attachments)
+    }
+
+    func removeQueued(_ id: UUID) {
+        queued.removeAll { $0.id == id }
+    }
+
+    /// Pull a queued follow-up back into the composer to edit it.
+    func editQueued(_ id: UUID) {
+        guard let i = queued.firstIndex(where: { $0.id == id }) else { return }
+        let m = queued.remove(at: i)
+        draft = draft.isEmpty ? m.text : m.text + "\n\n" + draft
+        attachments = m.attachments + attachments
+    }
+
+    /// The turn ended: everything queued goes out together as the next message.
+    private func sendQueued() {
+        guard !queued.isEmpty, !isRunning else { return }
+        let all = queued
+        queued = []
+        let text = all.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n")
+        send(text: text, attachments: all.flatMap(\.attachments))
+    }
+
+    /// Stopping the agent means "hold on": queued follow-ups go back into the composer instead of firing.
+    private func restoreQueuedToDraft() {
+        guard !queued.isEmpty else { return }
+        let all = queued
+        queued = []
+        let text = all.map(\.text).filter { !$0.isEmpty }
+        draft = (text + (draft.isEmpty ? [] : [draft])).joined(separator: "\n\n")
+        attachments = all.flatMap(\.attachments) + attachments
     }
 
     func send(text: String, attachments: [AgentAttachment] = []) {
@@ -197,6 +265,28 @@ final class ChatModel {
         var display = text
         if !attachments.isEmpty { display += "\n\n" + attachments.map { "📎 \($0.filename)" }.joined(separator: "  ") }
         clearFinishedFromTray()
+        if viaTeamCar {
+            isRunning = true
+            turnStartedAt = turnStartedAt ?? .now
+            let rider = tabID.radioID
+            let files = attachments.map { a -> Radio_Attachment in
+                var r = Radio_Attachment()
+                r.data = a.data
+                r.mediaType = a.mediaType
+                r.filename = a.filename
+                return r
+            }
+            Task {
+                do {
+                    try await self.link!.ready().sendMessage(riderID: rider, text: text, attachments: files)
+                } catch {
+                    self.upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: error.localizedDescription)))
+                    self.isRunning = false
+                    self.turnStartedAt = nil
+                }
+            }
+            return
+        }
         let item = TranscriptItem(id: "user-\(UUID().uuidString)", kind: .user(text: display))
         upsert(item)
         let session = ensureSession()
@@ -225,29 +315,53 @@ final class ChatModel {
     }
 
     func interrupt() {
+        restoreQueuedToDraft()
+        if viaTeamCar {
+            riderCall { try await $0.interrupt(riderID: $1) }
+            return
+        }
         guard let session else { return }
         Task { await session.interrupt() }
     }
 
     func respond(_ request: ApprovalRequest, decision: ApprovalDecision) {
+        if viaTeamCar {
+            let (d, message) = decision.radio
+            riderCall { try await $0.respondApproval(riderID: $1, requestID: request.requestID, decision: d, message: message) }
+            return
+        }
         guard let session else { return }
         Task { await session.respond(requestID: request.requestID, decision: decision) }
     }
 
     func answer(_ request: ApprovalRequest, answers: [String: String]) {
+        if viaTeamCar {
+            riderCall { try await $0.answerQuestion(riderID: $1, requestID: request.requestID, answers: answers) }
+            return
+        }
         guard let session else { return }
         Task { await session.answer(requestID: request.requestID, answers: answers) }
     }
 
     func setPermissionMode(_ mode: AgentPermissionMode) {
         updateTab { $0.permissionMode = mode }
+        if viaTeamCar {
+            var u = Radio_UpdateRider()
+            u.permissionMode = mode.radio
+            updateRider(u)
+            return
+        }
         if let session { Task { await session.setPermissionMode(mode) } }
     }
 
     func setModel(_ model: String?) {
         guard let tab else { return }
         updateTab { $0.model = model }
-        if let session { Task { await session.setModel(model) } }
+        if viaTeamCar {
+            var u = Radio_UpdateRider()
+            u.model = model ?? ""
+            updateRider(u)
+        } else if let session { Task { await session.setModel(model) } }
         // Keep the thinking level valid for the new model.
         let option = workspace.app.resolvedModel(tab.provider, model)
         if let effort = tab.effort, let option, !option.efforts.contains(effort) {
@@ -257,7 +371,11 @@ final class ChatModel {
 
     func setEffort(_ effort: String?) {
         updateTab { $0.effort = effort }
-        if let session { Task { await session.setEffort(effort) } }
+        if viaTeamCar {
+            var u = Radio_UpdateRider()
+            u.effort = effort ?? ""
+            updateRider(u)
+        } else if let session { Task { await session.setEffort(effort) } }
     }
 
     /// Only allowed before the first message: the provider owns the conversation after that.
@@ -270,9 +388,21 @@ final class ChatModel {
             $0.effort = workspace.app.defaultEffort(for: provider)
             $0.providerSessionID = nil
         }
+        if viaTeamCar, let tab {
+            // A rider's provider is fixed: replace the (empty) rider, keeping the tab's id.
+            let link = self.link!
+            let wsID = workspace.id
+            Task {
+                await link.replaceRider(tab, workspace: wsID)
+                self.loaded = false
+                self.loadIfNeeded()
+            }
+        }
     }
 
     func shutdown() {
+        riderTask?.cancel()
+        riderTask = nil
         flushDeltas()
         persistDirty()
         eventTask?.cancel()
@@ -337,6 +467,7 @@ final class ChatModel {
             turnStartedAt = nil
             persistDirty()
             workspace.agentFinishedTurn(self)
+            sendQueued()
         case .status(let s):
             status = s
         case .models(let models):
@@ -350,7 +481,7 @@ final class ChatModel {
             if task.isRunning {
                 trayClearTask?.cancel()
             } else {
-                recordTaskResult(task)
+                if !viaTeamCar { recordTaskResult(task) }  // Team Car records it on the item itself
                 scheduleTrayAutoClear()
             }
         case .autoTurnStarted(let reason):
@@ -366,6 +497,7 @@ final class ChatModel {
             session = nil
             eventTask = nil
             isRunning = false
+            restoreQueuedToDraft()
             status = nil
             turnStartedAt = nil
             if let message {
@@ -438,6 +570,10 @@ final class ChatModel {
     }
 
     private func persistDirty() {
+        if viaTeamCar {
+            dirty.removeAll()  // Team Car persists the transcript
+            return
+        }
         guard !dirty.isEmpty else { return }
         let toWrite = dirty.compactMap { id in index[id].map { items[$0] } }.sorted { lhs, rhs in
             (index[lhs.id] ?? 0) < (index[rhs.id] ?? 0)
@@ -445,5 +581,135 @@ final class ChatModel {
         dirty.removeAll()
         let id = tabID
         Task { await Store.shared.append(toWrite, tabID: id) }
+    }
+
+    // MARK: Team Car rider
+
+    private func riderCall(_ call: @escaping @Sendable (TeamCarClient, String) async throws -> Void) {
+        let rider = tabID.radioID
+        let link = self.link!
+        Task {
+            do {
+                try await call(try await link.ready(), rider)
+            } catch {
+                self.upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: error.localizedDescription)))
+            }
+        }
+    }
+
+    private func updateRider(_ update: Radio_UpdateRider) {
+        var u = update
+        u.riderID = tabID.radioID
+        let req = u
+        riderCall { client, _ in _ = try await client.updateRider(req) }
+    }
+
+    /// Replays the rider's transcript, then follows it live. The subscription resumes by itself after a
+    /// reconnect (replaying only what changed), so this runs until the chat is closed.
+    private func followRider() {
+        riderTask?.cancel()
+        items = []
+        index = [:]
+        replayBuffer = []
+        let link = self.link!
+        let rider = tabID.radioID
+        riderTask = Task { [weak self] in
+            var attempts = 0
+            while !Task.isCancelled {
+                do {
+                    let client = try await link.ready()
+                    let sub = try await client.subscribeRider(rider)
+                    await withTaskCancellationHandler {
+                        for await event in sub.events {
+                            guard let self else { return }
+                            self.applyRider(event)
+                        }
+                    } onCancel: {
+                        sub.cancel()
+                    }
+                    return
+                } catch let e as TeamCarError where e.code == .notFound && attempts < 20 {
+                    // The rider is still being opened (a new tab).
+                    attempts += 1
+                    try? await Task.sleep(for: .milliseconds(250))
+                } catch {
+                    guard let self else { return }
+                    self.replayBuffer = nil
+                    self.upsert(TranscriptItem(id: "error-teamcar", kind: .error(text: "Couldn't load this chat from Team Car: \(error.localizedDescription)")))
+                    return
+                }
+            }
+        }
+    }
+
+    private func applyRider(_ event: Radio_Event) {
+        if case .appendText(let a) = event.payload, replayBuffer == nil {
+            pendingDeltas.append((a.itemID, a.delta))
+            scheduleFlush()
+            return
+        }
+        flushDeltas()
+        switch event.payload {
+        case .itemUpserted(let r):
+            guard let item = TranscriptItem(radio: r) else { return }
+            if replayBuffer != nil {
+                replayBuffer?.append(item)
+                return
+            }
+            upsert(item)
+            if case .tool(let call) = item.kind, call.name == "Bash", call.status != .running, !call.output.isEmpty {
+                workspace.noticePullRequestURL(in: call.output)
+            }
+            if case .tool(let call) = item.kind, call.status != .running,
+                !call.fileChanges.isEmpty || ["Bash", "Edit", "Write", "MultiEdit"].contains(call.name)
+            {
+                workspace.scheduleDiffRefresh()
+            }
+            if case .approval(let req) = item.kind, req.resolution == .pending { workspace.agentNeedsAttention(self) }
+        case .replayDone:
+            if let buffer = replayBuffer {
+                replayBuffer = nil
+                for item in buffer {
+                    if let i = index[item.id] {
+                        items[i] = item
+                    } else {
+                        index[item.id] = items.count
+                        items.append(item)
+                    }
+                }
+            }
+            let running = link?.isRiderRunning(tabID) ?? false
+            isRunning = running
+            if !running { turnStartedAt = nil } else { turnStartedAt = turnStartedAt ?? .now }
+        case .turnStarted:
+            isRunning = true
+            turnStartedAt = turnStartedAt ?? .now
+        case .turnEnded:
+            isRunning = false
+            status = nil
+            turnStartedAt = nil
+            workspace.agentFinishedTurn(self)
+            sendQueued()
+        case .status(let st):
+            status = st.text.isEmpty ? nil : st.text
+        case .models(let list):
+            if let provider = tab?.provider {
+                workspace.app.updateModels(list.models.map(ModelOption.init(radio:)), for: provider)
+            }
+        case .task(let t):
+            apply(.task(AgentTask(radio: t)))
+        case .autoTurnStarted:
+            isRunning = true
+            turnStartedAt = .now
+        case .rateLimit(let r):
+            if let provider = tab?.provider { workspace.app.recordUsage(RateLimitInfo(radio: r), for: provider) }
+        case .exited:
+            isRunning = false
+            restoreQueuedToDraft()
+            status = nil
+            turnStartedAt = nil
+        default:
+            break
+        }
     }
 }

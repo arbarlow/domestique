@@ -8,6 +8,10 @@ public struct AgentTask: Sendable, Hashable, Identifiable {
     public struct Step: Sendable, Hashable {
         public var name: String
         public var summary: String
+        public init(name: String, summary: String) {
+            self.name = name
+            self.summary = summary
+        }
     }
 
     public var id: String

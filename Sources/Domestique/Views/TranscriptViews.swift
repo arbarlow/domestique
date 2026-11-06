@@ -316,12 +316,30 @@ struct ToolLine: View {
             } label: {
                 HStack(spacing: 7) {
                     icon.frame(width: 14)
-                    Text(verb).foregroundStyle(Theme.text2)
-                    Text(detail)
-                        .font(isCommand ? Theme.mono : Theme.ui)
-                        .foregroundStyle(Theme.text)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let description {
+                        // The agent said what it's doing: lead with that, the command trails as a quiet chip.
+                        Text(description)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    } else {
+                        Text(verb).foregroundStyle(Theme.text2)
+                    }
+                    if isCommand {
+                        Text(detail)
+                            .font(Theme.monoSmall)
+                            .foregroundStyle(Theme.text2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 5))
+                    } else {
+                        Text(detail)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                     if let stat = diffStat {
                         DiffCount(additions: stat.0, deletions: stat.1)
                     }
@@ -345,6 +363,11 @@ struct ToolLine: View {
     }
 
     private var isCommand: Bool { call.name == "Bash" }
+
+    private var description: String? {
+        guard let d = call.description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty else { return nil }
+        return d
+    }
 
     private var verb: String {
         let running = call.status == .running
@@ -386,7 +409,19 @@ struct ToolLine: View {
         case .running: Spinner(size: 10)
         case .failed: Image(systemName: "xmark.circle").foregroundStyle(Theme.removed).font(.system(size: 11))
         case .declined: Image(systemName: "nosign").foregroundStyle(Theme.warning).font(.system(size: 11))
-        case .completed: Image(systemName: symbol).foregroundStyle(Theme.text3).font(.system(size: 11))
+        case .completed: Image(systemName: symbol).foregroundStyle(tint).font(.system(size: 11))
+        }
+    }
+
+    private var tint: Color {
+        switch call.name {
+        case "Bash": Theme.toolCommand
+        case "Read": Theme.toolRead
+        case "Edit", "Write", "MultiEdit", "NotebookEdit": Theme.toolEdit
+        case "Grep", "Glob": Theme.toolSearch
+        case "WebFetch", "WebSearch": Theme.toolWeb
+        case "Agent": Theme.toolAgent
+        default: Theme.text3
         }
     }
 
@@ -488,12 +523,17 @@ private struct ReasoningLine: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "brain").font(.system(size: 11)).foregroundStyle(Theme.text3).frame(width: 14)
+                    Image(systemName: "brain").font(.system(size: 11)).foregroundStyle(Theme.toolThought)
+                        .frame(width: 14)
                     Text("Thought").foregroundStyle(Theme.text2)
                     if !expanded {
                         Text(text.replacingOccurrences(of: "\n", with: " "))
-                            .foregroundStyle(Theme.text3)
+                            .font(Theme.small)
+                            .foregroundStyle(Theme.text2)
                             .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.toolThought.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                     }
                 }
                 .font(Theme.ui)

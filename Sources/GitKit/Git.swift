@@ -119,6 +119,17 @@ public enum Git {
         return sha
     }
 
+    /// Points a fresh worktree's branch at pull request `number`'s head (fetched as `pull/<n>/head`,
+    /// so fork PRs work too). Only for a just-created worktree: it hard-resets. Returns the new HEAD.
+    @discardableResult
+    public static func checkOutPullRequest(path: String, number: Int, host: any ExecutionHost = LocalHost.shared)
+        async throws -> String
+    {
+        try await git(["fetch", "origin", "+refs/pull/\(number)/head"], cwd: path, host: host)
+        try await git(["reset", "-q", "--hard", "FETCH_HEAD"], cwd: path, host: host)
+        return try await output(["rev-parse", "HEAD"], cwd: path, host: host)
+    }
+
     public static func removeWorktree(repoPath: String, path: String, force: Bool) async throws {
         var args = ["worktree", "remove"]
         if force { args.append("--force") }

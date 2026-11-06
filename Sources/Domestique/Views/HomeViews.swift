@@ -86,6 +86,10 @@ struct ProjectHomeView: View {
             Menu {
                 Button("New workspace with Claude") { newWorkspace(.claude) }
                 Button("New workspace with Codex") { newWorkspace(.codex) }
+                if repo.githubSlug != nil {
+                    Divider()
+                    Button("New workspace from pull request…") { app.pullRequestPickerRepo = repo }
+                }
             } label: {
                 Label("New workspace", systemImage: "square.and.pencil")
             } primaryAction: {
@@ -171,7 +175,7 @@ struct ProjectHomeView: View {
                 Card {
                     ForEach(Array(prs.enumerated()), id: \.element.id) { i, pr in
                         if i > 0 { Hairline().padding(.leading, 40) }
-                        PullRequestRow(pr: pr, workspace: workspace(for: pr))
+                        PullRequestRow(repo: repo, pr: pr, workspace: workspace(for: pr))
                     }
                 }
             }
@@ -181,7 +185,7 @@ struct ProjectHomeView: View {
     // MARK: helpers
 
     private func workspace(for pr: PullRequestSummary) -> Workspace? {
-        app.activeWorkspaces(in: repo).first { $0.prNumber == pr.number || $0.branch == pr.headRefName }
+        app.workspace(for: pr, in: repo)
     }
 
     private var githubURL: URL? {
@@ -261,6 +265,7 @@ private struct ProjectWorkspaceRow: View {
 
 private struct PullRequestRow: View {
     @Environment(AppModel.self) private var app
+    let repo: Repository
     let pr: PullRequestSummary
     let workspace: Workspace?
 
@@ -311,8 +316,23 @@ private struct PullRequestRow: View {
                     .frame(minWidth: 70, alignment: .trailing)
             }
         }
-        .help(workspace != nil ? "Open workspace for \(pr.headRefName)" : "Open #\(pr.number) on GitHub")
+        .help(workspace != nil ? "Open workspace for \(pr.headRefName)" : "New workspace on #\(pr.number) (\(pr.headRefName))")
         .contextMenu {
+            if workspace != nil {
+                Button("Open workspace", action: open)
+            } else {
+                Button("New workspace on #\(pr.number)", action: open)
+                if let choices = app.newWorkspaceChoices(for: repo) {
+                    Menu("New workspace on #\(pr.number) on") {
+                        ForEach(choices) { loc in
+                            Button(app.locationName(loc)) {
+                                Task { await app.openPullRequest(pr, in: repo, location: loc) }
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
             if let url = URL(string: pr.url) {
                 Button("Open on GitHub") { NSWorkspace.shared.open(url) }
                 Button("Copy link") {
@@ -330,8 +350,8 @@ private struct PullRequestRow: View {
     private func open() {
         if let workspace {
             app.selectedWorkspaceID = workspace.id
-        } else if let url = URL(string: pr.url) {
-            NSWorkspace.shared.open(url)
+        } else {
+            Task { await app.openPullRequest(pr, in: repo) }
         }
     }
 }

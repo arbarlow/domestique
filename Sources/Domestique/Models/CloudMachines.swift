@@ -20,7 +20,7 @@ final class CloudMachines {
     private(set) var busy: [String: String] = [:]
     /// machine id -> last error from an action or poll.
     var errors: [String: String] = [:]
-    /// Whether a boat.dev credential is available (refreshed from Settings).
+    /// Whether any sandbox provider has a credential (refreshed from Settings).
     private(set) var boatConfigured = BoatClient.isConfigured
 
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -32,7 +32,20 @@ final class CloudMachines {
         startPolling()
     }
 
-    func refreshCredentialState() { boatConfigured = BoatClient.isConfigured }
+    func refreshCredentialState() {
+        boatConfigured = app.settings.sandboxProviders.contains { BoatClient.isConfigured(account: $0.credentialAccount) }
+    }
+
+    /// The sandbox provider account a machine belongs to (from the workspace that uses it).
+    private func account(_ machineID: String) -> String? {
+        app.state.workspaces.first { $0.host?.provider == .boat && $0.host?.machineID == machineID }?.host?.accountID
+    }
+
+    /// The API client for a machine's provider.
+    func client(_ machineID: String) -> BoatClient { BoatClient.client(account: account(machineID)) }
+
+    /// The SSH host for a machine, signed in with its provider's account.
+    func host(_ machineID: String) -> BoatHost { Hosts.boatHost(machineID, account: account(machineID)) }
 
     func sandbox(for ws: Workspace) -> BoatSandbox? { ws.host.flatMap { status[$0.machineID] } }
     func phase(for ws: Workspace) -> BoatPhase? { sandbox(for: ws)?.phase }
@@ -74,7 +87,7 @@ final class CloudMachines {
         for ws in remoteWorkspaces {
             guard let h = ws.host, h.provider == .boat else { continue }
             let id = h.machineID
-            observe(Hosts.boatHost(id))
+            observe(host(id))
             let s = status[id]
             let selected = app.selectedWorkspaceID == ws.id
             let fast = s == nil || s!.phase.isTransitional || busy[id] != nil
@@ -86,13 +99,13 @@ final class CloudMachines {
     }
 
     func poll(_ id: String) async {
-        guard BoatClient.isConfigured else { return }
+        guard BoatClient.isConfigured(account: account(id)) else { return }
         do {
-            let s = try await BoatClient.shared.sandbox(id)
+            let s = try await client(id).sandbox(id)
             update(s)
             if s.phase != .running {
                 // Stopped under us (auto-stop): make the next command go through prepare() again.
-                await Hosts.boatHost(id).invalidate()
+                await self.host(id).invalidate()
             }
         } catch let e as BoatAPIError where e.status == 404 {
             status[id] = BoatSandbox(id: id, state: "cancelled", error: "Deleted on boat.dev")
@@ -123,14 +136,14 @@ final class CloudMachines {
         // Stop what runs on it first so nothing reconnects (and resumes it) right away.
         if let m = app.existingModel(for: ws.id) { m.machineWillStop() }
         run(ws, "Stopping…") { id in
-            await Hosts.boatHost(id).disconnect()
-            try await BoatClient.shared.stop(id)
+            await self.host(id).disconnect()
+            try await self.client(id).stop(id)
         }
     }
 
     func resume(_ ws: Workspace) {
         run(ws, "Starting…") { id in
-            try await Hosts.boatHost(id).prepare()
+            try await self.host(id).prepare()
             await self.app.existingModel(for: ws.id)?.machineDidStart()
         }
     }
@@ -138,24 +151,24 @@ final class CloudMachines {
     /// Restart a machine that stopped answering (disk untouched).
     func recover(_ ws: Workspace) {
         run(ws, "Recovering…") { id in
-            await Hosts.boatHost(id).disconnect()
-            try await BoatClient.shared.recover(id)
-            _ = try await BoatClient.shared.waitUntilRunning(id)
+            await self.host(id).disconnect()
+            try await self.client(id).recover(id)
+            _ = try await self.client(id).waitUntilRunning(id)
         }
     }
 
     /// Push the auto-stop deadline to now + `minutes`; nil = keep running until stopped.
     func setAutoStop(_ ws: Workspace, minutes: Int?) {
         run(ws, minutes == nil ? "Turning off auto-stop…" : "Extending…") { id in
-            try await BoatClient.shared.setAutoStop(id, ttlSeconds: minutes.map { $0 * 60 })
+            try await self.client(id).setAutoStop(id, ttlSeconds: minutes.map { $0 * 60 })
         }
     }
 
     func openDesktop(_ ws: Workspace) {
         run(ws, "Opening desktop…") { id in
-            try await Hosts.boatHost(id).prepare()
+            try await self.host(id).prepare()
             let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let url = try await BoatClient.shared.desktopURL(id, dark: dark)
+            let url = try await self.client(id).desktopURL(id, dark: dark)
             NSWorkspace.shared.open(url)
         }
     }
@@ -163,7 +176,7 @@ final class CloudMachines {
     /// Copies a stable HTTPS URL for a port (private = carries an access token).
     func copyHostedURL(_ ws: Workspace, port: Int, isPublic: Bool) {
         run(ws, "Getting URL…") { id in
-            let url = try await BoatClient.shared.hostedURL(id, port: port, public: isPublic, title: ws.name)
+            let url = try await self.client(id).hostedURL(id, port: port, public: isPublic, title: ws.name)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(url.absoluteString, forType: .string)
             self.app.toast = "Copied \(isPublic ? "public" : "private") URL for :\(port)"

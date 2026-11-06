@@ -93,7 +93,7 @@ func testEnv(port: Int = 0) -> [String: String] {
     }
 
     @Test func serviceReadyPortAndStopKillsTree() async throws {
-        let port = PortAllocator.allocate(used: [], start: 47000)
+        let port = PortAllocator.allocate(used: [], in: 47000...47999)
         let run = TaskRun(
             config: TaskConfig(
                 id: "srv", command: "python3 -m http.server $DOMESTIQUE_PORT --bind 127.0.0.1", kind: .service,
@@ -206,9 +206,21 @@ func testEnv(port: Int = 0) -> [String: String] {
 
 @Suite struct PortAllocatorTests {
     @Test func skipsUsed() {
-        let base = PortAllocator.allocate(used: [48000, 48010], start: 48000)
+        let base = PortAllocator.allocate(used: [48000, 48010], in: 48000...48999)
         #expect(base >= 48020)
         #expect(base % 10 == 0)
+    }
+
+    @Test func rangesDontOverlap() {
+        #expect(!PortAllocator.localRange.overlaps(PortAllocator.cloudRange))
+        let cloud = PortAllocator.allocate(used: [], in: PortAllocator.cloudRange)
+        #expect(PortAllocator.cloudRange.contains(cloud) && PortAllocator.cloudRange.contains(cloud + 9))
+    }
+
+    @Test func staysInRange() {
+        // Every block taken: falls back to the start rather than spilling into another range.
+        let used = Set(stride(from: 49000, through: 49090, by: 10))
+        #expect(PortAllocator.allocate(used: used, in: 49000...49099) == 49000)
     }
 
     @Test func descendants() async throws {

@@ -6,28 +6,35 @@ import HostKit
 /// Creating, archiving and deleting workspaces that live on a cloud machine.
 extension AppModel {
     /// Where new workspaces in `repo` run by default.
-    func defaultLocation(for repo: Repository) -> WorkspaceLocation { repo.defaultLocation ?? .local }
+    func defaultLocation(for repo: Repository) -> WorkspaceLocation {
+        // The pre-provider "boat.dev" choice means the first boat.dev provider.
+        if case .cloud = repo.defaultLocation, let p = settings.provider(for: repo.defaultLocation) { return .sandbox(p.id) }
+        return repo.defaultLocation ?? .local
+    }
 
     /// New boat.dev workspace: one sandbox per workspace, the repo cloned into /home/user/<repo>,
     /// on a new branch from a fresh origin/<default>. Mirrors the local worktree flow.
-    func provisionBoatWorkspace(_ wsID: UUID, repo: Repository) async throws {
+    func provisionBoatWorkspace(_ wsID: UUID, repo: Repository, provider: SandboxProviderConfig) async throws {
         guard let ws = workspace(wsID) else { return }
-        let boat = settings.boat
-        guard BoatClient.isConfigured else {
-            throw HostError("Connect boat.dev first: add an API key in Settings → Cloud, or run `boat login`.")
+        let boat = provider.boat
+        let client = BoatClient.client(account: provider.credentialAccount)
+        guard BoatClient.isConfigured(account: provider.credentialAccount) else {
+            throw HostError("Sign \(provider.name) in first: add an API key in Settings → Sandbox Providers, or run `boat login`.")
         }
 
-        setCreationStep(wsID, "Starting a boat.dev sandbox")
+        setCreationStep(wsID, "Starting a sandbox on \(provider.name)")
         let request = BoatCreateRequest(
             name: "\(repo.name) · \(ws.name)", type: boat.machineType,
             ttlSeconds: boat.autoStopMinutes.map { $0 * 60 }, disableAutoStop: boat.autoStopMinutes == nil,
             environment: boat.environment?.isEmpty == false ? boat.environment : nil,
             labels: ["domestique": "1", "repo": repo.name, "workspace": ws.name])
-        let machineID = try await BoatClient.shared.create(request, idempotencyKey: wsID.uuidString)
+        let machineID = try await client.create(request, idempotencyKey: wsID.uuidString)
         updateWorkspace(wsID) {
-            $0.host = WorkspaceHost(provider: .boat, machineID: machineID, machineName: request.name, machineType: boat.machineType)
+            var h = WorkspaceHost(provider: .boat, machineID: machineID, machineName: request.name, machineType: boat.machineType)
+            h.accountID = provider.credentialAccount
+            $0.host = h
         }
-        let host = Hosts.boatHost(machineID)
+        let host = Hosts.boatHost(machineID, account: provider.credentialAccount)
         cloud.observe(host)
 
         setCreationStep(wsID, "Waiting for \(machineID) to boot")
@@ -125,13 +132,14 @@ extension AppModel {
     /// Archive: stop the sandbox (resumable for 14 days), or delete it if the user asked for that.
     func archiveRemote(_ ws: Workspace) async {
         guard let h = ws.host else { return }
-        let host = Hosts.boatHost(h.machineID)
+        let host = cloud.host(h.machineID)
+        let client = cloud.client(h.machineID)
         await host.disconnect()
         do {
-            if settings.boat.deleteOnArchive {
-                try await BoatClient.shared.delete(h.machineID)
+            if settings.provider(for: h)?.boat.deleteOnArchive ?? false {
+                try await client.delete(h.machineID)
             } else if cloud.status[h.machineID]?.phase != .stopped {
-                try await BoatClient.shared.stop(h.machineID)
+                try await client.stop(h.machineID)
             }
         } catch let e as BoatAPIError where e.status == 404 {
             // Already gone.
@@ -145,7 +153,7 @@ extension AppModel {
     func deleteRemote(_ ws: Workspace) async {
         guard let h = ws.host else { return }
         do {
-            try await BoatClient.shared.delete(h.machineID)
+            try await cloud.client(h.machineID).delete(h.machineID)
         } catch let e as BoatAPIError where e.status == 404 {
         } catch {
             alert = AppAlert(title: "Couldn't delete the boat.dev sandbox", message: error.localizedDescription)

@@ -151,7 +151,15 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var isArchived: Bool { if case .archived = state { true } else { false } }
     public var isPushedToTrunk: Bool { trunkPushedAt != nil }
     public var isRemote: Bool { host != nil }
-    public var location: WorkspaceLocation { host?.provider.location ?? .local }
+    public var location: WorkspaceLocation {
+        guard let host else { return .local }
+        if host.provider == .teamcar, let id = UUID(uuidString: host.machineID) { return .teamCar(id) }
+        return host.provider.location  // sandbox workspaces: resolve with AppSettings.provider(for:)
+    }
+    /// On a boat.dev sandbox (machine status, auto-stop, SSH port forwarding apply).
+    public var isSandbox: Bool { host?.provider == .boat }
+    /// On a remote Team Car.
+    public var teamCarID: UUID? { host?.provider == .teamcar ? host.flatMap { UUID(uuidString: $0.machineID) } : nil }
 }
 
 // MARK: - Where workspaces run
@@ -159,34 +167,94 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
 /// Cloud machine providers. Only boat.dev today; the rest of the app talks to `CloudProviderID`.
 public enum CloudProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
     case boat
+    /// A Team Car server the user runs (`WorkspaceHost.machineID` is the car's id).
+    case teamcar
 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
         case .boat: "boat.dev"
+        case .teamcar: "Team Car"
         }
     }
     public var location: WorkspaceLocation { .cloud(self) }
+    /// Machines the app creates and manages (status, auto-stop, port forwarding over SSH).
+    public static var sandboxes: [CloudProviderID] { [.boat] }
 }
 
 /// A choice in "run new workspaces on…".
 public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
     case local
     case cloud(CloudProviderID)
+    /// A remote Team Car from Settings → Team Cars.
+    case teamCar(UUID)
+    /// A sandbox provider from Settings → Sandbox Providers (e.g. one boat.dev account).
+    case sandbox(UUID)
 
     public var id: String {
         switch self {
         case .local: "local"
         case .cloud(let p): p.rawValue
+        case .teamCar(let id): "teamcar:" + id.uuidString
+        case .sandbox(let id): "sandbox:" + id.uuidString
         }
     }
+    /// Generic label; the app shows a Team Car's own name instead.
     public var displayName: String {
         switch self {
         case .local: "This Mac"
         case .cloud(let p): p.displayName
+        case .teamCar: "Team Car"
+        case .sandbox: "Sandbox"
         }
     }
-    public static var all: [WorkspaceLocation] { [.local] + CloudProviderID.allCases.map { .cloud($0) } }
+    /// The fixed locations (sandbox providers and Team Cars come from settings).
+    public static var all: [WorkspaceLocation] { [.local] }
+}
+
+/// A sandbox provider in Settings → Sandbox Providers: one account on a sandbox service (boat.dev
+/// today) with its own defaults. Several can exist (accounts, teams, or presets like "boat · large").
+public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var kind: CloudProviderID
+    public var name: String
+    /// Keychain account for this provider's API key. The first provider keeps the original
+    /// `api-key`; without a saved key it uses `BOAT_API_KEY` or the `boat login` session.
+    public var credentialAccount: String
+    public var boat: BoatSettings
+
+    public init(id: UUID = UUID(), kind: CloudProviderID = .boat, name: String, credentialAccount: String? = nil,
+                boat: BoatSettings = BoatSettings()) {
+        self.id = id
+        self.kind = kind
+        self.name = name
+        self.credentialAccount = credentialAccount ?? "api-key.\(id.uuidString.lowercased())"
+        self.boat = boat
+    }
+
+    /// Whether a workspace's sandbox belongs to this provider.
+    public func owns(_ host: WorkspaceHost?) -> Bool {
+        guard let host, host.provider == kind else { return false }
+        return (host.accountID ?? "api-key") == credentialAccount
+    }
+}
+
+/// A Team Car server in Settings → Team Cars. Its token lives in the Keychain, keyed by `id`.
+/// App-wide: every repository can create workspaces on every car.
+public struct TeamCarConfig: Codable, Sendable, Hashable, Identifiable {
+    public var id: UUID
+    public var name: String
+    /// ws:// or wss:// (path /radio/v1 is added when missing).
+    public var url: String
+
+    public init(id: UUID = UUID(), name: String, url: String) {
+        self.id = id
+        self.name = name
+        self.url = url
+    }
+
+    /// The server's host name, used for links to ports opened there.
+    public var hostName: String? { URL(string: url)?.host }
 }
 
 /// A cloud machine a workspace lives on. One machine per workspace.
@@ -197,6 +265,9 @@ public struct WorkspaceHost: Codable, Sendable, Hashable {
     public var machineName: String?
     /// Machine size it was created with (boat: small/default/large/xlarge).
     public var machineType: String?
+    /// boat.dev: the sandbox provider's Keychain account (`SandboxProviderConfig.credentialAccount`).
+    /// nil = the original provider.
+    public var accountID: String?
 
     public init(provider: CloudProviderID, machineID: String, machineName: String? = nil, machineType: String? = nil) {
         self.provider = provider
@@ -277,10 +348,13 @@ public struct ToolCall: Codable, Sendable, Hashable {
     public var status: Status
     /// Unified diff per file for edits, when the provider gives it to us.
     public var fileChanges: [FileChange]
+    /// The agent's own short description of the call ("Find table end and row markup"), when it gives one.
+    /// Claude sends this for Bash; Codex has no equivalent.
+    public var description: String?
 
     public init(
         name: String, summary: String, input: String = "", output: String = "", status: Status = .running,
-        fileChanges: [FileChange] = []
+        fileChanges: [FileChange] = [], description: String? = nil
     ) {
         self.name = name
         self.summary = summary
@@ -288,6 +362,7 @@ public struct ToolCall: Codable, Sendable, Hashable {
         self.output = output
         self.status = status
         self.fileChanges = fileChanges
+        self.description = description
     }
 }
 

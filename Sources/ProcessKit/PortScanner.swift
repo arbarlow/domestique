@@ -128,16 +128,25 @@ public enum PortScanner {
 }
 
 /// Picks a block of ports for a new workspace.
+///
+/// Each kind of workspace has its own range so blocks never collide, even though the ones on this Mac
+/// are handed out by Team Car and the cloud ones by the app.
 public enum PortAllocator {
-    /// Lowest base (start, start+step, ...) not in `used` whose `count` ports are all currently free.
-    public static func allocate(used: Set<Int>, start: Int = 41000, step: Int = 10, count: Int = 10) -> Int {
-        var base = start
-        while base + count < 65535 {
-            if !used.contains(base), !(base..<(base + count)).contains(where: { PortScanner.isPortListening($0) }) {
+    public static let blockSize = 10
+    /// Local worktrees (allocated by Team Car; keep in step with teamcar's DefaultPortStart/End).
+    public static let localRange = 41000...50999
+    /// boat.dev sandboxes (their ports are forwarded to this Mac).
+    public static let cloudRange = 51000...60999
+
+    /// Lowest base in `range` (stepping by the block size) not in `used` whose ports are all free here.
+    public static func allocate(used: Set<Int>, in range: ClosedRange<Int> = localRange) -> Int {
+        var base = range.lowerBound
+        while base + blockSize - 1 <= range.upperBound {
+            if !used.contains(base), !(base..<(base + blockSize)).contains(where: { PortScanner.isPortListening($0) }) {
                 return base
             }
-            base += step
+            base += blockSize
         }
-        return start
+        return range.lowerBound
     }
 }

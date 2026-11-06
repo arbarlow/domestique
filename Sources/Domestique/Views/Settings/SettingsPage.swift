@@ -31,7 +31,8 @@ struct SettingsPage: View {
                         switch route {
                         case .general: GeneralSettings()
                         case .agents: AgentSettings()
-                        case .cloud: CloudSettings()
+                        case .cloud: SandboxProviderSettings()
+                        case .teamCars: TeamCarSettings()
                         case .repo(let id):
                             if let repo = app.repo(id) {
                                 RepoSettings(repo: repo)
@@ -58,9 +59,10 @@ private struct SettingsNav: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 1) {
-                navRow(.general, "General", "slider.horizontal.3")
-                navRow(.agents, "Agents", "sparkles")
-                navRow(.cloud, "Cloud", "cloud")
+                navRow(.general, "General", "gearshape.fill", .gray)
+                navRow(.agents, "Agents", "sparkles", .purple)
+                navRow(.teamCars, "Team Cars", "server.rack", .blue)
+                navRow(.cloud, "Sandbox Providers", "shippingbox.fill", .teal)
                 Text("Repositories")
                     .font(Theme.small)
                     .foregroundStyle(Theme.text3)
@@ -84,10 +86,29 @@ private struct SettingsNav: View {
         .background(Theme.sidebar.opacity(0.5))
     }
 
-    private func navRow(_ r: SettingsRoute, _ title: String, _ symbol: String) -> some View {
+    private func navRow(_ r: SettingsRoute, _ title: String, _ symbol: String, _ tint: Color) -> some View {
         HoverRow(selected: route == r, height: 30, action: { app.settingsRoute = r }) {
-            Label(title, systemImage: symbol).font(Theme.ui).foregroundStyle(Theme.text)
+            HStack(spacing: 8) {
+                SettingsIconTile(symbol: symbol, tint: tint)
+                Text(title).font(Theme.ui).foregroundStyle(Theme.text)
+            }
         }
+    }
+}
+
+/// A white glyph on a coloured rounded square, like System Settings. Same size as repository icons
+/// in the list below, so the column lines up.
+struct SettingsIconTile: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 18
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(tint.gradient, in: RoundedRectangle(cornerRadius: size * 0.27, style: .continuous))
     }
 }
 
@@ -109,6 +130,7 @@ struct SettingsSection<Content: View>: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
             .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border, lineWidth: 0.5))
             if let footer {
@@ -126,44 +148,64 @@ struct SettingsRow<Control: View>: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Theme.ui).foregroundStyle(Theme.text)
-                if let subtitle {
-                    Text(subtitle).font(Theme.small).foregroundStyle(Theme.text3).lineLimit(2)
+            if !title.isEmpty || subtitle != nil {
+                VStack(alignment: .leading, spacing: 2) {
+                    if !title.isEmpty { Text(title).font(Theme.ui).foregroundStyle(Theme.text) }
+                    if let subtitle {
+                        Text(subtitle).font(Theme.small).foregroundStyle(Theme.text3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             Spacer(minLength: 12)
             control
         }
         .padding(.horizontal, 14)
+        .padding(.vertical, 9)
         .frame(minHeight: 44)
     }
 }
 
-private struct PageTitle: View {
+struct PageTitle<Accessory: View>: View {
     let title: String
     var subtitle: String? = nil
+    @ViewBuilder var accessory: Accessory
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
-            if let subtitle { Text(subtitle).font(Theme.ui).foregroundStyle(Theme.text2) }
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
+                if let subtitle {
+                    Text(subtitle).font(Theme.ui).foregroundStyle(Theme.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+            accessory
         }
         .padding(.bottom, 22)
     }
 }
 
-private struct FieldStyle: ViewModifier {
+extension PageTitle where Accessory == EmptyView {
+    init(title: String, subtitle: String? = nil) {
+        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+struct FieldStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .textFieldStyle(.plain)
             .font(Theme.ui)
             .padding(.horizontal, 8)
             .frame(width: 220, height: 26)
-            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
+            .background(Theme.field, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border, lineWidth: 0.5))
     }
 }
 
-private struct PathValue: View {
+struct PathValue: View {
     let path: String
     var body: some View {
         HStack(spacing: 4) {
@@ -172,7 +214,9 @@ private struct PathValue: View {
                 .foregroundStyle(Theme.text2)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .frame(maxWidth: 300, alignment: .trailing)
                 .textSelection(.enabled)
+                .help(path)
             IconButton(symbol: "folder", help: "Reveal in Finder", size: 11) {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
             }
@@ -252,39 +296,60 @@ private struct AgentSettings: View {
     }
 }
 
+/// One ship prompt: a one-line summary that opens into an editor, so the page stays scannable.
 private struct ShipPromptEditor: View {
     @Environment(AppModel.self) private var app
     let kind: ShipPromptKind
+    @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+        let customized = app.settings.isShipPromptCustomized(kind)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(kind.displayName).font(Theme.ui).foregroundStyle(Theme.text)
+                    HStack(spacing: 6) {
+                        Text(kind.displayName).font(Theme.ui).foregroundStyle(Theme.text)
+                        if customized {
+                            Text("Customized")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Theme.running)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Theme.running.opacity(0.12), in: Capsule())
+                        }
+                    }
                     Text(kind.summary).font(Theme.small).foregroundStyle(Theme.text3)
                 }
                 Spacer(minLength: 12)
-                if app.settings.isShipPromptCustomized(kind) {
+                if customized, expanded {
                     Button("Reset") { app.settings.setShipPromptTemplate(kind, nil) }
                         .buttonStyle(.softCompact)
+                        .help("Go back to the built-in prompt")
                 }
+                Button(expanded ? "Done" : "Edit") {
+                    withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
+                }
+                .buttonStyle(.softCompact)
             }
-            TextEditor(text: Binding(
-                get: { app.settings.shipPromptTemplate(kind) },
-                set: { app.settings.setShipPromptTemplate(kind, $0) }
-            ))
-            .font(Theme.mono)
-            .scrollContentBackground(.hidden)
-            .padding(6)
-            .frame(minHeight: 110)
-            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
-            Text(kind.placeholders.map { "\($0.token) \($0.meaning)" }.joined(separator: " · "))
-                .font(Theme.small)
-                .foregroundStyle(Theme.text3)
-                .fixedSize(horizontal: false, vertical: true)
+            if expanded {
+                TextEditor(text: Binding(
+                    get: { app.settings.shipPromptTemplate(kind) },
+                    set: { app.settings.setShipPromptTemplate(kind, $0) }
+                ))
+                .font(Theme.mono)
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(minHeight: 140)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border, lineWidth: 0.5))
+                Text(kind.placeholders.map { "\($0.token) \($0.meaning)" }.joined(separator: " · "))
+                    .font(Theme.small)
+                    .foregroundStyle(Theme.text3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 11)
     }
 }
 
@@ -353,12 +418,12 @@ private struct RepoSettings: View {
                     }
                     .labelsHidden().fixedSize()
                 }
-                SettingsRow(title: "Run new workspaces on", subtitle: "This Mac (git worktree) or a cloud sandbox") {
+                SettingsRow(title: "Run new workspaces on", subtitle: "This Mac (git worktree), a cloud sandbox, or one of your Team Cars") {
                     Picker("", selection: Binding(
                         get: { app.repo(repo.id)?.defaultLocation ?? .local },
                         set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
                     )) {
-                        ForEach(WorkspaceLocation.all) { Text($0.displayName).tag($0) }
+                        ForEach(app.workspaceLocations) { Text(app.locationName($0)).tag($0) }
                     }
                     .labelsHidden().fixedSize()
                 }
@@ -367,19 +432,19 @@ private struct RepoSettings: View {
                 }
                 SettingsRow(title: "Location") { PathValue(path: repo.path) }
                 SettingsRow(title: "Config", subtitle: configSubtitle) {
-                    Button("Open") {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: repo.path + "/" + RepoConfig.fileName))
+                    Button(hasConfig ? "Open" : "Create") {
+                        let path = repo.path + "/" + RepoConfig.fileName
+                        if !hasConfig { try? RepoConfig.template.write(toFile: path, atomically: true, encoding: .utf8) }
+                        NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     }
                     .buttonStyle(.softCompact)
-                    .disabled(!hasConfig)
                 }
             }
 
             SettingsSection(title: "Danger zone") {
                 SettingsRow(title: "Remove repository", subtitle: "Archive its workspaces first. Your clone isn't touched.") {
                     Button("Remove…") { confirmRemove = true }
-                        .buttonStyle(.softCompact)
-                        .foregroundStyle(Theme.removed)
+                        .buttonStyle(.softDestructive)
                 }
             }
         }
@@ -393,6 +458,8 @@ private struct RepoSettings: View {
 
     private var hasConfig: Bool { FileManager.default.fileExists(atPath: repo.path + "/" + RepoConfig.fileName) }
     private var configSubtitle: String {
-        hasConfig ? "\(RepoConfig.fileName) in the main checkout" : "No \(RepoConfig.fileName) in the main checkout"
+        hasConfig
+            ? "\(RepoConfig.fileName) in the main checkout: setup, run tasks and ship gates"
+            : "No \(RepoConfig.fileName) yet. It defines setup, run tasks and ship gates"
     }
 }

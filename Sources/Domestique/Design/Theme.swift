@@ -9,6 +9,9 @@ enum Theme {
     static let panel = dyn(light: 0xFAFAFA, dark: 0x202022)
     static let raised = dyn(light: 0xFFFFFF, dark: 0x2A2A2D)
     static let sunken = dyn(light: 0xF3F3F3, dark: 0x2A2A2C)
+    /// Inset text fields and editors on raised cards (darker than the card in dark mode, where
+    /// `sunken` and `raised` are nearly the same).
+    static let field = dyn(light: 0xF3F3F3, dark: 0x1E1E20)
     static let hover = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.045, darkAlpha: 0.07)
     static let selected = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.075, darkAlpha: 0.11)
     static let hairline = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.085, darkAlpha: 0.10)
@@ -30,8 +33,19 @@ enum Theme {
     static let warning = dyn(light: 0xD9480F, dark: 0xFF8A4C)
     static let running = dyn(light: 0x2F80ED, dark: 0x58A6FF)
     static let merged = dyn(light: 0x8250DF, dark: 0xA371F7)
+    /// Filled "go" buttons (Merge). Darker than `added` in dark mode so white text stays legible.
+    static let go = dyn(light: 0x1F883D, dark: 0x238636)
     static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)
     static let codex = dyn(light: 0x111111, dark: 0xECECEE)
+
+    // Tool kinds in the transcript: icon colour, and a faint wash of it behind chips.
+    static let toolCommand = running
+    static let toolRead = dyn(light: 0x0E7C86, dark: 0x39C5CF)
+    static let toolEdit = added
+    static let toolSearch = merged
+    static let toolWeb = dyn(light: 0xBF3989, dark: 0xF778BA)
+    static let toolAgent = warning
+    static let toolThought = dyn(light: 0x8C6D1F, dark: 0xD4A72C)
 
     // MARK: Syntax (Codex/GitHub-light-ish)
     static let synKeyword = dyn(light: 0xCF222E, dark: 0xFF7B72)
@@ -104,28 +118,43 @@ struct IconButton: View {
 struct SoftButtonStyle: ButtonStyle {
     var prominent = false
     var compact = false
+    /// Red label, for actions that remove or delete something.
+    var destructive = false
+    /// Fill for prominent buttons; defaults to the near-black `userBubble`.
+    var fill: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
-        SoftButtonBody(configuration: configuration, prominent: prominent, compact: compact)
+        SoftButtonBody(
+            configuration: configuration, prominent: prominent, compact: compact, destructive: destructive,
+            fill: fill ?? Theme.userBubble)
     }
 
     private struct SoftButtonBody: View {
         let configuration: ButtonStyleConfiguration
         let prominent: Bool
         let compact: Bool
+        let destructive: Bool
+        let fill: Color
         @State private var hovering = false
         @Environment(\.isEnabled) private var enabled
 
         var body: some View {
             configuration.label
+                .lineLimit(1)
+                .fixedSize()  // buttons keep their label; the row's text wraps instead
                 .font(compact ? Theme.small : Theme.ui)
-                .foregroundStyle(prominent ? Color.white : Theme.text)
+                .foregroundStyle(prominent ? Color.white : destructive ? Theme.removed : Theme.text)
                 .padding(.horizontal, compact ? 8 : 11)
                 .frame(height: compact ? 24 : 28)
                 .background(
                     RoundedRectangle(cornerRadius: 7)
-                        .fill(prominent ? AnyShapeStyle(Theme.userBubble) : AnyShapeStyle(hovering ? Theme.hover : Theme.raised))
+                        .fill(prominent ? AnyShapeStyle(fill) : AnyShapeStyle(hovering ? Theme.hover : Theme.raised))
                 )
+                .overlay {
+                    if prominent && hovering {
+                        RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.08))
+                    }
+                }
                 .overlay(
                     RoundedRectangle(cornerRadius: 7).strokeBorder(prominent ? .clear : Theme.border, lineWidth: 0.5)
                 )
@@ -140,6 +169,9 @@ extension ButtonStyle where Self == SoftButtonStyle {
     static var soft: SoftButtonStyle { SoftButtonStyle() }
     static var softCompact: SoftButtonStyle { SoftButtonStyle(compact: true) }
     static var softProminent: SoftButtonStyle { SoftButtonStyle(prominent: true) }
+    static var softDestructive: SoftButtonStyle { SoftButtonStyle(compact: true, destructive: true) }
+    /// Filled green, for the moment a PR is ready to land.
+    static var softGo: SoftButtonStyle { SoftButtonStyle(prominent: true, fill: Theme.go) }
 }
 
 /// Pill-style tab (Conductor "Changes 56" / "Checks").

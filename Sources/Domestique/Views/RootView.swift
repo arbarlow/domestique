@@ -57,6 +57,7 @@ struct RootView: View {
         .animation(.snappy(duration: 0.22), value: app.rightPanelVisible)
         .animation(.snappy(duration: 0.18), value: app.settingsRoute)
         .sheet(isPresented: $app.showGitHubPicker) { GitHubRepoPicker() }
+        .sheet(item: $app.pullRequestPickerRepo) { repo in PullRequestPicker(repo: repo) }
         .overlay(alignment: .bottom) {
             if let toast = app.toast {
                 ToastView(text: toast)

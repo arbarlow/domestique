@@ -208,6 +208,10 @@ public struct PullRequestSummary: Codable, Sendable, Hashable, Identifiable {
     public var url: String
     public var isDraft: Bool
     public var headRefName: String
+    /// The branch it merges into.
+    public var baseRefName: String
+    /// The head branch lives in a fork, so pushing to origin can't update it.
+    public var isCrossRepository: Bool
     public var authorLogin: String?
     public var authorAvatarURL: String?
     public var createdAt: Date?
@@ -220,15 +224,18 @@ public struct PullRequestSummary: Codable, Sendable, Hashable, Identifiable {
     public var checks: ChecksOverall
 
     public init(
-        number: Int, title: String, url: String, isDraft: Bool, headRefName: String, authorLogin: String?,
-        authorAvatarURL: String?, createdAt: Date?, updatedAt: Date?, additions: Int, deletions: Int, comments: Int,
-        reviewDecision: String?, checks: ChecksOverall
+        number: Int, title: String, url: String, isDraft: Bool, headRefName: String, baseRefName: String = "",
+        isCrossRepository: Bool = false, authorLogin: String?, authorAvatarURL: String?, createdAt: Date?,
+        updatedAt: Date?, additions: Int, deletions: Int, comments: Int, reviewDecision: String?,
+        checks: ChecksOverall
     ) {
         self.number = number
         self.title = title
         self.url = url
         self.isDraft = isDraft
         self.headRefName = headRefName
+        self.baseRefName = baseRefName
+        self.isCrossRepository = isCrossRepository
         self.authorLogin = authorLogin
         self.authorAvatarURL = authorAvatarURL
         self.createdAt = createdAt

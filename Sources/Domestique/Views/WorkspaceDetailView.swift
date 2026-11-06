@@ -11,9 +11,13 @@ struct WorkspaceDetailView: View {
                 WorkspaceHeader(model: model, workspace: ws)
                 ChatTabBar(model: model, workspace: ws)
                 Hairline()
-                if ws.isRemote, ws.state == .ready { MachineBanner(workspace: ws) }
+                if ws.isSandbox, ws.state == .ready { MachineBanner(workspace: ws) }
                 switch ws.state {
-                case .creating where ws.isRemote || ws.path.hasPrefix("/home/user"):
+                case .creating where ws.teamCarID != nil:
+                    ProgressPlaceholder(
+                        title: "Creating on \(ws.host?.machineName ?? "Team Car")",
+                        detail: app.creationSteps[ws.id] ?? "Cloning \(model.repo?.name ?? "the repo") and branching \(ws.branch)")
+                case .creating where ws.isSandbox || ws.path.hasPrefix("/home/user"):
                     ProgressPlaceholder(
                         title: "Creating a boat.dev workspace",
                         detail: app.creationSteps[ws.id] ?? "Starting a sandbox and cloning \(model.repo?.name ?? "the repo")")
@@ -77,7 +81,15 @@ private struct WorkspaceHeader: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             WorkspaceMenu(model: model, workspace: workspace)
-            if workspace.isRemote { MachineBadge(model: model, workspace: workspace) }
+            if workspace.isSandbox { MachineBadge(model: model, workspace: workspace) }
+            if let car = workspace.host, car.provider == .teamcar {
+                HStack(spacing: 4) {
+                    Image(systemName: "server.rack").font(.system(size: 10))
+                    Text(car.machineName ?? "Team Car").font(Theme.small)
+                }
+                .foregroundStyle(Theme.text2)
+                .help("This workspace runs on \(car.machineName ?? "a Team Car")")
+            }
             Spacer(minLength: 12)
 
             if let target = model.primaryOpenTarget {
@@ -100,10 +112,12 @@ private struct WorkspaceHeader: View {
                 ) { model.startDefaultStack() }
             }
             if workspace.isRemote {
-                IconButton(symbol: "display", help: "Open the sandbox desktop", size: 12) {
-                    app.cloud.openDesktop(workspace)
+                if workspace.isSandbox {
+                    IconButton(symbol: "display", help: "Open the sandbox desktop", size: 12) {
+                        app.cloud.openDesktop(workspace)
+                    }
                 }
-                IconButton(symbol: "terminal", help: "New terminal on the sandbox (⌃`)", size: 12) {
+                IconButton(symbol: "terminal", help: "New terminal on \(workspace.isSandbox ? "the sandbox" : workspace.host?.machineName ?? "the Team Car") (⌃`)", size: 12) {
                     model.newTerminal()
                 }
             } else {
@@ -130,9 +144,10 @@ private struct WorkspaceMenu: View {
             Button("New chat tab") { model.newTab() }
             Button("New terminal") { model.newTerminal() }
             Divider()
-            if workspace.isRemote {
+            if workspace.isSandbox {
                 Button("Open desktop") { app.cloud.openDesktop(workspace) }
                 Button("Copy SSH command") { app.cloud.copySSHCommand(workspace) }
+            } else if workspace.teamCarID != nil {
             } else {
                 Button("Open in editor") { model.openInEditor() }
                 Button("Reveal in Finder") { model.revealInFinder() }
@@ -141,7 +156,7 @@ private struct WorkspaceMenu: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.branch, forType: .string)
             }
-            Button(workspace.isRemote ? "Copy path on sandbox" : "Copy worktree path") {
+            Button(workspace.isSandbox ? "Copy path on sandbox" : workspace.teamCarID != nil ? "Copy path on \(workspace.host?.machineName ?? "Team Car")" : "Copy worktree path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.path, forType: .string)
             }

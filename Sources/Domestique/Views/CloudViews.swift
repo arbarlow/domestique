@@ -23,10 +23,13 @@ struct MachineGlyph: View {
 
     var body: some View {
         let phase = app.cloud.phase(for: workspace)
-        Image(systemName: phase == .stopped || phase == .gone ? "cloud" : "cloud.fill")
-            .font(.system(size: size, weight: .medium))
-            .foregroundStyle(phase?.color ?? Theme.text3)
-            .help("\(workspace.host?.provider.displayName ?? "Cloud") · \(app.cloud.label(for: workspace))")
+        // boat.dev's mark, tinted by machine state (running green, stopped grey, …).
+        BoatMark()
+            .fill(phase?.color ?? Theme.text3)
+            .opacity(phase == .stopped || phase == .gone ? 0.55 : 1)
+            .aspectRatio(BoatMark.aspectRatio, contentMode: .fit)
+            .frame(height: size)
+            .help("\(app.settings.provider(for: workspace.host)?.name ?? "boat.dev") · \(app.cloud.label(for: workspace))")
     }
 }
 
@@ -44,7 +47,7 @@ struct MachineBadge: View {
         let phase = cloud.phase(for: workspace)
         let busy = cloud.busy[id] != nil
         Menu {
-            Section("\(workspace.host?.provider.displayName ?? "Cloud") · \(id)") {
+            Section("\(app.settings.provider(for: workspace.host)?.name ?? "boat.dev") · \(id)") {
                 if let s = cloud.sandbox(for: workspace) {
                     Text(specLine(s))
                 }
@@ -219,147 +222,6 @@ struct MachineBanner: View {
 }
 
 // MARK: - Settings
-
-struct CloudSettings: View {
-    @Environment(AppModel.self) private var app
-    @State private var apiKey = ""
-    @State private var account: String?
-    @State private var plan: String?
-    @State private var checkError: String?
-    @State private var checking = false
-    @State private var machineTypes: [BoatLimits.MachineType] = []
-
-    var body: some View {
-        @Bindable var app = app
-        let boat = Binding(get: { app.settings.boat }, set: { app.settings.boat = $0 })
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Cloud").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
-                Text("Run workspaces on a cloud machine instead of this Mac. Each workspace gets its own sandbox with the repo cloned, your stack running there, and its ports forwarded to localhost.")
-                    .font(Theme.ui).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.bottom, 22)
-
-            SettingsSection(
-                title: "boat.dev",
-                footer: "Domestique uses your boat CLI login when there is one (`boat login`), or an API key from boat.dev → Dashboard → API keys. The key is stored in your Keychain."
-            ) {
-                SettingsRow(title: "Account", subtitle: connectionSubtitle) {
-                    HStack(spacing: 6) {
-                        if checking { Spinner(size: 11) }
-                        Button("Check") { Task { await check() } }.buttonStyle(.softCompact)
-                    }
-                }
-                SettingsRow(title: "API key", subtitle: BoatClient.credential()?.source == .keychain ? "Saved in Keychain" : "Optional when the boat CLI is signed in") {
-                    HStack(spacing: 6) {
-                        SecureField("boat_…", text: $apiKey)
-                            .textFieldStyle(.plain).font(Theme.ui)
-                            .padding(.horizontal, 8).frame(width: 180, height: 26)
-                            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
-                        Button("Save") {
-                            BoatClient.saveAPIKey(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
-                            apiKey = ""
-                            app.cloud.refreshCredentialState()
-                            Task { await check() }
-                        }
-                        .buttonStyle(.softCompact)
-                        .disabled(apiKey.isEmpty)
-                        if BoatClient.credential()?.source == .keychain {
-                            Button("Remove") {
-                                BoatClient.saveAPIKey(nil)
-                                app.cloud.refreshCredentialState()
-                                Task { await check() }
-                            }
-                            .buttonStyle(.softCompact)
-                        }
-                    }
-                }
-                SettingsRow(title: "Dashboard", subtitle: "Agents & Proxying: connect the Claude / ChatGPT accounts sandboxes use") {
-                    HStack(spacing: 6) {
-                        Button("Agents") { NSWorkspace.shared.open(BoatClient.agentsSetupURL) }.buttonStyle(.softCompact)
-                        Button("Open") { app.cloud.openDashboard() }.buttonStyle(.softCompact)
-                    }
-                }
-            }
-
-            SettingsSection(title: "New boat.dev workspaces") {
-                SettingsRow(title: "Machine size") {
-                    Picker("", selection: boat.machineType) {
-                        ForEach(["small", "default", "large", "xlarge"], id: \.self) { t in
-                            Text(Self.sizeLabel(t)).tag(t)
-                                .disabled(machineTypes.first { $0.type == t }?.available == false)
-                        }
-                    }
-                    .labelsHidden().fixedSize()
-                }
-                SettingsRow(title: "Auto-stop", subtitle: "Stopped sandboxes don't bill; they resume with their disk when you use them") {
-                    Picker("", selection: boat.autoStopMinutes) {
-                        ForEach([30, 60, 120, 240, 480, 1440], id: \.self) { Text("After \(MachineBadge.duration($0))").tag(Optional($0)) }
-                        Text("Never").tag(Int?.none)
-                    }
-                    .labelsHidden().fixedSize()
-                }
-                SettingsRow(title: "Environment", subtitle: "Named boat environment (repos, secrets, AI logins). Empty = your default") {
-                    TextField("base", text: Binding(get: { boat.wrappedValue.environment ?? "" }, set: { boat.wrappedValue.environment = $0.isEmpty ? nil : $0 }))
-                        .textFieldStyle(.plain).font(Theme.ui)
-                        .padding(.horizontal, 8).frame(width: 220, height: 26)
-                        .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
-                }
-                SettingsRow(title: "Share my GitHub login", subtitle: "If boat.dev's GitHub app can't clone a repo, give the sandbox your `gh` token") {
-                    Toggle("", isOn: boat.shareGitHubToken).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                }
-                SettingsRow(title: "Forward ports automatically", subtitle: "Every port the stack or agent listens on appears on the same localhost port") {
-                    Toggle("", isOn: boat.autoForwardPorts).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                }
-                SettingsRow(title: "Delete sandbox on archive", subtitle: "Off: archiving stops it (kept 14 days). Deleting a workspace always deletes it") {
-                    Toggle("", isOn: boat.deleteOnArchive).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                }
-            }
-        }
-        .task { await check() }
-    }
-
-    private var connectionSubtitle: String {
-        if let checkError { return checkError }
-        guard let cred = BoatClient.credential() else { return "Not connected" }
-        var s = account.map { "\($0) · " } ?? ""
-        s += cred.source.label
-        if let plan { s += " · \(plan)" }
-        return s
-    }
-
-    private func check() async {
-        app.cloud.refreshCredentialState()
-        guard BoatClient.isConfigured else {
-            account = nil
-            plan = nil
-            checkError = "Not connected. Run `boat login` in a terminal, or paste an API key."
-            return
-        }
-        checking = true
-        defer { checking = false }
-        do {
-            let me = try await BoatClient.shared.me()
-            account = me.email ?? me.login ?? me.displayName
-            let limits = try? await BoatClient.shared.limits()
-            plan = limits?.trialLine ?? limits?.accessTier
-            machineTypes = limits?.machineTypes ?? []
-            checkError = nil
-        } catch {
-            checkError = error.localizedDescription
-        }
-    }
-
-    static func sizeLabel(_ t: String) -> String {
-        switch t {
-        case "small": "Small · 2 vCPU, 4 GB"
-        case "default": "Medium · 4 vCPU, 8 GB"
-        case "large": "Large · 8 vCPU, 16 GB"
-        case "xlarge": "XL · 16 vCPU, 32 GB"
-        default: t
-        }
-    }
-}
 
 // MARK: - Toast
 

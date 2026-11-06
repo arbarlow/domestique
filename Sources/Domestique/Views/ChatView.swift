@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     let chat: ChatModel
     let workspaceModel: WorkspaceModel
+    @State private var dropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,9 +14,38 @@ struct ChatView: View {
             AgentsTray(chat: chat)
                 .padding(.bottom, 6)
                 .animation(.snappy(duration: 0.2), value: chat.trayTaskIDs)
+            QueuedMessagesView(chat: chat)
+                .animation(.snappy(duration: 0.2), value: chat.queued.map(\.id))
             ComposerView(chat: chat)
         }
+        // The whole pane takes image drops. While one hovers, the hint covers the composer too, so
+        // the text field's editor can't swallow the file as a pasted path.
+        .overlay {
+            if dropTargeted { DropHint().transition(.opacity) }
+        }
+        .animation(.easeOut(duration: 0.12), value: dropTargeted)
+        .onDrop(of: ImageAttachments.acceptedDropTypes, isTargeted: $dropTargeted) { providers in
+            Task { chat.attachments += await ImageAttachments.load(providers) }
+            return true
+        }
         .onAppear { chat.loadIfNeeded() }
+    }
+}
+
+private struct DropHint: View {
+    var body: some View {
+        ZStack {
+            Theme.canvas.opacity(0.82)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.text3, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                .padding(14)
+            VStack(spacing: 8) {
+                Image(systemName: "photo.badge.plus")
+                    .font(.system(size: 26, weight: .light))
+                Text("Drop images to attach").font(Theme.uiMedium)
+            }
+            .foregroundStyle(Theme.text2)
+        }
     }
 }
 
@@ -72,10 +102,13 @@ struct ComposerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !chat.attachments.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(Array(chat.attachments.enumerated()), id: \.offset) { i, a in
-                        AttachmentChip(name: a.filename) { chat.attachments.remove(at: i) }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(chat.attachments.enumerated()), id: \.offset) { i, a in
+                            AttachmentThumb(attachment: a) { chat.attachments.remove(at: i) }
+                        }
                     }
+                    .padding(.top, 2)
                 }
             }
             TextField(placeholder, text: $chat.draft, axis: .vertical)
@@ -85,9 +118,16 @@ struct ComposerView: View {
                 .focused($focused)
                 .onSubmit { chat.send() }
                 .onKeyPress(.return, phases: .down) { press in
-                    guard press.modifiers.contains(.shift) else { return .ignored }
-                    chat.draft += "\n"
-                    return .handled
+                    if press.modifiers.contains(.shift) {
+                        chat.draft += "\n"
+                        return .handled
+                    }
+                    // ⌘↩ mid-turn steers: the message goes into the running turn instead of the queue.
+                    if press.modifiers.contains(.command) {
+                        chat.send(steer: true)
+                        return .handled
+                    }
+                    return .ignored
                 }
                 .padding(.top, 4)
                 .padding(.bottom, 6)
@@ -135,10 +175,6 @@ struct ComposerView: View {
         .frame(maxWidth: .infinity)
         .onAppear { focusSoon() }
         .onChange(of: app.composerFocusRequest) { focusSoon() }
-        .dropDestination(for: URL.self) { urls, _ in
-            addImages(urls)
-            return true
-        }
     }
 
     /// Setting focus in the same pass the field is inserted is dropped by AppKit; defer a runloop turn.
@@ -147,7 +183,7 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        if chat.isRunning { return "Steer or queue a follow-up…" }
+        if chat.isRunning { return "Queue a follow-up… (⌘↩ to steer now)" }
         switch chat.tab?.provider {
         case .codex: return "Work with Codex"
         default: return "Work with Claude"
@@ -159,36 +195,49 @@ struct ComposerView: View {
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = true
         guard panel.runModal() == .OK else { return }
-        addImages(panel.urls)
-    }
-
-    private func addImages(_ urls: [URL]) {
-        for url in urls {
-            guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image),
-                let data = try? Data(contentsOf: url)
-            else { continue }
-            chat.attachments.append(
-                AgentAttachment(data: data, mediaType: type.preferredMIMEType ?? "image/png", filename: url.lastPathComponent))
-        }
+        chat.attachments += ImageAttachments.load(urls: panel.urls)
     }
 }
 
-private struct AttachmentChip: View {
-    let name: String
+/// Small square preview of an attached image, with a remove badge.
+private struct AttachmentThumb: View {
+    let attachment: AgentAttachment
     let remove: () -> Void
+    @State private var hovering = false
+
+    private static let side: CGFloat = 56
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "photo").foregroundStyle(Theme.text2)
-            Text(name).lineLimit(1)
+        ZStack(alignment: .topTrailing) {
+            Group {
+                if let image = NSImage(data: attachment.data) {
+                    Image(nsImage: image).resizable().interpolation(.medium).aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: "photo").foregroundStyle(Theme.text3)
+                }
+            }
+            .frame(width: Self.side, height: Self.side)
+            .background(Theme.sunken)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
+
             Button(action: remove) {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.text3)
+                Image(systemName: "xmark")
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 17, height: 17)
+                    .background(Circle().fill(Color.black.opacity(0.72)))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .offset(x: 5, y: -5)
+            .opacity(hovering ? 1 : 0)
+            .help("Remove")
         }
-        .font(Theme.small)
-        .padding(.horizontal, 8)
-        .frame(height: 24)
-        .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 6))
+        .padding(.top, 5)
+        .padding(.trailing, 5)
+        .onHover { hovering = $0 }
+        .help(attachment.filename)
     }
 }
 
@@ -499,7 +548,75 @@ private struct SendButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!stop && empty)
-        .help(stop ? "Stop (⌘.)" : "Send (↩) · newline (⇧↩)")
+        .help(stop ? "Stop (⌘.)" : chat.isRunning ? "Queue (↩) · steer now (⌘↩) · newline (⇧↩)" : "Send (↩) · newline (⇧↩)")
+    }
+}
+
+// MARK: - Queued follow-ups
+
+/// Follow-ups waiting for the current turn to end, stacked just above the composer.
+private struct QueuedMessagesView: View {
+    let chat: ChatModel
+
+    var body: some View {
+        if !chat.queued.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(chat.queued.enumerated()), id: \.element.id) { i, m in
+                    if i > 0 { Divider().overlay(Theme.hairline) }
+                    QueuedRow(chat: chat, message: m)
+                }
+            }
+            .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
+            .padding(.horizontal, 42)
+            .padding(.bottom, -6)
+            .frame(maxWidth: Theme.contentWidth)
+            .frame(maxWidth: .infinity)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+}
+
+private struct QueuedRow: View {
+    let chat: ChatModel
+    let message: ChatModel.QueuedMessage
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "clock")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Theme.text3)
+            Text(label)
+                .font(Theme.small)
+                .foregroundStyle(Theme.text2)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { chat.editQueued(message.id) }
+                .help("Edit")
+            HStack(spacing: 2) {
+                Button("Steer") { chat.steer(message.id) }
+                    .buttonStyle(.softCompact)
+                    .help("Send into the running turn now")
+                IconButton(symbol: "xmark", help: "Remove from queue", size: 9) {
+                    chat.removeQueued(message.id)
+                }
+            }
+            .opacity(hovering ? 1 : 0.55)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .onHover { hovering = $0 }
+    }
+
+    private var label: String {
+        var s = message.text
+        if !message.attachments.isEmpty {
+            s += (s.isEmpty ? "" : "  ") + message.attachments.map { "📎 \($0.filename)" }.joined(separator: " ")
+        }
+        return s
     }
 }
 

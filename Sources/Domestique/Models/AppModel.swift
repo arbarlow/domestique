@@ -7,6 +7,7 @@ import GitKit
 import HostKit
 import Observation
 import ProcessKit
+import RaceRadioKit
 
 @MainActor
 @Observable
@@ -21,6 +22,8 @@ final class AppModel {
     var settingsRoute: SettingsRoute?
     /// "Clone from GitHub" sheet.
     var showGitHubPicker = false
+    /// "New workspace from pull request" sheet, for this repository.
+    var pullRequestPickerRepo: Repository?
     // Layout (persisted)
     var sidebarVisible = UserDefaults.standard.object(forKey: "dq.sidebarVisible") as? Bool ?? true {
         didSet { UserDefaults.standard.set(sidebarVisible, forKey: "dq.sidebarVisible") }
@@ -32,6 +35,10 @@ final class AppModel {
     var usage: [ProviderKind: UsageInfo] = [:]
     /// Cloud machine status + actions (boat.dev).
     @ObservationIgnored private(set) var cloud: CloudMachines!
+    /// This Mac's Team Car: runs agents and local worktrees.
+    @ObservationIgnored private(set) var teamCar: TeamCarLink!
+    /// Remote Team Cars from Settings → Team Cars, by id.
+    private(set) var remoteCars: [UUID: TeamCarLink] = [:]
     /// Progress line for workspaces being created ("Cloning …").
     var creationSteps: [UUID: String] = [:]
     /// Brief confirmation shown at the bottom of the window.
@@ -68,7 +75,12 @@ final class AppModel {
             case .creating where state.workspaces[i].path.hasPrefix(BoatHost.home):
                 // A cloud workspace whose sandbox/clone didn't finish before we quit.
                 state.workspaces[i].state = .failed("Creation was interrupted. Archive this workspace and create a new one.")
-            case .creating, .settingUp: state.workspaces[i].state = .ready
+            case .creating, .settingUp:
+                // Team Car workspaces: its server stream says how creation ended.
+                let teamCarOwned = (state.workspaces[i].host == nil
+                    && ProcessInfo.processInfo.environment["DOMESTIQUE_LEGACY_ENGINE"] != "1")
+                    || state.workspaces[i].host?.provider == .teamcar
+                if !teamCarOwned { state.workspaces[i].state = .ready }
             default: break
             }
         }
@@ -76,6 +88,11 @@ final class AppModel {
         self.state = state
         lastDataVersion = Store.shared.dataVersion()
         cloud = CloudMachines(app: self)
+        teamCar = TeamCarLink(app: self)
+        teamCar.start()
+        TeamCarDirectory.shared.update(state.settings.teamCars)
+        Hosts.teamCarResolver = { h in TeamCarDirectory.shared.host(for: h) }
+        for cfg in state.settings.teamCars { startCar(cfg) }
         // Coming back to the app (e.g. after editing domestique.toml elsewhere): re-check the config.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
             [weak self] _ in
@@ -113,7 +130,8 @@ final class AppModel {
             let page = i + 1 < args.count ? args[i + 1] : "general"
             switch page {
             case "agents": settingsRoute = .agents
-            case "cloud": settingsRoute = .cloud
+            case "cloud", "sandboxes": settingsRoute = .cloud
+            case "teamcars": settingsRoute = .teamCars
             case "repo": settingsRoute = state.repositories.first.map { .repo($0.id) } ?? .general
             default: settingsRoute = .general
             }
@@ -133,7 +151,7 @@ final class AppModel {
                 URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path == path
             })
         {
-            let loc = WorkspaceLocation.all.first { $0.id == args[n + 1] } ?? .local
+            let loc = workspaceLocations.first { $0.id == args[n + 1] || locationName($0) == args[n + 1] } ?? .local
             await createWorkspace(in: repo, location: loc)
         }
         if let p = args.firstIndex(of: "--prompt"), p + 1 < args.count, let model = selectedWorkspaceModel {
@@ -181,6 +199,7 @@ final class AppModel {
             state.selectedWorkspaceID = newValue
             if let newValue {
                 updateWorkspace(newValue) { $0.hasUnread = false }
+                teamCar.markSeen(workspace: newValue)
                 workspaceModels[newValue]?.supervisor?.isFocused = true
                 workspaceModels[newValue]?.reloadConfigIfChanged()
             }
@@ -225,6 +244,122 @@ final class AppModel {
 
     func existingModel(for workspaceID: UUID) -> WorkspaceModel? { workspaceModels[workspaceID] }
 
+    // MARK: Team Cars
+
+    /// The Team Car running this workspace's agents, if any (nil for boat.dev and legacy workspaces).
+    func link(for ws: Workspace?) -> TeamCarLink? {
+        guard let ws else { return nil }
+        if let id = ws.teamCarID { return remoteCars[id] }
+        return teamCar.manages(ws) ? teamCar : nil
+    }
+
+    /// This Mac's car first, then the remote ones in settings order.
+    var teamCarLinks: [TeamCarLink] {
+        [teamCar] + settings.teamCars.compactMap { remoteCars[$0.id] }
+    }
+
+    /// Where new workspaces can run: This Mac, each sandbox provider, then each remote Team Car.
+    var workspaceLocations: [WorkspaceLocation] {
+        [.local] + settings.sandboxProviders.map { .sandbox($0.id) } + settings.teamCars.map { .teamCar($0.id) }
+    }
+
+    /// What the sidebar's + offers when there's more than one usable place to run (nil otherwise: +
+    /// just creates on the default). Connected remote cars and signed-in sandbox providers only; the
+    /// default stays even if it's offline.
+    func newWorkspaceChoices(for repo: Repository) -> [WorkspaceLocation]? {
+        let def = defaultLocation(for: repo)
+        let choices = workspaceLocations.filter { loc in
+            if loc == def { return true }
+            switch loc {
+            case .teamCar(let id): return remoteCars[id]?.isConnected == true
+            case .sandbox, .cloud:
+                return settings.provider(for: loc).map { BoatClient.isConfigured(account: $0.credentialAccount) } ?? false
+            case .local: return true
+            }
+        }
+        return choices.count > 1 ? choices : nil
+    }
+
+    func locationName(_ loc: WorkspaceLocation) -> String {
+        switch loc {
+        case .teamCar(let id): return settings.teamCars.first { $0.id == id }?.name ?? "Missing Team Car"
+        case .sandbox, .cloud: return settings.provider(for: loc)?.name ?? "Missing sandbox provider"
+        case .local: return loc.displayName
+        }
+    }
+
+    // MARK: sandbox providers
+
+    /// Adds a boat.dev provider. `apiKey` nil = use `BOAT_API_KEY` / the `boat login` session.
+    func addSandboxProvider(name: String, apiKey: String?, boat: BoatSettings = BoatSettings()) {
+        let p = SandboxProviderConfig(name: name, boat: boat)
+        if let apiKey, !apiKey.isEmpty { BoatClient.saveAPIKey(apiKey, account: p.credentialAccount) }
+        settings.sandboxProviders.append(p)
+        cloud.refreshCredentialState()
+    }
+
+    func updateSandboxProvider(_ p: SandboxProviderConfig) {
+        guard let i = settings.sandboxProviders.firstIndex(where: { $0.id == p.id }) else { return }
+        settings.sandboxProviders[i] = p
+    }
+
+    /// Workspaces still on this provider (removing it would orphan their sandboxes).
+    func activeWorkspaces(on p: SandboxProviderConfig) -> [Workspace] {
+        state.workspaces.filter { !$0.isArchived && p.owns($0.host) }
+    }
+
+    func removeSandboxProvider(_ p: SandboxProviderConfig) {
+        guard activeWorkspaces(on: p).isEmpty else {
+            alert = AppAlert(title: "Archive its workspaces first", message: "\(p.name) still has active workspaces.")
+            return
+        }
+        settings.sandboxProviders.removeAll { $0.id == p.id }
+        BoatClient.saveAPIKey(nil, account: p.credentialAccount)
+        for repo in state.repositories where defaultLocation(for: repo) == .sandbox(p.id) {
+            updateRepo(repo.id) { $0.defaultLocation = nil }
+        }
+        cloud.refreshCredentialState()
+    }
+
+    private func startCar(_ cfg: TeamCarConfig) {
+        let link = TeamCarLink(app: self, car: .remote(cfg))
+        remoteCars[cfg.id] = link
+        link.start()
+    }
+
+    func addTeamCar(_ cfg: TeamCarConfig, token: String) throws {
+        try TeamCarTokens.set(token, for: cfg.id)
+        settings.teamCars.append(cfg)
+        TeamCarDirectory.shared.update(settings.teamCars)
+        startCar(cfg)
+    }
+
+    /// Name, URL or token changed: reconnect.
+    func updateTeamCar(_ cfg: TeamCarConfig, token: String?) throws {
+        if let token, !token.isEmpty { try TeamCarTokens.set(token, for: cfg.id) }
+        guard let i = settings.teamCars.firstIndex(where: { $0.id == cfg.id }) else { return }
+        settings.teamCars[i] = cfg
+        TeamCarDirectory.shared.update(settings.teamCars)
+        remoteCars[cfg.id]?.close()
+        startCar(cfg)
+        for ws in state.workspaces where ws.teamCarID == cfg.id {
+            updateWorkspaceIfChanged(ws.id) { $0.host?.machineName = cfg.name }
+        }
+    }
+
+    /// Forgets the car and its workspaces here. They keep existing on the server.
+    func removeTeamCar(_ id: UUID) {
+        remoteCars[id]?.close()
+        remoteCars[id] = nil
+        for ws in state.workspaces where ws.teamCarID == id { forgetWorkspace(ws.id) }
+        settings.teamCars.removeAll { $0.id == id }
+        TeamCarDirectory.shared.update(settings.teamCars)
+        TeamCarTokens.delete(id)
+        for repo in state.repositories where repo.defaultLocation == .teamCar(id) {
+            updateRepo(repo.id) { $0.defaultLocation = nil }
+        }
+    }
+
     // MARK: mutation
 
     func updateWorkspace(_ id: UUID, _ mutate: (inout Workspace) -> Void) {
@@ -236,6 +371,71 @@ final class AppModel {
     func updateRepo(_ id: UUID, _ mutate: (inout Repository) -> Void) {
         guard let i = state.repositories.firstIndex(where: { $0.id == id }) else { return }
         mutate(&state.repositories[i])
+        scheduleSave()
+    }
+
+    /// Like updateWorkspace, but skips the save when nothing changed (server echoes are frequent).
+    func updateWorkspaceIfChanged(_ id: UUID, _ mutate: (inout Workspace) -> Void) {
+        guard let i = state.workspaces.firstIndex(where: { $0.id == id }) else { return }
+        var copy = state.workspaces[i]
+        mutate(&copy)
+        guard copy != state.workspaces[i] else { return }
+        state.workspaces[i] = copy
+        scheduleSave()
+    }
+
+    func updateRepoIfChanged(_ id: UUID, _ mutate: (inout Repository) -> Void) {
+        guard let i = state.repositories.firstIndex(where: { $0.id == id }) else { return }
+        var copy = state.repositories[i]
+        mutate(&copy)
+        guard copy != state.repositories[i] else { return }
+        state.repositories[i] = copy
+        scheduleSave()
+    }
+
+    // MARK: mirroring Team Car
+
+    /// A repository another client added to Team Car.
+    func adoptRepository(_ repo: Repository) {
+        guard self.repo(repo.id) == nil else { return }
+        state.repositories.append(repo)
+        scheduleSave()
+    }
+
+    /// A workspace another client created on Team Car.
+    func adoptWorkspace(_ ws: Workspace) {
+        guard workspace(ws.id) == nil else { return }
+        state.workspaces.append(ws)
+        scheduleSave()
+    }
+
+    /// Removed on Team Car by another client.
+    func forgetWorkspace(_ id: UUID) {
+        guard workspace(id) != nil else { return }
+        workspaceModels[id]?.shutdownNow()
+        workspaceModels[id] = nil
+        state.workspaces.removeAll { $0.id == id }
+        if state.selectedWorkspaceID == id { state.selectedWorkspaceID = nil }
+        scheduleSave()
+    }
+
+    func forgetRepository(_ id: UUID) {
+        state.workspaces.removeAll { $0.repoID == id && $0.isArchived }
+        state.repositories.removeAll { $0.id == id }
+        if selectedRepoID == id { selectedRepoID = nil }
+        scheduleSave()
+    }
+
+    /// Team Car already knew this clone under another id: adopt its id.
+    func renameRepositoryID(_ old: UUID, to new: UUID) {
+        guard let i = state.repositories.firstIndex(where: { $0.id == old }) else { return }
+        if repo(new) != nil {
+            state.repositories.remove(at: i)
+        } else {
+            state.repositories[i].id = new
+        }
+        for j in state.workspaces.indices where state.workspaces[j].repoID == old { state.workspaces[j].repoID = new }
+        if selectedRepoID == old { selectedRepoID = new }
         scheduleSave()
     }
 
@@ -301,6 +501,21 @@ final class AppModel {
     }
 
     func addRepository(path: String) async {
+        if teamCar.isEnabled {
+            do {
+                if let existing = state.repositories.first(where: {
+                    URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path
+                        == URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+                }) {
+                    showProject(existing)
+                    return
+                }
+                showProject(try await teamCar.addRepository(path: path))
+            } catch {
+                alert = AppAlert(title: "Couldn't add repository", message: error.localizedDescription)
+            }
+            return
+        }
         do {
             let info = try await Git.repoInfo(path: path)
             if let existing = state.repositories.first(where: { $0.path == info.root }) {
@@ -360,44 +575,136 @@ final class AppModel {
         state.repositories.removeAll { $0.id == repo.id }
         if selectedRepoID == repo.id { selectedRepoID = nil }
         scheduleSave()
+        if teamCar.isEnabled {
+            Task {
+                do {
+                    try await teamCar.removeRepository(repo.id)
+                } catch {
+                    alert = AppAlert(title: "Couldn't remove the repository from Team Car", message: error.localizedDescription)
+                }
+            }
+        }
     }
 
     // MARK: workspaces
 
+    /// The active workspace already working on `pr`, if any.
+    func workspace(for pr: PullRequestSummary, in repo: Repository) -> Workspace? {
+        activeWorkspaces(in: repo).first {
+            $0.prNumber == pr.number || (!pr.isCrossRepository && $0.branch == pr.headRefName)
+        }
+    }
+
+    /// Jumps to the workspace already on `pr`, or starts one checked out at its head.
+    func openPullRequest(_ pr: PullRequestSummary, in repo: Repository, location: WorkspaceLocation? = nil) async {
+        if let ws = workspace(for: pr, in: repo) {
+            selectedWorkspaceID = ws.id
+            return
+        }
+        await createWorkspace(in: repo, location: location, pullRequest: pr)
+    }
+
     /// New workspace = fresh worktree branched from a just-fetched origin/<default>. Never from the local checkout.
-    func createWorkspace(in repo: Repository, provider: ProviderKind? = nil, location: WorkspaceLocation? = nil) async {
+    /// With `pullRequest`, the worktree is then moved to that PR's head: same-repo PRs keep their branch name
+    /// (so pushing updates the PR and it's linked); fork PRs get a local `pr-<n>` branch instead.
+    func createWorkspace(
+        in repo: Repository, provider: ProviderKind? = nil, location: WorkspaceLocation? = nil,
+        pullRequest pr: PullRequestSummary? = nil
+    ) async {
         let location = location ?? defaultLocation(for: repo)
         let used = Set(state.workspaces.filter { $0.repoID == repo.id }.map(\.name))
         let name = WorkspaceNames.next(excluding: used)
         let prefix = settings.branchPrefix.trimmingCharacters(in: .whitespaces)
-        let branch = prefix.isEmpty ? name : "\(prefix)/\(name)"
+        let branch: String =
+            if let pr, !pr.isCrossRepository, !pr.headRefName.isEmpty { pr.headRefName }
+            else if let pr { prefix.isEmpty ? "pr-\(pr.number)" : "\(prefix)/pr-\(pr.number)" }
+            else { prefix.isEmpty ? name : "\(prefix)/\(name)" }
+        let linkPR = pr.map { !$0.isCrossRepository } ?? false
+        let car: TeamCarLink? = if case .teamCar(let id) = location { remoteCars[id] } else { nil }
+        if case .teamCar = location, car == nil {
+            alert = AppAlert(title: "Team Car not found", message: "That Team Car isn't in Settings → Team Cars any more.")
+            return
+        }
         let remote = location != .local
         let path =
-            remote
+            car != nil
+            ? ""  // the server's path arrives with its first update
+            : remote
             ? "\(BoatHost.home)/\(repo.name)"
             : Paths.workspacesRoot.appendingPathComponent(repo.name).appendingPathComponent(name).path
         let usedPorts = Set(state.workspaces.filter { !$0.isArchived }.map(\.portBase))
-        let portBase = PortAllocator.allocate(used: usedPorts)
+        // Team Car assigns local workspaces' ports (and updates this); cloud ones use their own range.
+        let portBase = PortAllocator.allocate(used: usedPorts, in: remote ? PortAllocator.cloudRange : PortAllocator.localRange)
         let provider = provider ?? settings.defaultProvider
         var tab = ChatTab(
             provider: provider, model: defaultModel(for: provider), permissionMode: settings.defaultPermissionMode)
         tab.effort = defaultEffort(for: provider)
-        let ws = Workspace(
+        if let pr { tab.title = "#\(pr.number) \(pr.title)" }
+        var ws = Workspace(
             repoID: repo.id, name: name, branch: branch, path: path, baseBranch: repo.defaultBranch,
-            portBase: portBase, state: .creating, tabs: [tab], selectedTabID: tab.id)
+            portBase: portBase, state: .creating, prNumber: linkPR ? pr?.number : nil,
+            prURL: linkPR ? pr?.url : nil, tabs: [tab], selectedTabID: tab.id)
+        ws.host = car?.workspaceHost
         state.workspaces.append(ws)
         selectedWorkspaceID = ws.id
         scheduleSave()
 
         Trace.log("ws created, selected")
+        if let car {
+            // The car clones (once) and creates the worktree; setup runs from here, on the car.
+            setCreationStep(ws.id, "Creating on \(car.displayName)")
+            car.settingUp.insert(ws.id)
+            defer { car.settingUp.remove(ws.id) }
+            do {
+                try await car.createWorkspace(ws)
+                if let pr { try await checkOutPullRequest(pr, in: ws.id) }
+                setCreationStep(ws.id, "Running setup")
+                updateWorkspace(ws.id) { $0.state = .settingUp }
+                let model = model(for: ws.id)
+                await model.loadConfigAsync()
+                await model.runSetup()
+                creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .ready }
+            } catch {
+                creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .failed(error.localizedDescription) }
+            }
+            return
+        }
         if remote {
             do {
-                try await provisionBoatWorkspace(ws.id, repo: repo)
+                guard let provider = settings.provider(for: location) else {
+                    throw HostError("That sandbox provider isn't in Settings → Sandbox Providers any more.")
+                }
+                try await provisionBoatWorkspace(ws.id, repo: repo, provider: provider)
+                if let pr { try await checkOutPullRequest(pr, in: ws.id) }
                 setCreationStep(ws.id, "Running setup")
                 let model = model(for: ws.id)
                 await model.loadConfigAsync()
                 await model.runSetup()
                 creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .ready }
+            } catch {
+                creationSteps[ws.id] = nil
+                updateWorkspace(ws.id) { $0.state = .failed(error.localizedDescription) }
+            }
+            return
+        }
+        if teamCar.isEnabled {
+            // Team Car fetches and creates the worktree; the app runs setup so its output shows in the dock.
+            teamCar.settingUp.insert(ws.id)
+            defer { teamCar.settingUp.remove(ws.id) }
+            do {
+                try await teamCar.createWorkspace(ws)
+                if let pr {
+                    try await checkOutPullRequest(pr, in: ws.id)
+                    creationSteps[ws.id] = nil
+                }
+                updateWorkspace(ws.id) { $0.state = .settingUp }
+                let model = model(for: ws.id)
+                model.recordGhMergeBase()
+                model.loadConfig()
+                await model.runSetup()
                 updateWorkspace(ws.id) { $0.state = .ready }
             } catch {
                 creationSteps[ws.id] = nil
@@ -411,6 +718,10 @@ final class AppModel {
             let base = try await Git.createWorktree(
                 repoPath: repo.path, path: path, branch: branch, base: "origin/\(repo.defaultBranch)")
             Trace.log("worktree added")
+            if let pr {
+                try await checkOutPullRequest(pr, in: ws.id)
+                creationSteps[ws.id] = nil
+            }
             updateWorkspace(ws.id) {
                 $0.baseCommit = base
                 $0.state = .settingUp
@@ -425,8 +736,18 @@ final class AppModel {
             updateWorkspace(ws.id) { $0.state = .ready }
             Trace.log("ready")
         } catch {
+            creationSteps[ws.id] = nil
             updateWorkspace(ws.id) { $0.state = .failed(error.localizedDescription) }
         }
+    }
+
+    /// Moves a just-created workspace's branch to `pr`'s head, on whichever host the workspace lives.
+    private func checkOutPullRequest(_ pr: PullRequestSummary, in wsID: UUID) async throws {
+        guard let ws = workspace(wsID), !ws.path.isEmpty else {
+            throw GitError("The workspace has no worktree to check #\(pr.number) out into.")
+        }
+        setCreationStep(wsID, "Checking out #\(pr.number)")
+        try await Git.checkOutPullRequest(path: ws.path, number: pr.number, host: model(for: wsID).host)
     }
 
     func archive(_ ws: Workspace) async {
@@ -434,8 +755,15 @@ final class AppModel {
         if let m = existingModel(for: ws.id) {
             await m.prepareForArchive()
         }
-        if ws.isRemote {
+        if ws.isSandbox {
             await archiveRemote(ws)
+        } else if let link = link(for: ws) {
+            do {
+                try await link.archiveWorkspace(ws)
+            } catch {
+                alert = AppAlert(title: "Couldn't archive workspace", message: error.localizedDescription)
+                return
+            }
         } else { do {
             if FileManager.default.fileExists(atPath: ws.path) {
                 try await Git.removeWorktree(repoPath: repo.path, path: ws.path, force: true)
@@ -453,8 +781,15 @@ final class AppModel {
     func deleteArchived(_ ws: Workspace) async {
         guard ws.isArchived else { return }
         for tab in ws.tabs { await Store.shared.deleteTranscript(tabID: tab.id) }
-        if ws.isRemote {
+        if ws.isSandbox {
             await deleteRemote(ws)
+        } else if let link = link(for: ws) {
+            do {
+                try await link.deleteWorkspace(ws)
+            } catch {
+                alert = AppAlert(title: "Couldn't delete workspace", message: error.localizedDescription)
+                return
+            }
         } else if let repo = repo(ws.repoID) {
             try? await Git.deleteBranch(repoPath: repo.path, branch: ws.branch)
         }
@@ -526,16 +861,26 @@ final class AppModel {
     }
 
     private func loadClaudeModels() async {
+        if teamCar.isEnabled {
+            if let models = await teamCar.listModels(.claude) { updateModels(models, for: .claude) }
+            return
+        }
         if let models = await ClaudeSession.probeModels() { updateModels(models, for: .claude) }
     }
 
     private func loadCodexModels() async {
+        if teamCar.isEnabled {
+            if let models = await teamCar.listModels(.codex) { updateModels(models, for: .codex) }
+            return
+        }
         if let models = try? await CodexAppServer.shared.listModels() { updateModels(models, for: .codex) }
     }
 
     // MARK: lifecycle
 
     func shutdown() {
+        // Agents in Team Car keep running after the app quits; only the in-app ones stop.
+        for link in teamCarLinks { link.close() }
         for m in workspaceModels.values { m.shutdownNow() }
         let state = self.state
         let sem = DispatchSemaphore(value: 0)
@@ -555,6 +900,7 @@ enum SettingsRoute: Hashable {
     case general
     case agents
     case cloud
+    case teamCars
     case repo(UUID)
 }
 

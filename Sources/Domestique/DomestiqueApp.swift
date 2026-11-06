@@ -11,7 +11,10 @@ struct DomestiqueApp: App {
         WindowGroup("Domestique", id: "main") {
             RootView()
                 .environment(app)
-                .onAppear { delegate.app = app }
+                .onAppear {
+                    delegate.app = app
+                    DevSnapshots.run(app: app)
+                }
                 .frame(minWidth: 1000, minHeight: 600)
         }
         .defaultSize(width: 1480, height: 920)
@@ -96,6 +99,11 @@ struct AppCommands: Commands {
                 if let repo { Task { await app.createWorkspace(in: repo, location: .cloud(.boat)) } } else { app.promptAddRepository() }
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("New Workspace from Pull Request…") {
+                guard let repo = app.selectedRepo ?? app.repositories.first else { return app.promptAddRepository() }
+                app.pullRequestPickerRepo = repo
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
             Button("New Chat Tab") { app.selectedWorkspaceModel?.newTab() }
                 .keyboardShortcut("t", modifiers: .command)
             Button("Previous Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(-1) }
