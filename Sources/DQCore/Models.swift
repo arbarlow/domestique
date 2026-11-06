@@ -123,6 +123,8 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var trunkPushedAt: Date?
     /// Commit that push put on the base branch.
     public var trunkPushedCommit: String?
+    /// Chat tabs closed in this workspace, most recent first, so they can be reopened (transcripts kept).
+    public var closedTabs: [ClosedChatTab]?
 
     public init(
         id: UUID = UUID(), repoID: UUID, name: String, branch: String, path: String, baseBranch: String,
@@ -341,6 +343,21 @@ public struct ChatTab: Codable, Sendable, Identifiable, Hashable {
         self.providerSessionID = providerSessionID
         self.createdAt = createdAt
     }
+}
+
+/// A chat tab that was closed and can be reopened.
+public struct ClosedChatTab: Codable, Sendable, Identifiable, Hashable {
+    public var tab: ChatTab
+    public var closedAt: Date
+    public var id: UUID { tab.id }
+
+    public init(tab: ChatTab, closedAt: Date = .now) {
+        self.tab = tab
+        self.closedAt = closedAt
+    }
+
+    /// How many closed tabs a workspace remembers; older ones are forgotten (and their transcripts deleted).
+    public static let limit = 20
 }
 
 // MARK: - Transcript

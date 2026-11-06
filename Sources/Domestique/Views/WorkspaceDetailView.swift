@@ -203,6 +203,31 @@ struct ChatTabBar: View {
                 }
                 .padding(.horizontal, 8)
             }
+            if let closed = workspace.closedTabs, !closed.isEmpty {
+                Menu {
+                    Section("Recently closed") {
+                        ForEach(closed) { c in
+                            Button {
+                                model.reopenTab(c.id)
+                            } label: {
+                                Text(c.tab.title)
+                                Text(c.closedAt, format: .relative(presentation: .named))
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text2)
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Reopen a closed chat (⇧⌘T)")
+            }
             Menu {
                 ForEach(ProviderKind.allCases) { p in
                     Button("New " + p.displayName + " chat") { model.newTab(provider: p) }

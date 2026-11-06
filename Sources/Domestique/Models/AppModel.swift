@@ -725,6 +725,7 @@ final class AppModel {
     func deleteArchived(_ ws: Workspace) async {
         guard ws.isArchived else { return }
         for tab in ws.tabs { await Store.shared.deleteTranscript(tabID: tab.id) }
+        for closed in ws.closedTabs ?? [] { await Store.shared.deleteTranscript(tabID: closed.id) }
         if ws.isSandbox {
             await deleteRemote(ws)
         } else if let link = link(for: ws) {

@@ -106,6 +106,9 @@ struct AppCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .option])
             Button("New Chat Tab") { app.selectedWorkspaceModel?.newTab() }
                 .keyboardShortcut("t", modifiers: .command)
+            Button("Reopen Closed Chat Tab") { app.selectedWorkspaceModel?.reopenLastClosedTab() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(app.selectedWorkspaceModel?.closedTabs.isEmpty ?? true)
             Button("Previous Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(-1) }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
             Button("Next Chat Tab") { app.selectedWorkspaceModel?.selectAdjacentTab(1) }

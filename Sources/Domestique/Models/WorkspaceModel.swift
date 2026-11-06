@@ -207,16 +207,46 @@ final class WorkspaceModel {
         guard let ws = workspace, ws.tabs.count > 1 else { return }
         chats[tabID]?.shutdown()
         chats[tabID] = nil
+        let link = app.link(for: ws)
+        var forgotten: [UUID] = []
         app.updateWorkspace(id) { w in
             let idx = w.tabs.firstIndex { $0.id == tabID } ?? 0
+            // Local chats keep their transcript so the tab can be reopened. Team Car deletes a closed
+            // rider's history on the server, so there's nothing to bring back there.
+            if link == nil, let tab = w.tabs.first(where: { $0.id == tabID }) {
+                var closed = w.closedTabs ?? []
+                closed.removeAll { $0.id == tabID }
+                closed.insert(ClosedChatTab(tab: tab), at: 0)
+                forgotten = closed.dropFirst(ClosedChatTab.limit).map(\.id)
+                w.closedTabs = Array(closed.prefix(ClosedChatTab.limit))
+            }
             w.tabs.removeAll { $0.id == tabID }
             if w.selectedTabID == tabID { w.selectedTabID = w.tabs[max(0, min(idx, w.tabs.count - 1))].id }
         }
-        if let link = app.link(for: ws) {
+        if let link {
             Task { await link.closeRider(tabID) }
         } else {
-            Task { await Store.shared.deleteTranscript(tabID: tabID) }
+            Task { for id in forgotten { await Store.shared.deleteTranscript(tabID: id) } }
         }
+    }
+
+    /// Recently closed chat tabs, most recent first.
+    var closedTabs: [ClosedChatTab] { workspace?.closedTabs ?? [] }
+
+    /// Bring a closed chat tab back, with its transcript and agent session.
+    func reopenTab(_ tabID: UUID) {
+        guard let closed = closedTabs.first(where: { $0.id == tabID }) else { return }
+        app.updateWorkspace(id) { w in
+            w.closedTabs?.removeAll { $0.id == tabID }
+            if !w.tabs.contains(where: { $0.id == tabID }) { w.tabs.append(closed.tab) }
+            w.selectedTabID = tabID
+        }
+        app.composerFocusRequest += 1
+    }
+
+    /// ⌘⇧T: reopen the most recently closed chat tab.
+    func reopenLastClosedTab() {
+        if let last = closedTabs.first { reopenTab(last.id) }
     }
 
     func agentFinishedTurn(_ chat: ChatModel) {
