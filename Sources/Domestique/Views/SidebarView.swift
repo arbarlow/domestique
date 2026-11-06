@@ -139,17 +139,12 @@ private struct RepoSection: View {
                             Button("New workspace from pull request…") { app.pullRequestPickerRepo = repo }
                         }
                         Divider()
-                        ForEach(app.workspaceLocations) { loc in
-                            Button("New workspace on \(app.locationName(loc))") {
-                                Task { await app.createWorkspace(in: repo, location: loc) }
-                            }
+                        Menu("New workspace on") {
+                            NewWorkspaceMenuSections(
+                                locations: app.workspaceLocations, defaultLocation: app.defaultLocation(for: repo)
+                            ) { loc in Task { await app.createWorkspace(in: repo, location: loc) } }
                         }
-                        Picker("Run new workspaces on", selection: Binding(
-                            get: { repo.defaultLocation ?? .local },
-                            set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
-                        )) {
-                            ForEach(app.workspaceLocations) { Text(app.locationName($0)).tag($0) }
-                        }
+                        RepoLocationPicker(repo: repo, title: "Run new workspaces on")
                         Divider()
                         Picker("Ship mode", selection: Binding(
                             get: { repo.shipMode },
@@ -175,12 +170,9 @@ private struct RepoSection: View {
                     if let choices = app.newWorkspaceChoices(for: repo) {
                         let def = app.defaultLocation(for: repo)
                         Menu {
-                            Section("New workspace from origin/\(repo.defaultBranch) on") {
-                                ForEach(choices) { loc in
-                                    Button(loc == def ? "\(app.locationName(loc)) (default)" : app.locationName(loc)) {
-                                        Task { await app.createWorkspace(in: repo, location: loc) }
-                                    }
-                                }
+                            Text("New workspace from origin/\(repo.defaultBranch) on")
+                            NewWorkspaceMenuSections(locations: choices, defaultLocation: def) { loc in
+                                Task { await app.createWorkspace(in: repo, location: loc) }
                             }
                         } label: {
                             Image(systemName: "plus").font(.system(size: 12)).foregroundStyle(Theme.text2)
@@ -195,7 +187,7 @@ private struct RepoSection: View {
                     } else {
                         IconButton(
                             symbol: "plus",
-                            help: "New workspace from origin/\(repo.defaultBranch) on \(app.locationName(app.defaultLocation(for: repo)))",
+                            help: "New workspace from origin/\(repo.defaultBranch): \(app.longLocationName(app.defaultLocation(for: repo)))",
                             size: 12
                         ) {
                             Task { await app.createWorkspace(in: repo) }
@@ -247,6 +239,12 @@ struct RepoMonogram: View {
 struct WorkspaceRow: View {
     @Environment(AppModel.self) private var app
     let workspace: Workspace
+    @State private var hovering = false
+
+    /// Hovering an active, settled workspace swaps its trailing badge for an archive button.
+    private var showsArchive: Bool {
+        hovering && !workspace.isArchived && workspace.state != .creating && workspace.state != .settingUp
+    }
 
     var body: some View {
         let model = app.existingModel(for: workspace.id)
@@ -265,13 +263,25 @@ struct WorkspaceRow: View {
                     TeamCarGlyph(name: car.machineName ?? "Team Car")
                 }
                 Spacer(minLength: 6)
-                if let model, !model.diffFiles.isEmpty {
+                if showsArchive {
+                    // Reserves room for the archive button overlaid below.
+                    Color.clear.frame(width: 18, height: 18)
+                } else if let model, !model.diffFiles.isEmpty {
                     DiffCount(additions: model.diffStat.additions, deletions: model.diffStat.deletions)
                 } else if workspace.hasUnread {
                     Circle().fill(Theme.running).frame(width: 6, height: 6)
                 }
             }
         }
+        .overlay(alignment: .trailing) {
+            if showsArchive {
+                IconButton(symbol: "archivebox", help: "Archive \(workspace.name)", size: 11.5) {
+                    Task { await app.archive(workspace) }
+                }
+                .padding(.trailing, 4)
+            }
+        }
+        .onHover { hovering = $0 }
         .help("\(workspace.name) · \(workspace.branch)")
         .contextMenu { WorkspaceContextMenu(workspace: workspace) }
         .padding(.leading, 8)

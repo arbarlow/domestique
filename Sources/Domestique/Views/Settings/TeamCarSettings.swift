@@ -3,7 +3,8 @@ import RaceRadioKit
 import SwiftUI
 
 /// Settings → Team Cars: This Mac's server and any remote ones, one card each, plus adding new ones.
-/// The list is app-wide: every repository can create workspaces on every car.
+/// Each card also says what new workspaces on that car can be (a worktree, or a sandbox from one of
+/// its sandbox providers). The list is app-wide: every repository can create workspaces on every car.
 struct TeamCarSettings: View {
     @Environment(AppModel.self) private var app
     @State private var adding = false
@@ -12,7 +13,7 @@ struct TeamCarSettings: View {
         VStack(alignment: .leading, spacing: 0) {
             PageTitle(
                 title: "Team Cars",
-                subtitle: "Servers that run your agents and workspaces. This Mac always has one; add machines you own to work on them from here."
+                subtitle: "Machines that run your agents and workspaces. Each one can make git worktrees on itself and start cloud sandboxes from its sandbox providers, which it keeps the API keys for. This Mac always has one."
             ) {
                 if !adding {
                     Button("Add Team Car…") { withAnimation(.snappy(duration: 0.2)) { adding = true } }
@@ -22,17 +23,44 @@ struct TeamCarSettings: View {
             if adding {
                 AddTeamCarForm(onDone: { withAnimation(.snappy(duration: 0.2)) { adding = false } })
             }
+            DefaultCarSection()
             VStack(spacing: 14) {
                 CarCard(link: app.teamCar)
                 ForEach(app.settings.teamCars) { cfg in
                     if let link = app.remoteCars[cfg.id] { CarCard(link: link) }
                 }
             }
-            Text("You're in charge of reaching remote cars (Tailscale, a VPN or a reverse proxy) and of TLS. Tokens are kept in your Keychain.")
+            Text("You're in charge of reaching remote cars (Tailscale, a VPN or a reverse proxy) and of TLS. Tokens are kept in your Keychain. Saving a car's sandbox providers needs an admin token.")
                 .font(Theme.small)
                 .foregroundStyle(Theme.text3)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 14)
+        }
+    }
+}
+
+// MARK: - Default
+
+/// Which car new workspaces go to, and what that car makes by default.
+private struct DefaultCarSection: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let current = app.settings.defaultCar ?? .thisMac
+        let cars = app.cars.filter { $0 == current || !app.locations(on: $0).isEmpty }
+        SettingsSection(title: "New workspaces") {
+            SettingsRow(
+                title: "Default Team Car",
+                subtitle: "Starts as \(app.longLocationName(app.appDefaultLocation)). Change what a car starts with on its card; repositories can pick their own in their settings"
+            ) {
+                Picker("", selection: Binding(
+                    get: { current },
+                    set: { c in app.settings.defaultCar = c == .thisMac ? nil : c }
+                )) {
+                    ForEach(cars, id: \.self) { Text(app.carName(for: $0)).tag($0) }
+                }
+                .labelsHidden().fixedSize()
+            }
         }
     }
 }
@@ -55,6 +83,8 @@ private struct CarCard: View {
             }
             Hairline().padding(.leading, 14)
             facts
+            Hairline().padding(.leading, 14)
+            CarTargets(link: link)
             if editing, case .remote(let cfg) = link.car {
                 Hairline().padding(.leading, 14)
                 EditTeamCarForm(config: cfg, onDone: { withAnimation(.snappy(duration: 0.2)) { editing = false } })
@@ -79,11 +109,24 @@ private struct CarCard: View {
                 Text(subtitle).font(Theme.small).foregroundStyle(Theme.text3).lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 12)
+            if isDefaultCar, app.settings.teamCars.count > 0 {
+                Text("Default")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.text2)
+                    .padding(.horizontal, 8)
+                    .frame(height: 20)
+                    .background(Theme.hover, in: Capsule())
+                    .help("New workspaces go to this car unless a repository picks another")
+            }
             StatusPill(status: link.status)
             actions
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+
+    private var isDefaultCar: Bool {
+        (app.settings.defaultCar ?? .thisMac) == (link.carID.map { .teamCar($0) } ?? .thisMac)
     }
 
     /// Who answers on the other end: "Alexs-Mac · dev · darwin/arm64", else where we're trying to reach.
@@ -102,6 +145,9 @@ private struct CarCard: View {
         switch link.car {
         case .local:
             Menu {
+                Button("Use for New Workspaces") { app.settings.defaultCar = nil }
+                    .disabled(isDefaultCar || app.locations(on: .thisMac).isEmpty)
+                Divider()
                 Button("Show Log") { NSWorkspace.shared.open(LocalTeamCar.home.appending(path: "teamcar.log")) }
                 Button("Show Data in Finder") { NSWorkspace.shared.activateFileViewerSelecting([LocalTeamCar.home]) }
                 Divider()
@@ -117,6 +163,10 @@ private struct CarCard: View {
         case .remote:
             Menu {
                 Button("Edit…") { withAnimation(.snappy(duration: 0.2)) { editing = true } }
+                if let id = link.carID {
+                    Button("Use for New Workspaces") { app.settings.defaultCar = .teamCar(id) }
+                        .disabled(isDefaultCar || app.locations(on: .teamCar(id)).isEmpty)
+                }
                 Divider()
                 Button("Remove…", role: .destructive) { confirmRemove = true }
             } label: {

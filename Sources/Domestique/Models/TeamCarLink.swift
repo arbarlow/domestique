@@ -70,6 +70,8 @@ final class TeamCarLink {
 
     @ObservationIgnored private var closed = false
     @ObservationIgnored private var versionCheckPending = false
+    /// This Mac's car is outdated but was busy; swap it as soon as no agent is mid-turn.
+    @ObservationIgnored private var restartWhenIdle = false
     @ObservationIgnored private var alerted = false
     /// Server repository id -> app repository id (remote cars; This Mac's use the same ids).
     @ObservationIgnored private var repoMap: [String: UUID] = [:]
@@ -163,20 +165,35 @@ final class TeamCarLink {
     }
 
     /// After an app update the old Team Car keeps running (it outlives the app). Swap it for the bundled
-    /// one when the versions differ and no agent is mid-turn; otherwise leave it for next launch.
+    /// one whenever the versions differ: right away if no agent is mid-turn, else as soon as they all are
+    /// idle. A bundled "dev" build (running from a source checkout) leaves whatever car is running alone;
+    /// a running "dev" car is replaced by a release one.
     private func restartIfOutdated() async {
-        guard let bundled = LocalTeamCar.binary(), let running = welcome?.serverVersion,
-            let version = Self.version(of: bundled), version != running, version != "dev", running != "dev"
-        else { return }
-        guard !activity.values.contains(where: { $0 == .running || $0 == .awaitingInput }) else {
-            Trace.log("teamcar: \(running) is outdated (bundled \(version)) but agents are running; keeping it")
+        restartWhenIdle = false
+        guard isLocal, let bundled = LocalTeamCar.binary(), let running = welcome?.serverVersion else { return }
+        let version = await Task.detached { Self.version(of: bundled) }.value
+        guard let version, version != "dev", version != running, welcome?.serverVersion == running else { return }
+        guard !agentsBusy else {
+            Trace.log("teamcar: \(running) is outdated (bundled \(version)); restarting once agents are idle")
+            restartWhenIdle = true
             return
         }
         Trace.log("teamcar: restarting \(running) -> \(version)")
         await restart()
     }
 
-    private static func version(of binary: URL) -> String? {
+    private var agentsBusy: Bool {
+        activity.values.contains(where: { $0 == .running || $0 == .awaitingInput })
+    }
+
+    /// Called whenever rider activity changes: performs a restart deferred by `restartIfOutdated`.
+    private func restartIfDeferredAndIdle() {
+        guard restartWhenIdle, !agentsBusy else { return }
+        restartWhenIdle = false
+        Task { await restartIfOutdated() }
+    }
+
+    nonisolated private static func version(of binary: URL) -> String? {
         let p = Process()
         p.executableURL = binary
         p.arguments = ["version"]
@@ -191,6 +208,7 @@ final class TeamCarLink {
     /// This Mac only: stop the running Team Car (its agents stop too) and start it again.
     func restart() async {
         guard isLocal else { return }
+        restartWhenIdle = false
         serverTask?.cancel()
         if let client { await client.close() }
         client = nil
@@ -302,6 +320,7 @@ final class TeamCarLink {
         case .riderRemoved(let id):
             guard let tabID = UUID(radioID: id) else { return }
             activity[tabID] = nil
+            restartIfDeferredAndIdle()
             for ws in app.state.workspaces where ws.tabs.contains(where: { $0.id == tabID }) && !pendingTabs.contains(tabID) {
                 app.model(for: ws.id).dropTab(tabID)
             }
@@ -517,6 +536,7 @@ final class TeamCarLink {
         activity[tabID] = r.activity
         app.updateWorkspaceIfChanged(wsID) { ws in Self.merge(r, into: &ws) }
         noteProgress(r)
+        restartIfDeferredAndIdle()
     }
 
     // MARK: unread
@@ -696,6 +716,7 @@ final class TeamCarLink {
     func closeRider(_ tabID: UUID) async {
         pendingTabs.remove(tabID)
         activity[tabID] = nil
+        restartIfDeferredAndIdle()
         _ = try? await ready().closeRider(id: tabID.radioID)
     }
 

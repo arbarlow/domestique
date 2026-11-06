@@ -324,10 +324,8 @@ private struct PullRequestRow: View {
                 Button("New workspace on #\(pr.number)", action: open)
                 if let choices = app.newWorkspaceChoices(for: repo) {
                     Menu("New workspace on #\(pr.number) on") {
-                        ForEach(choices) { loc in
-                            Button(app.locationName(loc)) {
-                                Task { await app.openPullRequest(pr, in: repo, location: loc) }
-                            }
+                        NewWorkspaceMenuSections(locations: choices, defaultLocation: app.defaultLocation(for: repo)) { loc in
+                            Task { await app.openPullRequest(pr, in: repo, location: loc) }
                         }
                     }
                 }

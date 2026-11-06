@@ -64,7 +64,7 @@ public struct Repository: Codable, Sendable, Identifiable, Hashable {
     /// Shown instead of `name` when set. `name` stays the folder-safe id used for worktree paths.
     public var displayName: String?
     public var icon: RepoIcon?
-    /// Where new workspaces run (nil = this Mac).
+    /// Where new workspaces run (nil = the default Team Car's default, from Settings → Team Cars).
     public var defaultLocation: WorkspaceLocation?
 
     public var title: String { (displayName?.isEmpty == false ? displayName : nil) ?? name }
@@ -188,9 +188,9 @@ public enum CloudProviderID: String, Codable, Sendable, CaseIterable, Identifiab
 public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
     case local
     case cloud(CloudProviderID)
-    /// A remote Team Car from Settings → Team Cars.
+    /// A worktree on a remote Team Car from Settings → Team Cars.
     case teamCar(UUID)
-    /// A sandbox provider from Settings → Sandbox Providers (e.g. one boat.dev account).
+    /// A sandbox from one of a Team Car's sandbox providers (e.g. one boat.dev account).
     case sandbox(UUID)
 
     public var id: String {
@@ -214,7 +214,7 @@ public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
     public static var all: [WorkspaceLocation] { [.local] }
 }
 
-/// A sandbox provider in Settings → Sandbox Providers: one account on a sandbox service (boat.dev
+/// A sandbox provider in Settings → Team Cars: one account on a sandbox service (boat.dev
 /// today) with its own defaults. Several can exist (accounts, teams, or presets like "boat · large").
 ///
 /// Each provider belongs to a Team Car (`home`), which keeps its API key and makes every call to the
@@ -255,10 +255,39 @@ public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// Which Team Car owns a sandbox provider.
+/// A Team Car: This Mac's or a remote one from Settings → Team Cars. Also says which car owns a
+/// sandbox provider.
 public enum SandboxProviderHome: Codable, Sendable, Hashable {
     case thisMac
     case teamCar(UUID)
+
+    /// Stable key for per-car settings.
+    public var key: String {
+        switch self {
+        case .thisMac: "this-mac"
+        case .teamCar(let id): id.uuidString.lowercased()
+        }
+    }
+}
+
+/// This Mac's choices for new workspaces on one Team Car.
+public struct CarPreferences: Codable, Sendable, Hashable {
+    /// Offer git worktrees on the car itself. Off for a car that should only start sandboxes (or a
+    /// laptop you don't want workspaces on).
+    public var worktrees: Bool
+    /// What "New workspace on <car>" makes: nil = a worktree, else one of the car's sandbox providers.
+    public var defaultSandbox: UUID?
+
+    public init(worktrees: Bool = true, defaultSandbox: UUID? = nil) {
+        self.worktrees = worktrees
+        self.defaultSandbox = defaultSandbox
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        worktrees = try c.decodeIfPresent(Bool.self, forKey: .worktrees) ?? true
+        defaultSandbox = try c.decodeIfPresent(UUID.self, forKey: .defaultSandbox)
+    }
 }
 
 /// A provider's state as its Team Car reports it (never the key itself).

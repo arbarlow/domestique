@@ -74,7 +74,7 @@ public struct AppSettings: Codable, Sendable, Hashable {
         set { boatSettings = newValue }
     }
 
-    /// Sandbox providers (Settings → Sandbox Providers). nil until migrated: the old single boat.dev
+    /// Sandbox providers (Settings → Team Cars, under their car). nil until migrated: the old single boat.dev
     /// setup (`boatSettings` and the `api-key` Keychain item) becomes the first one.
     public var sandboxProviderList: [SandboxProviderConfig]?
 
@@ -103,6 +103,22 @@ public struct AppSettings: Codable, Sendable, Hashable {
     public var teamCars: [TeamCarConfig] {
         get { teamCarList ?? [] }
         set { teamCarList = newValue }
+    }
+
+    /// The car new workspaces go to unless a repository says otherwise. nil = This Mac.
+    public var defaultCar: SandboxProviderHome?
+
+    /// Per-car choices keyed by `SandboxProviderHome.key`. Optional so older settings still decode.
+    public var carPreferenceMap: [String: CarPreferences]?
+
+    public func preferences(for car: SandboxProviderHome) -> CarPreferences {
+        carPreferenceMap?[car.key] ?? CarPreferences()
+    }
+
+    public mutating func setPreferences(_ p: CarPreferences, for car: SandboxProviderHome) {
+        var map = carPreferenceMap ?? [:]
+        map[car.key] = p == CarPreferences() ? nil : p
+        carPreferenceMap = map.isEmpty ? nil : map
     }
 
     public init() {}

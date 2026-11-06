@@ -67,7 +67,7 @@ delete_on_archive = false
 
 Without `api_key_env` / `api_key_file`, a provider uses `BOAT_API_KEY`, then the car user's
 `boat login` session. Providers can also be saved over Race Radio with an `admin` token, which is
-what the Mac app's Settings → Sandbox Providers does (keys are stored in `teamcar.sqlite`, inside the
+what the Mac app's Settings → Team Cars does (keys are stored in `teamcar.sqlite`, inside the
 `0700` Team Car home):
 
 ```sh

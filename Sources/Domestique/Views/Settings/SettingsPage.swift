@@ -31,7 +31,6 @@ struct SettingsPage: View {
                         switch route {
                         case .general: GeneralSettings()
                         case .agents: AgentSettings()
-                        case .cloud: SandboxProviderSettings()
                         case .teamCars: TeamCarSettings()
                         case .repo(let id):
                             if let repo = app.repo(id) {
@@ -62,7 +61,6 @@ private struct SettingsNav: View {
                 navRow(.general, "General", "gearshape.fill", .gray)
                 navRow(.agents, "Agents", "sparkles", .purple)
                 navRow(.teamCars, "Team Cars", "server.rack", .blue)
-                navRow(.cloud, "Sandbox Providers", "shippingbox.fill", .teal)
                 Text("Repositories")
                     .font(Theme.small)
                     .foregroundStyle(Theme.text3)
@@ -418,14 +416,8 @@ private struct RepoSettings: View {
                     }
                     .labelsHidden().fixedSize()
                 }
-                SettingsRow(title: "Run new workspaces on", subtitle: "This Mac (git worktree), a cloud sandbox, or one of your Team Cars") {
-                    Picker("", selection: Binding(
-                        get: { app.repo(repo.id)?.defaultLocation ?? .local },
-                        set: { l in app.updateRepo(repo.id) { $0.defaultLocation = l == .local ? nil : l } }
-                    )) {
-                        ForEach(app.workspaceLocations) { Text(app.locationName($0)).tag($0) }
-                    }
-                    .labelsHidden().fixedSize()
+                SettingsRow(title: "Run new workspaces on", subtitle: "A worktree or a sandbox on one of your Team Cars. The default is set in Settings → Team Cars") {
+                    RepoLocationPicker(repo: repo).labelsHidden().fixedSize()
                 }
                 SettingsRow(title: "Default branch", subtitle: "New workspaces branch from a fresh origin/\(repo.defaultBranch)") {
                     Text(repo.defaultBranch).font(Theme.mono).foregroundStyle(Theme.text2)

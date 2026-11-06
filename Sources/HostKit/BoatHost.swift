@@ -125,9 +125,19 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
 
     // MARK: commands
 
+    /// boat's ~/.bashrc loads the Claude login it injects (`CLAUDE_CODE_OAUTH_TOKEN`) from this file,
+    /// then unsets it again whenever ~/.claude/.credentials.json is non-empty. That file also holds MCP
+    /// servers' OAuth tokens, so a snapshot made after authorizing an MCP server (but never running
+    /// `claude /login`) keeps the file without a Claude login in it, and claude ends up logged out.
+    /// Load boat's secrets again unless the file has a real login (`claudeAiOauth`).
+    static let restoreBoatClaudeLogin = """
+        if [ -r /run/ascii-secrets/env.sh ] && ! grep -qs claudeAiOauth "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"; \
+        then . /run/ascii-secrets/env.sh; fi
+        """
+
     /// The remote string handed to the login shell: source Domestique's env, cd, export, run.
     static func remoteScript(_ body: String, cwd: String, env: [String: String]) -> String {
-        let prelude = "[ -r \"\(remoteEnvFile)\" ] && . \"\(remoteEnvFile)\""
+        let prelude = "\(restoreBoatClaudeLogin); [ -r \"\(remoteEnvFile)\" ] && . \"\(remoteEnvFile)\""
         let cd = "cd \(ShellQuote.quote(cwd)) 2>/dev/null || cd \"$HOME\""
         let exports = ShellQuote.exports(env)
         let inner = [prelude, cd, exports, body].filter { !$0.isEmpty }.joined(separator: "; ")

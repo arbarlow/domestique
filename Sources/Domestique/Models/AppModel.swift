@@ -133,7 +133,7 @@ final class AppModel {
             let page = i + 1 < args.count ? args[i + 1] : "general"
             switch page {
             case "agents": settingsRoute = .agents
-            case "cloud", "sandboxes": settingsRoute = .cloud
+            case "cloud", "sandboxes": settingsRoute = .teamCars
             case "teamcars": settingsRoute = .teamCars
             case "repo": settingsRoute = state.repositories.first.map { .repo($0.id) } ?? .general
             default: settingsRoute = .general
@@ -299,9 +299,11 @@ final class AppModel {
         settings.teamCars.removeAll { $0.id == id }
         TeamCarDirectory.shared.update(settings.teamCars)
         TeamCarTokens.delete(id)
-        for repo in state.repositories where repo.defaultLocation == .teamCar(id) {
+        for repo in state.repositories where repo.defaultLocation.map({ car(of: $0) == .teamCar(id) }) ?? false {
             updateRepo(repo.id) { $0.defaultLocation = nil }
         }
+        if settings.defaultCar == .teamCar(id) { settings.defaultCar = nil }
+        settings.setPreferences(CarPreferences(), for: .teamCar(id))
     }
 
     // MARK: mutation
@@ -556,6 +558,13 @@ final class AppModel {
         pullRequest pr: PullRequestSummary? = nil
     ) async {
         let location = location ?? defaultLocation(for: repo)
+        if isWorktree(location), !settings.preferences(for: car(of: location)).worktrees {
+            let name = carName(for: car(of: location))
+            alert = AppAlert(
+                title: "Worktrees are off on \(name)",
+                message: "Turn them back on, or add a sandbox provider to a Team Car, in Settings → Team Cars.")
+            return
+        }
         let used = Set(state.workspaces.filter { $0.repoID == repo.id }.map(\.name))
         let name = WorkspaceNames.next(excluding: used)
         let prefix = settings.branchPrefix.trimmingCharacters(in: .whitespaces)
@@ -618,7 +627,7 @@ final class AppModel {
         if remote {
             do {
                 guard let provider = settings.provider(for: location) else {
-                    throw HostError("That sandbox provider isn't in Settings → Sandbox Providers any more.")
+                    throw HostError("That sandbox provider isn't in Settings → Team Cars any more.")
                 }
                 try await provisionBoatWorkspace(ws.id, repo: repo, provider: provider)
                 if let pr { try await checkOutPullRequest(pr, in: ws.id) }
@@ -844,7 +853,6 @@ final class AppModel {
 enum SettingsRoute: Hashable {
     case general
     case agents
-    case cloud
     case teamCars
     case repo(UUID)
 }

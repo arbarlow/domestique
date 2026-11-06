@@ -8,8 +8,11 @@ extension AppModel {
     /// Where new workspaces in `repo` run by default.
     func defaultLocation(for repo: Repository) -> WorkspaceLocation {
         // The pre-provider "boat.dev" choice means the first boat.dev provider.
-        if case .cloud = repo.defaultLocation, let p = settings.provider(for: repo.defaultLocation) { return .sandbox(p.id) }
-        return repo.defaultLocation ?? .local
+        var loc = repo.defaultLocation
+        if case .cloud = loc, let p = settings.provider(for: loc) { loc = .sandbox(p.id) }
+        // A repository's own choice, unless it's gone or turned off; else the app-wide default.
+        if let loc, workspaceLocations.contains(loc) { return loc }
+        return appDefaultLocation
     }
 
     /// New boat.dev workspace: one sandbox per workspace, the repo cloned into /home/user/<repo>,
@@ -22,7 +25,7 @@ extension AppModel {
             if let home = provider.home, link(for: home)?.isConnected != true {
                 throw HostError("\(carName(for: home)) isn't connected, so it can't start a sandbox on \(provider.name).")
             }
-            throw HostError("Sign \(provider.name) in first: add an API key in Settings → Sandbox Providers, or run `boat login`.")
+            throw HostError("Sign \(provider.name) in first: add an API key in Settings → Team Cars, or run `boat login`.")
         }
 
         setCreationStep(wsID, "Starting a sandbox on \(provider.name)")

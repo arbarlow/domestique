@@ -177,44 +177,94 @@ extension AppModel {
 
     // MARK: places to run
 
-    /// Cars that can own a new provider: This Mac's (when it runs) and connected remote ones.
-    var providerHomes: [SandboxProviderHome] {
-        var out: [SandboxProviderHome] = []
-        if teamCar?.isEnabled == true { out.append(.thisMac) }
-        out += settings.teamCars.filter { remoteCars[$0.id]?.isConnected == true }.map { .teamCar($0.id) }
+    /// Every Team Car, This Mac's first.
+    var cars: [SandboxProviderHome] { [.thisMac] + settings.teamCars.map { .teamCar($0.id) } }
+
+    /// The car a location runs on. Providers from before Team Car count as This Mac's.
+    func car(of loc: WorkspaceLocation) -> SandboxProviderHome {
+        switch loc {
+        case .local: return .thisMac
+        case .teamCar(let id): return .teamCar(id)
+        case .sandbox, .cloud: return settings.provider(for: loc)?.home ?? .thisMac
+        }
+    }
+
+    /// The worktree location on `car` (whether or not worktrees are on there).
+    func worktreeLocation(on car: SandboxProviderHome) -> WorkspaceLocation {
+        switch car {
+        case .thisMac: .local
+        case .teamCar(let id): .teamCar(id)
+        }
+    }
+
+    func isWorktree(_ loc: WorkspaceLocation) -> Bool {
+        switch loc {
+        case .local, .teamCar: true
+        case .sandbox, .cloud: false
+        }
+    }
+
+    /// `car`'s sandbox providers (This Mac's include ones still in the Keychain).
+    func sandboxProviders(on car: SandboxProviderHome) -> [SandboxProviderConfig] {
+        settings.sandboxProviders.filter { ($0.home ?? .thisMac) == car }
+    }
+
+    /// What `car` offers: a worktree (unless turned off), then its sandbox providers.
+    func locations(on car: SandboxProviderHome) -> [WorkspaceLocation] {
+        var out: [WorkspaceLocation] = []
+        if settings.preferences(for: car).worktrees { out.append(worktreeLocation(on: car)) }
+        out += sandboxProviders(on: car).map { .sandbox($0.id) }
         return out
     }
 
-    /// Where new workspaces can run, grouped by car: This Mac and its providers, then each remote
-    /// Team Car followed by its own providers.
-    var workspaceLocations: [WorkspaceLocation] {
-        let providers = settings.sandboxProviders
-        var out: [WorkspaceLocation] = [.local]
-        out += providers.filter { $0.remoteCarID == nil }.map { .sandbox($0.id) }
-        for car in settings.teamCars {
-            out.append(.teamCar(car.id))
-            out += providers.filter { $0.remoteCarID == car.id }.map { .sandbox($0.id) }
+    /// Where new workspaces can run, grouped by car: This Mac's, then each remote car's.
+    var workspaceLocations: [WorkspaceLocation] { cars.flatMap(locations(on:)) }
+
+    /// What a new workspace on `car` becomes: its chosen default, else the first thing it offers.
+    func defaultLocation(on car: SandboxProviderHome) -> WorkspaceLocation? {
+        let offered = locations(on: car)
+        if let id = settings.preferences(for: car).defaultSandbox, offered.contains(.sandbox(id)) { return .sandbox(id) }
+        return offered.first
+    }
+
+    /// The app-wide default: the default car's default, else anything on offer.
+    var appDefaultLocation: WorkspaceLocation {
+        defaultLocation(on: settings.defaultCar ?? .thisMac) ?? workspaceLocations.first ?? .local
+    }
+
+    /// Whether `loc` can take a new workspace right now: its car is connected and a provider has a key.
+    func isUsable(_ loc: WorkspaceLocation) -> Bool {
+        switch loc {
+        case .local: return true
+        case .teamCar(let id): return remoteCars[id]?.isConnected == true
+        case .sandbox, .cloud:
+            return settings.provider(for: loc).map { BoatClient.isConfigured(account: $0.credentialAccount) } ?? false
         }
-        return out
     }
 
     /// What the sidebar's + offers when there's more than one usable place to run (nil otherwise: +
-    /// just creates on the default). Connected remote cars and usable sandbox providers only; the
-    /// default stays even if it's offline.
+    /// just creates on the default). Usable locations only; the default stays even if it's offline.
     func newWorkspaceChoices(for repo: Repository) -> [WorkspaceLocation]? {
         let def = defaultLocation(for: repo)
-        let choices = workspaceLocations.filter { loc in
-            if loc == def { return true }
-            switch loc {
-            case .teamCar(let id): return remoteCars[id]?.isConnected == true
-            case .sandbox, .cloud:
-                return settings.provider(for: loc).map { BoatClient.isConfigured(account: $0.credentialAccount) } ?? false
-            case .local: return true
-            }
-        }
+        let choices = workspaceLocations.filter { $0 == def || isUsable($0) }
         return choices.count > 1 ? choices : nil
     }
 
+    /// One car's share of a list of locations, for menus and pickers with a section per car.
+    struct CarLocations: Identifiable {
+        var car: SandboxProviderHome
+        var locations: [WorkspaceLocation]
+        var id: String { car.key }
+    }
+
+    func groupedByCar(_ locs: [WorkspaceLocation]) -> [CarLocations] {
+        cars.compactMap { car in
+            let mine = locs.filter { self.car(of: $0) == car }
+            return mine.isEmpty ? nil : CarLocations(car: car, locations: mine)
+        }
+    }
+
+    /// The full name: "This Mac", "hetzner-box", "boat.dev", "boat.dev · hetzner-box".
     func locationName(_ loc: WorkspaceLocation) -> String {
         switch loc {
         case .teamCar(let id): return settings.teamCars.first { $0.id == id }?.name ?? "Missing Team Car"
@@ -225,6 +275,30 @@ extension AppModel {
             return p.name
         case .local: return loc.displayName
         }
+    }
+
+    /// The name within its car's section: "Worktree" or the provider's name.
+    func targetName(_ loc: WorkspaceLocation) -> String {
+        isWorktree(loc) ? "Worktree" : settings.provider(for: loc)?.name ?? "Missing sandbox provider"
+    }
+
+    /// "Worktree on This Mac", "boat.dev on hetzner-box".
+    func longLocationName(_ loc: WorkspaceLocation) -> String {
+        "\(targetName(loc)) on \(carName(for: car(of: loc)))"
+    }
+
+    // MARK: per-car choices
+
+    func updateCarPreferences(_ car: SandboxProviderHome, _ mutate: (inout CarPreferences) -> Void) {
+        var p = settings.preferences(for: car)
+        mutate(&p)
+        settings.setPreferences(p, for: car)
+    }
+
+    /// Makes `loc` what new workspaces on its car become.
+    func makeCarDefault(_ loc: WorkspaceLocation) {
+        let car = car(of: loc)
+        updateCarPreferences(car) { $0.defaultSandbox = settings.provider(for: loc)?.id }
     }
 
     // MARK: editing
@@ -310,9 +384,11 @@ extension AppModel {
     func forgetSandboxProvider(_ p: SandboxProviderConfig) {
         settings.sandboxProviders.removeAll { $0.id == p.id }
         BoatClient.saveAPIKey(nil, account: p.credentialAccount)
-        for repo in state.repositories where defaultLocation(for: repo) == .sandbox(p.id) {
+        for repo in state.repositories where repo.defaultLocation == .sandbox(p.id) {
             updateRepo(repo.id) { $0.defaultLocation = nil }
         }
+        let car = p.home ?? .thisMac
+        if settings.preferences(for: car).defaultSandbox == p.id { updateCarPreferences(car) { $0.defaultSandbox = nil } }
         refreshSandboxRoutes()
     }
 

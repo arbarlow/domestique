@@ -117,14 +117,10 @@ struct PullRequestPicker: View {
                     .font(Theme.small).foregroundStyle(Theme.text3).lineLimit(1)
             }
             Spacer()
-            if app.newWorkspaceChoices(for: repo) != nil {
-                Picker("Run on", selection: Binding(
-                    get: { location ?? app.defaultLocation(for: repo) },
-                    set: { location = $0 }
-                )) {
-                    ForEach(app.workspaceLocations) { Text(app.locationName($0)).tag($0) }
-                }
-                .fixedSize()
+            if let choices = app.newWorkspaceChoices(for: repo) {
+                CarTargetPicker(
+                    selection: Binding(get: { location ?? app.defaultLocation(for: repo) }, set: { location = $0 }),
+                    locations: choices)
             }
             Button("Cancel") { dismiss() }
                 .buttonStyle(.soft)

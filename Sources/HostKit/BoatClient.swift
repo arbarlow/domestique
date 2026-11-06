@@ -443,7 +443,7 @@ public actor BoatClient {
         guard let (token, _) = Self.credential(account: account) else {
             throw BoatAPIError(
                 status: 401, code: "unauthorized",
-                message: "Not signed in to boat.dev. Add an API key in Settings → Sandbox Providers, or run `boat login`.")
+                message: "Not signed in to boat.dev. Add an API key in Settings → Team Cars, or run `boat login`.")
         }
         var req = URLRequest(url: URL(string: baseURL.absoluteString + path)!)
         req.httpMethod = method
@@ -481,7 +481,7 @@ public actor BoatClient {
         if message.isEmpty { message = "HTTP \(status)" }
         let details = inner?["details"] as? [String: Any]
         let url = details?["setupUrl"] as? String ?? details?["billingUrl"] as? String ?? obj["url"] as? String
-        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Sandbox Providers." }
+        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Team Cars." }
         return BoatAPIError(status: status, code: code, message: message, url: url)
     }
 }

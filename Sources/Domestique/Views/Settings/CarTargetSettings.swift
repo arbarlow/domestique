@@ -2,82 +2,123 @@ import DQCore
 import HostKit
 import SwiftUI
 
-/// Settings → Sandbox Providers: accounts on sandbox services (boat.dev today) that new workspaces can
-/// run on. Several can exist: separate accounts or teams, or presets like "boat · large".
-struct SandboxProviderSettings: View {
+/// Inside each Team Car's card in Settings → Team Cars: what new workspaces on that car can be. A git
+/// worktree on the car itself (can be turned off), and a sandbox from any of the car's sandbox
+/// providers (boat.dev accounts the car keeps the API key for). One of them is the car's default.
+struct CarTargets: View {
     @Environment(AppModel.self) private var app
+    let link: TeamCarLink
     @State private var adding = false
+
+    private var car: SandboxProviderHome { link.carID.map { .teamCar($0) } ?? .thisMac }
+    private var offered: [WorkspaceLocation] { app.locations(on: car) }
+    private var carDefault: WorkspaceLocation? { app.defaultLocation(on: car) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageTitle(
-                title: "Sandbox Providers",
-                subtitle: "Run workspaces in a cloud sandbox instead of on this Mac. Each workspace gets its own machine with the repo cloned, your stack running there, and its ports forwarded to localhost. Providers belong to a Team Car, which keeps the API key and starts the sandboxes."
-            ) {
+            HStack {
+                Text("New workspaces here").font(Theme.smallMedium).foregroundStyle(Theme.text2)
+                Spacer()
                 if !adding {
-                    Button("Add Provider…") { withAnimation(.snappy(duration: 0.2)) { adding = true } }
+                    Button("Add Sandbox Provider…") { withAnimation(.snappy(duration: 0.2)) { adding = true } }
                         .buttonStyle(.softCompact)
+                        .disabled(!canAdd)
+                        .help(canAdd ? "Add a boat.dev account to this car" : "\(link.displayName) needs to be connected to add providers")
                 }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 11)
+            .padding(.bottom, 6)
+            WorktreeRow(link: link, car: car, isDefault: carDefault == app.worktreeLocation(on: car), showDefault: offered.count > 1)
+            ForEach(app.sandboxProviders(on: car)) { p in
+                Hairline().padding(.leading, 50)
+                ProviderRow(provider: p, isDefault: carDefault == .sandbox(p.id), showDefault: offered.count > 1)
+            }
+            if offered.isEmpty {
+                Hairline().padding(.leading, 14)
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(Theme.warning)
+                    Text("Nothing can run here. Turn worktrees on or add a sandbox provider.")
+                        .font(Theme.small).foregroundStyle(Theme.text)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
             }
             if adding {
-                AddProviderForm(onDone: { withAnimation(.snappy(duration: 0.2)) { adding = false } })
-            }
-            if app.settings.sandboxProviders.isEmpty, !adding {
-                EmptyProviders(onAdd: { withAnimation(.snappy(duration: 0.2)) { adding = true } })
-            }
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(groups, id: \.title) { g in
-                    if groups.count > 1 || g.home != nil {
-                        Text(g.title).font(Theme.smallMedium).foregroundStyle(Theme.text3).padding(.top, 4)
-                    }
-                    ForEach(g.providers) { p in ProviderCard(provider: p) }
-                }
+                Hairline().padding(.leading, 14)
+                AddProviderForm(home: addHome, onDone: { withAnimation(.snappy(duration: 0.2)) { adding = false } })
             }
         }
     }
-}
 
-extension SandboxProviderSettings {
-    struct Group {
-        var home: SandboxProviderHome?
-        var title: String
-        var providers: [SandboxProviderConfig]
+    /// This Mac's car when it runs (else this Mac's Keychain); a remote car once it's connected.
+    private var addHome: SandboxProviderHome? {
+        if link.isLocal { return link.isEnabled ? .thisMac : nil }
+        return car
     }
 
-    /// This Mac's car first, then each remote car in Settings order; providers not yet on a car last.
-    var groups: [Group] {
-        let all = app.settings.sandboxProviders
-        var out: [Group] = []
-        let mac = all.filter { $0.home == .thisMac }
-        if !mac.isEmpty { out.append(Group(home: .thisMac, title: "On This Mac's Team Car", providers: mac)) }
-        for car in app.settings.teamCars {
-            let ps = all.filter { $0.remoteCarID == car.id }
-            if !ps.isEmpty { out.append(Group(home: .teamCar(car.id), title: "On \(car.name)", providers: ps)) }
-        }
-        let local = all.filter { $0.home == nil }
-        if !local.isEmpty { out.append(Group(home: nil, title: "On this Mac (Keychain)", providers: local)) }
-        return out
-    }
+    private var canAdd: Bool { link.isLocal || link.isConnected }
 }
 
-private struct EmptyProviders: View {
-    let onAdd: () -> Void
+/// "Default" when it's what the car makes, else a button to make it so.
+private struct DefaultMark: View {
+    let isDefault: Bool
+    let makeDefault: () -> Void
+
     var body: some View {
-        VStack(spacing: 10) {
-            BoatTile(size: 40)
-            Text("No sandbox providers").font(Theme.uiMedium).foregroundStyle(Theme.text)
-            Text("Add a boat.dev account to run workspaces in the cloud.")
-                .font(Theme.small).foregroundStyle(Theme.text3)
-            Button("Add boat.dev…", action: onAdd).buttonStyle(.softCompact)
+        if isDefault {
+            Text("Default")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.text2)
+                .padding(.horizontal, 8)
+                .frame(height: 20)
+                .background(Theme.hover, in: Capsule())
+                .help("New workspaces on this car start here")
+        } else {
+            Button("Make Default", action: makeDefault).buttonStyle(.softCompact)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border, lineWidth: 0.5))
     }
 }
 
-// MARK: - Provider card
+/// Git worktrees on the car's own disk, with the switch to turn them off.
+private struct WorktreeRow: View {
+    @Environment(AppModel.self) private var app
+    let link: TeamCarLink
+    let car: SandboxProviderHome
+    let isDefault: Bool
+    let showDefault: Bool
+
+    private var enabled: Bool { app.settings.preferences(for: car).worktrees }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SettingsIconTile(symbol: "arrow.triangle.branch", tint: enabled ? .orange : .gray, size: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Worktrees").font(Theme.uiMedium).foregroundStyle(enabled ? Theme.text : Theme.text3)
+                Text(subtitle).font(Theme.small).foregroundStyle(Theme.text3).lineLimit(1).truncationMode(.tail)
+            }
+            Spacer(minLength: 12)
+            if enabled, showDefault {
+                DefaultMark(isDefault: isDefault) { app.makeCarDefault(app.worktreeLocation(on: car)) }
+            }
+            Toggle("", isOn: Binding(
+                get: { enabled },
+                set: { on in app.updateCarPreferences(car) { $0.worktrees = on } }
+            ))
+            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+            .help(enabled ? "Stop offering worktrees on \(link.displayName). Existing ones keep working" : "Offer worktrees on \(link.displayName)")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var subtitle: String {
+        guard enabled else { return "Off: new workspaces here are sandboxes only" }
+        if link.isLocal { return "A git worktree on this Mac, the stack running locally" }
+        return link.isConnected ? "A git worktree on \(link.displayName), driven over Race Radio" : "\(link.displayName) is offline"
+    }
+}
 
 /// What the provider's account looks like right now (checked when the card appears).
 private struct AccountState: Equatable {
@@ -88,9 +129,11 @@ private struct AccountState: Equatable {
     var machineTypes: [BoatLimits.MachineType] = []
 }
 
-private struct ProviderCard: View {
+private struct ProviderRow: View {
     @Environment(AppModel.self) private var app
     let provider: SandboxProviderConfig
+    let isDefault: Bool
+    let showDefault: Bool
     @State private var editing = false
     @State private var confirmRemove = false
     @State private var account = AccountState()
@@ -99,24 +142,23 @@ private struct ProviderCard: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             if let error = account.error, !account.checking {
-                Hairline().padding(.leading, 14)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(Theme.warning)
                     Text(error).font(Theme.small).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.leading, 50)
+                .padding(.trailing, 14)
+                .padding(.bottom, 10)
             }
-            Hairline().padding(.leading, 14)
-            facts
             if editing {
-                Hairline().padding(.leading, 14)
+                Hairline().padding(.leading, 50)
+                facts.padding(.leading, 36)
+                Hairline().padding(.leading, 50)
                 ProviderEditor(provider: provider, machineTypes: account.machineTypes, onChangedKey: { Task { await check() } })
+                    .padding(.leading, 36)
             }
         }
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border, lineWidth: 0.5))
         .task(id: checkKey) { await check() }
         .confirmationDialog("Remove \(provider.name)?", isPresented: $confirmRemove) {
             Button("Remove", role: .destructive) { Task { await app.removeSandboxProvider(provider) } }
@@ -130,13 +172,14 @@ private struct ProviderCard: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            BoatTile(size: 30)
+            BoatTile(size: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.name).font(Theme.uiMedium).foregroundStyle(Theme.text)
                 Text(subtitle).font(Theme.small).foregroundStyle(Theme.text3).lineLimit(1).truncationMode(.tail)
             }
             Spacer(minLength: 12)
             pill
+            if showDefault { DefaultMark(isDefault: isDefault) { app.makeCarDefault(.sandbox(provider.id)) } }
             Button(editing ? "Done" : "Edit") { withAnimation(.snappy(duration: 0.2)) { editing.toggle() } }
                 .buttonStyle(.softCompact)
             Menu {
@@ -155,7 +198,7 @@ private struct ProviderCard: View {
             .help("More")
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 
     /// Re-check when the key's location or the car's connection changes.
@@ -399,34 +442,24 @@ private struct ProviderEditor: View {
     }
 }
 
+/// A new boat.dev provider on one car (`home` nil = this Mac's Keychain, when This Mac has no car).
 private struct AddProviderForm: View {
     @Environment(AppModel.self) private var app
+    let home: SandboxProviderHome?
     let onDone: () -> Void
     @State private var name = ""
     @State private var apiKey = ""
-    @State private var home: SandboxProviderHome?
     @State private var saving = false
 
     var body: some View {
-        SettingsSection(
-            title: "New sandbox provider",
-            footer: "Use one provider per boat.dev account or team, or several for one account with different defaults (e.g. a \"large\" one for heavy repos). You can change everything later."
-        ) {
+        VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: "Service") {
                 HStack(spacing: 6) {
                     BoatMark().fill(BoatMark.brandBlue).aspectRatio(BoatMark.aspectRatio, contentMode: .fit).frame(height: 13)
                     Text("boat.dev").font(Theme.ui).foregroundStyle(Theme.text)
                 }
             }
-            if !app.providerHomes.isEmpty {
-                SettingsRow(title: "Team Car", subtitle: "The machine that keeps the key and starts its sandboxes") {
-                    Picker("", selection: $home) {
-                        ForEach(app.providerHomes, id: \.self) { h in Text(app.carName(for: h)).tag(Optional(h)) }
-                    }
-                    .labelsHidden().fixedSize()
-                }
-            }
-            SettingsRow(title: "Name", subtitle: "Shown in the sidebar and \"New workspace on…\"") {
+            SettingsRow(title: "Name", subtitle: "Shown in \"New workspace on…\" under this car") {
                 TextField(defaultName, text: $name).modifier(FieldStyle())
             }
             SettingsRow(
@@ -440,7 +473,7 @@ private struct AddProviderForm: View {
             SettingsRow(title: "") {
                 HStack(spacing: 6) {
                     Button("Cancel", action: onDone).buttonStyle(.softCompact)
-                    Button(saving ? "Adding…" : "Add Provider") {
+                    Button(saving ? "Adding…" : "Add Sandbox Provider") {
                         let n = name.trimmingCharacters(in: .whitespaces)
                         saving = true
                         Task {
@@ -456,9 +489,10 @@ private struct AddProviderForm: View {
                     .disabled(saving)
                 }
             }
+            Text("One provider per boat.dev account or team, or several for one account with different defaults (e.g. a \"large\" one for heavy repos).")
+                .font(Theme.small).foregroundStyle(Theme.text3).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14).padding(.bottom, 12)
         }
-        // New providers go to This Mac's car (or the first connected one).
-        .onAppear { if home == nil { home = app.providerHomes.first } }
     }
 
     /// "boat.dev", then "boat.dev 2", …
