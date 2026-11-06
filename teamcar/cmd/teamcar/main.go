@@ -27,6 +27,7 @@ import (
 	"github.com/arbarlow/domestique/teamcar/internal/agent"
 	"github.com/arbarlow/domestique/teamcar/internal/agent/claude"
 	"github.com/arbarlow/domestique/teamcar/internal/agent/codex"
+	"github.com/arbarlow/domestique/teamcar/internal/agent/lineproc"
 	"github.com/arbarlow/domestique/teamcar/internal/core"
 	"github.com/arbarlow/domestique/teamcar/internal/radio"
 	"github.com/arbarlow/domestique/teamcar/internal/sandbox"
@@ -101,6 +102,9 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Under launchd or systemd PATH is minimal; git needs Homebrew's git-lfs for LFS repos, and setup
+	// scripts expect the usual user tool dirs. Every child process inherits this.
+	extendPath()
 	if len(listen) > 0 {
 		cfg.Listen = listen
 	}
@@ -319,4 +323,14 @@ func parseScope(s string) (radiov1.TokenScope, error) {
 
 func scopeName(s radiov1.TokenScope) string {
 	return strings.ToLower(strings.TrimPrefix(s.String(), "TOKEN_SCOPE_"))
+}
+
+// extendPath appends lineproc.ExtraPathDirs (Homebrew, ~/.local/bin, ...) to this process's PATH, so the
+// existing entries keep precedence.
+func extendPath() {
+	for _, kv := range lineproc.Environ(nil) {
+		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
+			os.Setenv("PATH", v)
+		}
+	}
 }

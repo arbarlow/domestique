@@ -1,4 +1,5 @@
 import Darwin
+import DQCore
 import Foundation
 import Synchronization
 
@@ -25,8 +26,12 @@ public enum LocalTeamCar {
 
     /// If nothing answers on `socketPath`, starts `teamcar serve` detached (its own session, output appended
     /// to home/teamcar.log; it outlives the app) and waits up to `timeout` for the socket to accept.
+    /// It runs with the user's login-shell environment: a GUI app's own PATH is launchd's minimal one, which
+    /// would leave git without Homebrew tools like git-lfs (and setup scripts without node, bun, ...).
     public static func ensureRunning(timeout: Duration = .seconds(10)) async throws -> TeamCarEndpoint {
-        try await launch(timeout: timeout).endpoint
+        let login = await LoginEnvironment.shared.environment()
+        let env = ProcessInfo.processInfo.environment.merging(login) { $1 }
+        return try await launch(timeout: timeout, environment: env).endpoint
     }
 
     // MARK: Internals (environment injectable for tests)
