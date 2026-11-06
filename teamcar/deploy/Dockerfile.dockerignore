@@ -1,0 +1,5 @@
+# Build context is the teamcar directory.
+/teamcar
+/deploy
+**/*.test
+.git

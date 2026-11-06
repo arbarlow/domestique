@@ -1,0 +1,922 @@
+// Race Radio v1: the protocol between Domestique clients and Team Car servers.
+//
+// Transport: one WebSocket per client, binary messages only. Each WebSocket message is exactly one
+// ClientFrame (client -> server) or ServerFrame (server -> client). The same framing runs over a
+// Unix socket (local Mac) and TCP/TLS (servers).
+//
+// Rules for changing this file: additive changes only (new fields, new oneof arms, new enum values).
+// `buf breaking` enforces it. A breaking change means a new package, radio.v2.
+syntax = "proto3";
+
+package radio.v1;
+
+option go_package = "github.com/arbarlow/domestique/teamcar/gen/radio/v1;radiov1";
+option swift_prefix = "Radio_";
+
+// ---------------------------------------------------------------------------------------------
+// Frames
+// ---------------------------------------------------------------------------------------------
+
+message ClientFrame {
+  oneof frame {
+    // Must be the first frame on a connection.
+    Hello hello = 1;
+    Request request = 2;
+    Ping ping = 3;
+  }
+}
+
+message ServerFrame {
+  oneof frame {
+    // Answer to Hello. Sent exactly once, first.
+    Welcome welcome = 1;
+    Response response = 2;
+    Event event = 3;
+    // The server dropped a subscription (slow consumer, or the stream ended). Resubscribe from
+    // `resume_seq` to catch up.
+    Gap gap = 4;
+    Pong pong = 5;
+    // The server is closing the connection (bad token, protocol mismatch, shutdown).
+    Goodbye goodbye = 6;
+  }
+}
+
+// The current protocol version. Bumped only for behaviour changes that capabilities can't express.
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_1 = 1;
+}
+
+message Hello {
+  ProtocolVersion protocol_version = 1;
+  // Stable per client install. Lets the server tell reconnects from new clients.
+  string client_id = 2;
+  // Human readable, e.g. "Domestique for Mac 0.4.0".
+  string client_name = 3;
+  // Bearer token. Optional on a Unix socket, required on TCP.
+  string token = 4;
+  // Optional features the client understands, e.g. "zstd".
+  repeated string capabilities = 5;
+}
+
+message Welcome {
+  ProtocolVersion protocol_version = 1;
+  // Stable id of this Team Car (persisted on first start).
+  string server_id = 2;
+  string server_name = 3;
+  string server_version = 4;
+  repeated string capabilities = 5;
+  // What the presented token (or the Unix socket) allows.
+  TokenScope scope = 6;
+}
+
+message Goodbye {
+  ErrorCode code = 1;
+  string message = 2;
+}
+
+message Ping {
+  uint64 nonce = 1;
+}
+
+message Pong {
+  uint64 nonce = 1;
+}
+
+message Gap {
+  uint64 subscription_id = 1;
+  // Resubscribe with this cursor (rider streams). 0 for snapshot streams.
+  uint64 resume_seq = 2;
+  string reason = 3;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Requests and responses
+// ---------------------------------------------------------------------------------------------
+
+message Request {
+  // Chosen by the client, unique per connection. Echoed in the Response.
+  uint64 id = 1;
+  // Optional. Requests that create things (CreateWorkspace, OpenRider, SendMessage) with the same
+  // key within 10 minutes return the original result instead of running twice.
+  string idempotency_key = 2;
+
+  oneof command {
+    GetServerInfo get_server_info = 10;
+    Subscribe subscribe = 11;
+    Unsubscribe unsubscribe = 12;
+
+    ListRepositories list_repositories = 20;
+    AddRepository add_repository = 21;
+    RemoveRepository remove_repository = 22;
+
+    ListWorkspaces list_workspaces = 30;
+    CreateWorkspace create_workspace = 31;
+    ArchiveWorkspace archive_workspace = 32;
+    DeleteWorkspace delete_workspace = 33;
+    ImportWorkspace import_workspace = 34;
+
+    OpenRider open_rider = 40;
+    CloseRider close_rider = 41;
+    SendMessage send_message = 42;
+    Interrupt interrupt = 43;
+    RespondApproval respond_approval = 44;
+    AnswerQuestion answer_question = 45;
+    UpdateRider update_rider = 46;
+    ListModels list_models = 47;
+    GetTranscript get_transcript = 48;
+
+    GetDiff get_diff = 60;
+    ListFiles list_files = 61;
+    ReadFile read_file = 62;
+
+    // Running processes (see ProcessTarget).
+    ProcessInput process_input = 50;
+    ResizeProcess resize_process = 51;
+    SignalProcess signal_process = 52;
+
+    CreateToken create_token = 90;
+    ListTokens list_tokens = 91;
+    RevokeToken revoke_token = 92;
+  }
+
+  // Reserved for later phases: ship (70-79), sandboxes (80-89).
+  reserved 70 to 89;
+}
+
+message Response {
+  uint64 id = 1;
+
+  oneof result {
+    Error error = 2;
+    Empty empty = 3;
+    ServerInfo server_info = 10;
+    SubscribeResult subscribe = 11;
+    RepositoryList repositories = 20;
+    Repository repository = 21;
+    WorkspaceList workspaces = 30;
+    Workspace workspace = 31;
+    Rider rider = 40;
+    ModelList models = 47;
+    TranscriptPage transcript = 48;
+    Diff diff = 60;
+    FileList files = 61;
+    FileContent file = 62;
+    CreatedToken created_token = 90;
+    TokenList tokens = 91;
+  }
+}
+
+message Empty {}
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_INVALID_ARGUMENT = 1;
+  ERROR_CODE_NOT_FOUND = 2;
+  ERROR_CODE_UNAUTHENTICATED = 3;
+  ERROR_CODE_PERMISSION_DENIED = 4;
+  ERROR_CODE_FAILED_PRECONDITION = 5;
+  ERROR_CODE_UNAVAILABLE = 6;
+  ERROR_CODE_INTERNAL = 7;
+  ERROR_CODE_UNIMPLEMENTED = 8;
+  ERROR_CODE_PROTOCOL = 9;
+}
+
+message Error {
+  ErrorCode code = 1;
+  string message = 2;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------------------------
+
+message GetServerInfo {}
+
+message ServerInfo {
+  string server_id = 1;
+  string server_name = 2;
+  string server_version = 3;
+  // "darwin/arm64", "linux/amd64", ...
+  string platform = 4;
+  // Where worktrees live on this host.
+  string workspaces_root = 5;
+  // Which agent CLIs were found on this host.
+  repeated Provider providers = 6;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Subscriptions
+// ---------------------------------------------------------------------------------------------
+
+message Subscribe {
+  oneof target {
+    // Repositories, workspaces and riders on this Team Car. Starts with a ServerSnapshot.
+    ServerTarget server = 1;
+    // One rider's transcript and live activity.
+    RiderTarget rider = 2;
+    // Starts a process and streams its output: ProcessStarted, then ProcessOutput chunks, then
+    // ProcessExited. Needs the OPERATE scope. The process belongs to this subscription: unsubscribing
+    // or disconnecting hangs it up (SIGHUP to its process group, then SIGKILL), like ssh.
+    ProcessTarget process = 3;
+  }
+}
+
+message ProcessTarget {
+  // Optional: run inside this workspace (relative cwd resolves against it; its environment, e.g.
+  // DOMESTIQUE_PORT, is added).
+  string workspace_id = 1;
+  // Absolute, or relative to the workspace. Default: the workspace, else the server's home directory.
+  string cwd = 2;
+  // Exactly one of argv (executable resolved on PATH) or shell (a script run with the server user's
+  // shell, `-c`).
+  repeated string argv = 3;
+  string shell = 4;
+  // Added on top of the server's environment (and the workspace's).
+  map<string, string> env = 5;
+  // Run on a pseudo-terminal: stdout and stderr arrive merged as STDOUT, input is raw.
+  bool tty = 6;
+  uint32 cols = 7;
+  uint32 rows = 8;
+}
+
+enum OutputStream {
+  OUTPUT_STREAM_UNSPECIFIED = 0;
+  OUTPUT_STREAM_STDOUT = 1;
+  OUTPUT_STREAM_STDERR = 2;
+}
+
+message ProcessStarted {
+  // Use with ProcessInput / ResizeProcess / SignalProcess.
+  string process_id = 1;
+  int32 pid = 2;
+}
+
+// Output is never dropped: a slow client slows the process down (backpressure), it doesn't lose bytes.
+message ProcessOutput {
+  OutputStream stream = 1;
+  bytes data = 2;
+}
+
+message ProcessExited {
+  // -1 when killed by a signal.
+  int32 exit_code = 1;
+  // The signal that killed it, if any (e.g. 9, 15).
+  int32 signal = 2;
+  // Set when the process couldn't start at all (exit_code is then 127).
+  string error = 3;
+}
+
+message ProcessInput {
+  string process_id = 1;
+  bytes data = 2;
+  // Close the process's stdin after data.
+  bool eof = 3;
+}
+
+message ResizeProcess {
+  string process_id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+message SignalProcess {
+  string process_id = 1;
+  // POSIX signal number, sent to the process group (e.g. 2 INT, 15 TERM, 9 KILL).
+  int32 signal = 2;
+}
+
+message ServerTarget {}
+
+message RiderTarget {
+  string rider_id = 1;
+  // Replay every transcript item persisted after this cursor (0 = from the start), then go live.
+  // Replayed items arrive in display (creation) order; each event's seq is that item's last
+  // write, and ReplayDone carries the highest seq of the replay.
+  uint64 from_seq = 2;
+  // Coalesce AppendText events for at most this long. 0 = server default (33 ms).
+  uint32 coalesce_ms = 3;
+}
+
+message SubscribeResult {
+  uint64 subscription_id = 1;
+}
+
+message Unsubscribe {
+  uint64 subscription_id = 1;
+}
+
+message Event {
+  uint64 subscription_id = 1;
+  // Rider streams: the latest persisted transcript seq this event is consistent with. Store the
+  // highest you have seen and resubscribe with it. Snapshot streams: a per-subscription counter.
+  uint64 seq = 2;
+
+  oneof payload {
+    // Server stream.
+    ServerSnapshot server_snapshot = 10;
+    Repository repository_upserted = 11;
+    string repository_removed = 12;
+    Workspace workspace_upserted = 13;
+    string workspace_removed = 14;
+    Rider rider_upserted = 15;
+    string rider_removed = 16;
+
+    // Rider stream.
+    TranscriptItem item_upserted = 30;
+    AppendText append_text = 31;
+    TurnStarted turn_started = 32;
+    TurnEnded turn_ended = 33;
+    StatusLine status = 34;
+    AgentTask task = 35;
+    RateLimit rate_limit = 36;
+    AgentExited exited = 37;
+    AutoTurnStarted auto_turn_started = 38;
+    ModelList models = 39;
+    // Sent once after replay finishes; everything after is live.
+    ReplayDone replay_done = 40;
+
+    // Process stream.
+    ProcessStarted process_started = 50;
+    ProcessOutput process_output = 51;
+    ProcessExited process_exited = 52;
+  }
+}
+
+message ServerSnapshot {
+  repeated Repository repositories = 1;
+  repeated Workspace workspaces = 2;
+  repeated Rider riders = 3;
+}
+
+message AppendText {
+  string item_id = 1;
+  string delta = 2;
+}
+
+message TurnStarted {}
+
+message TurnEnded {
+  TurnSummary summary = 1;
+}
+
+message StatusLine {
+  // Empty clears the status.
+  string text = 1;
+}
+
+message AgentExited {
+  string message = 1;
+}
+
+message AutoTurnStarted {
+  string reason = 1;
+}
+
+message ReplayDone {}
+
+// ---------------------------------------------------------------------------------------------
+// Repositories and workspaces
+// ---------------------------------------------------------------------------------------------
+
+enum ShipMode {
+  SHIP_MODE_UNSPECIFIED = 0;
+  SHIP_MODE_PULL_REQUEST = 1;
+  SHIP_MODE_TRUNK = 2;
+}
+
+message Repository {
+  string id = 1;
+  // Folder-safe name, used in worktree paths.
+  string name = 2;
+  // Path of the clone on the Team Car's host.
+  string path = 3;
+  string remote_url = 4;
+  string default_branch = 5;
+  ShipMode ship_mode = 6;
+  int64 created_at_ms = 7;
+  string display_name = 8;
+}
+
+message RepositoryList {
+  repeated Repository repositories = 1;
+}
+
+message ListRepositories {}
+
+message AddRepository {
+  // Exactly one of path (an existing clone on the Team Car's host) or clone_url.
+  string path = 1;
+  string clone_url = 2;
+  // Optional folder name for clone_url. Defaults to the repo name from the URL.
+  string name = 3;
+  // Optional client-chosen id (a UUID). Lets clients keep their own ids when they hand a repository
+  // over to a Team Car. Ignored when the repository is already registered.
+  string id = 4;
+}
+
+message RemoveRepository {
+  string repository_id = 1;
+}
+
+enum WorkspaceState {
+  WORKSPACE_STATE_UNSPECIFIED = 0;
+  WORKSPACE_STATE_CREATING = 1;
+  WORKSPACE_STATE_SETTING_UP = 2;
+  WORKSPACE_STATE_READY = 3;
+  WORKSPACE_STATE_FAILED = 4;
+  WORKSPACE_STATE_ARCHIVED = 5;
+}
+
+message Workspace {
+  string id = 1;
+  string repository_id = 2;
+  // Short human name, e.g. "galibier". Also the worktree directory name.
+  string name = 3;
+  string branch = 4;
+  string path = 5;
+  string base_branch = 6;
+  string base_commit = 7;
+  // First of 10 consecutive ports reserved for this workspace (DOMESTIQUE_PORT).
+  int32 port_base = 8;
+  WorkspaceState state = 9;
+  // Set when state is FAILED.
+  string failure = 10;
+  int64 created_at_ms = 11;
+  int32 pr_number = 12;
+  string pr_url = 13;
+  bool has_unread = 14;
+}
+
+message WorkspaceList {
+  repeated Workspace workspaces = 1;
+}
+
+message ListWorkspaces {
+  // Optional filter.
+  string repository_id = 1;
+  bool include_archived = 2;
+}
+
+message CreateWorkspace {
+  string repository_id = 1;
+  // Optional; a cycling-themed name is picked when empty.
+  string name = 2;
+  // Optional; the repository's default branch when empty.
+  string base_branch = 3;
+  // Optional first prompt, sent once the workspace is ready.
+  string prompt = 4;
+  // Optional rider to open with the workspace (always opened when set, even without a prompt).
+  // When a prompt is given and this is unset, a default rider is opened.
+  OpenRider rider = 5;
+  // Optional client-chosen workspace id (a UUID).
+  string id = 6;
+  // Optional branch name. Default: "<branch_prefix>/<name>".
+  string branch = 7;
+  // Don't run domestique.toml's [setup] (the client runs it itself, e.g. to show its output).
+  bool skip_setup = 8;
+}
+
+message ArchiveWorkspace {
+  string workspace_id = 1;
+  // Also delete the local branch.
+  bool delete_branch = 2;
+  // Don't run domestique.toml's [archive] script (the client already did).
+  bool skip_archive_script = 3;
+}
+
+// Forgets an archived workspace: its riders and transcripts are deleted.
+message DeleteWorkspace {
+  string workspace_id = 1;
+  // Also delete the local branch.
+  bool delete_branch = 2;
+}
+
+// Registers a workspace that already exists on the Team Car's host (e.g. a worktree a client created
+// before it used Team Car), with its riders and their transcripts. Ids are kept. Idempotent: an
+// existing workspace is returned unchanged.
+message ImportWorkspace {
+  // id, repository_id, name, branch, path, base_branch, base_commit, port_base, state and
+  // created_at_ms are used. CREATING / SETTING_UP are stored as READY.
+  Workspace workspace = 1;
+  repeated ImportRider riders = 2;
+}
+
+message ImportRider {
+  // id, title, provider, model, effort, permission_mode, provider_session_id and created_at_ms are used.
+  Rider rider = 1;
+  // In display order.
+  repeated TranscriptItem items = 2;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Riders (agent sessions, shown as chat tabs)
+// ---------------------------------------------------------------------------------------------
+
+enum Provider {
+  PROVIDER_UNSPECIFIED = 0;
+  PROVIDER_CLAUDE = 1;
+  PROVIDER_CODEX = 2;
+}
+
+// How much the agent may do without asking.
+enum PermissionMode {
+  PERMISSION_MODE_UNSPECIFIED = 0;
+  // Never ask (Claude bypassPermissions, Codex never + danger-full-access). Default.
+  PERMISSION_MODE_BYPASS = 1;
+  // The provider's own reviewer decides.
+  PERMISSION_MODE_AUTO = 2;
+  // Every risky action becomes an approval request.
+  PERMISSION_MODE_ASK = 3;
+}
+
+enum RiderActivity {
+  RIDER_ACTIVITY_UNSPECIFIED = 0;
+  RIDER_ACTIVITY_IDLE = 1;
+  RIDER_ACTIVITY_RUNNING = 2;
+  // A turn is running and waiting on an approval or question.
+  RIDER_ACTIVITY_AWAITING_INPUT = 3;
+}
+
+message Rider {
+  string id = 1;
+  string workspace_id = 2;
+  string title = 3;
+  Provider provider = 4;
+  // Empty = provider default.
+  string model = 5;
+  string effort = 6;
+  PermissionMode permission_mode = 7;
+  // Claude session id / Codex thread id, used to resume.
+  string provider_session_id = 8;
+  int64 created_at_ms = 9;
+  RiderActivity activity = 10;
+  // Highest persisted transcript seq.
+  uint64 last_seq = 11;
+  string status = 12;
+}
+
+message OpenRider {
+  // Ignored inside CreateWorkspace.
+  string workspace_id = 1;
+  Provider provider = 2;
+  string model = 3;
+  string effort = 4;
+  PermissionMode permission_mode = 5;
+  string title = 6;
+  // Optional client-chosen rider id (a UUID). Must not belong to an open rider.
+  string id = 7;
+}
+
+message CloseRider {
+  string rider_id = 1;
+}
+
+message Attachment {
+  bytes data = 1;
+  string media_type = 2;
+  string filename = 3;
+}
+
+message SendMessage {
+  string rider_id = 1;
+  string text = 2;
+  repeated Attachment attachments = 3;
+}
+
+message Interrupt {
+  string rider_id = 1;
+}
+
+enum Decision {
+  DECISION_UNSPECIFIED = 0;
+  DECISION_APPROVE = 1;
+  DECISION_APPROVE_FOR_SESSION = 2;
+  DECISION_DENY = 3;
+}
+
+message RespondApproval {
+  string rider_id = 1;
+  string request_id = 2;
+  Decision decision = 3;
+  // Optional reason, sent to the agent on DENY.
+  string message = 4;
+}
+
+message AnswerQuestion {
+  string rider_id = 1;
+  string request_id = 2;
+  // Keyed by question id.
+  map<string, string> answers = 3;
+}
+
+message UpdateRider {
+  string rider_id = 1;
+  optional string model = 2;
+  optional string effort = 3;
+  optional PermissionMode permission_mode = 4;
+  optional string title = 5;
+}
+
+message ListModels {
+  Provider provider = 1;
+}
+
+message ModelOption {
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  repeated string efforts = 4;
+  string default_effort = 5;
+  bool is_default = 6;
+}
+
+message ModelList {
+  repeated ModelOption models = 1;
+}
+
+// Pull-style transcript paging, for clients that don't want a live subscription.
+message GetTranscript {
+  string rider_id = 1;
+  uint64 after_seq = 2;
+  // 0 = server default (500).
+  uint32 limit = 3;
+}
+
+message TranscriptPage {
+  repeated TranscriptEntry entries = 1;
+  // Pass as after_seq to get the next page. Equal to the request's after_seq when there's nothing new.
+  uint64 next_seq = 2;
+  bool has_more = 3;
+}
+
+message TranscriptEntry {
+  // Last write. Pages are ordered by seq.
+  uint64 seq = 1;
+  TranscriptItem item = 2;
+  // Creation order: display items sorted by this. (An item rewritten later, e.g. when streamed
+  // text is persisted, gets a new seq but keeps its position.)
+  uint64 position = 3;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Transcript
+// ---------------------------------------------------------------------------------------------
+
+message TranscriptItem {
+  string id = 1;
+  int64 timestamp_ms = 2;
+
+  oneof kind {
+    string user = 10;
+    // Markdown from the agent.
+    string assistant = 11;
+    string reasoning = 12;
+    ToolCall tool = 13;
+    ApprovalRequest approval = 14;
+    string notice = 15;
+    string error = 16;
+    TurnSummary turn_summary = 17;
+    // A turn the agent started on its own (e.g. a background subagent finished).
+    string trigger = 18;
+  }
+}
+
+enum ToolStatus {
+  TOOL_STATUS_UNSPECIFIED = 0;
+  TOOL_STATUS_RUNNING = 1;
+  TOOL_STATUS_COMPLETED = 2;
+  TOOL_STATUS_FAILED = 3;
+  TOOL_STATUS_DECLINED = 4;
+}
+
+message ToolCall {
+  // Normalised: "Bash", "Read", "Edit", "Write", "Grep", "WebSearch", "MCP", "Task", ...
+  string name = 1;
+  // One line, e.g. the command or the file path.
+  string summary = 2;
+  // Full input rendered as text (JSON or command).
+  string input = 3;
+  string output = 4;
+  ToolStatus status = 5;
+  repeated FileChange file_changes = 6;
+  // The agent's own short description of the call (Claude's Bash `description`), when it gives one.
+  string description = 7;
+}
+
+message FileChange {
+  string path = 1;
+  // Unified diff.
+  string diff = 2;
+}
+
+enum ApprovalResolution {
+  APPROVAL_RESOLUTION_UNSPECIFIED = 0;
+  APPROVAL_RESOLUTION_PENDING = 1;
+  APPROVAL_RESOLUTION_APPROVED = 2;
+  APPROVAL_RESOLUTION_APPROVED_FOR_SESSION = 3;
+  APPROVAL_RESOLUTION_DENIED = 4;
+  APPROVAL_RESOLUTION_ANSWERED = 5;
+  APPROVAL_RESOLUTION_CANCELLED = 6;
+}
+
+message ApprovalRequest {
+  // The provider's request id; pass it to RespondApproval / AnswerQuestion.
+  string request_id = 1;
+  string title = 2;
+  string detail = 3;
+  ApprovalResolution resolution = 4;
+  // Non-empty = a question for the user (answer with AnswerQuestion) rather than a yes/no approval.
+  repeated AgentQuestion questions = 5;
+  map<string, string> answers = 6;
+}
+
+message AgentQuestion {
+  string id = 1;
+  string header = 2;
+  string question = 3;
+  repeated QuestionOption options = 4;
+  bool multi_select = 5;
+}
+
+message QuestionOption {
+  string label = 1;
+  string description = 2;
+}
+
+message TurnSummary {
+  optional int64 duration_ms = 1;
+  optional double cost_usd = 2;
+  optional int64 input_tokens = 3;
+  optional int64 output_tokens = 4;
+  bool is_error = 5;
+  string message = 6;
+}
+
+enum AgentTaskStatus {
+  AGENT_TASK_STATUS_UNSPECIFIED = 0;
+  AGENT_TASK_STATUS_RUNNING = 1;
+  AGENT_TASK_STATUS_COMPLETED = 2;
+  AGENT_TASK_STATUS_FAILED = 3;
+  AGENT_TASK_STATUS_STOPPED = 4;
+}
+
+// A subagent (Claude's Agent tool) tracked live.
+message AgentTask {
+  string id = 1;
+  // The tool call that spawned it (matches a transcript item id).
+  string tool_use_id = 2;
+  string description = 3;
+  string subagent_type = 4;
+  string prompt = 5;
+  bool is_background = 6;
+  AgentTaskStatus status = 7;
+  int64 started_at_ms = 8;
+  int64 ended_at_ms = 9;
+  int32 tool_uses = 10;
+  int64 total_tokens = 11;
+  string activity = 12;
+  repeated AgentTaskStep steps = 13;
+  string output = 14;
+  string summary = 15;
+}
+
+message AgentTaskStep {
+  string name = 1;
+  string summary = 2;
+}
+
+message RateLimit {
+  // The most-used window (kept for simple clients): 0..1 of the window used.
+  double used_fraction = 1;
+  // "5-hour", "Weekly", ...
+  string window = 2;
+  int64 resets_at_ms = 3;
+  // Every window this update reported. Updates can be partial; merge by window id.
+  repeated RateLimitWindow windows = 4;
+  // Claude: currently drawing on extra usage / overage credits.
+  bool using_overage = 5;
+  // Claude: overage availability ("allowed", "rejected", ...) and why it's unavailable.
+  string overage_status = 6;
+  string overage_disabled_reason = 7;
+  // Codex: plan name, when reported.
+  string plan = 8;
+}
+
+message RateLimitWindow {
+  // Stable key ("five_hour", "seven_day_opus", "primary", ...).
+  string id = 1;
+  // "Current session", "Weekly", "Weekly · Opus", ...
+  string label = 2;
+  // "5 hours", "7 days", when known.
+  string duration = 3;
+  double used_fraction = 4;
+  int64 resets_at_ms = 5;
+  // "allowed", "allowed_warning", "rejected".
+  string status = 6;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Code
+// ---------------------------------------------------------------------------------------------
+
+message GetDiff {
+  string workspace_id = 1;
+  // Optional: only this file.
+  string path = 2;
+}
+
+message Diff {
+  // The merge base the diff is against.
+  string base = 1;
+  repeated FileDiff files = 2;
+  int32 ahead = 3;
+  int32 behind = 4;
+}
+
+enum FileDiffStatus {
+  FILE_DIFF_STATUS_UNSPECIFIED = 0;
+  FILE_DIFF_STATUS_ADDED = 1;
+  FILE_DIFF_STATUS_MODIFIED = 2;
+  FILE_DIFF_STATUS_DELETED = 3;
+  FILE_DIFF_STATUS_RENAMED = 4;
+}
+
+message FileDiff {
+  string path = 1;
+  string old_path = 2;
+  FileDiffStatus status = 3;
+  int32 additions = 4;
+  int32 deletions = 5;
+  // Unified diff text for this file. Empty in a whole-workspace listing when the file is binary.
+  string patch = 6;
+  bool binary = 7;
+}
+
+message ListFiles {
+  string workspace_id = 1;
+}
+
+message FileList {
+  // Paths relative to the workspace root, tracked and untracked (excluding ignored).
+  repeated string paths = 1;
+}
+
+message ReadFile {
+  string workspace_id = 1;
+  // Relative to the workspace root.
+  string path = 2;
+  // 0 = server default (2 MB).
+  int64 max_bytes = 3;
+}
+
+message FileContent {
+  string path = 1;
+  bytes data = 2;
+  int64 size = 3;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tokens
+// ---------------------------------------------------------------------------------------------
+
+enum TokenScope {
+  TOKEN_SCOPE_UNSPECIFIED = 0;
+  // Watch only.
+  TOKEN_SCOPE_READ = 1;
+  // Create workspaces, prompt, answer approvals, ship. No file reads or terminals.
+  TOKEN_SCOPE_TRIGGER = 2;
+  // Normal app use.
+  TOKEN_SCOPE_OPERATE = 3;
+  // Everything, including tokens.
+  TOKEN_SCOPE_ADMIN = 4;
+}
+
+message CreateToken {
+  string name = 1;
+  TokenScope scope = 2;
+}
+
+message CreatedToken {
+  TokenInfo info = 1;
+  // Shown once. Only a hash is stored.
+  string secret = 2;
+}
+
+message ListTokens {}
+
+message TokenList {
+  repeated TokenInfo tokens = 1;
+}
+
+message TokenInfo {
+  string id = 1;
+  string name = 2;
+  TokenScope scope = 3;
+  int64 created_at_ms = 4;
+  int64 last_used_at_ms = 5;
+}
+
+message RevokeToken {
+  string token_id = 1;
+}
