@@ -659,6 +659,7 @@ final class ChatModel {
             upsert(item)
             if case .tool(let call) = item.kind, call.name == "Bash", call.status != .running, !call.output.isEmpty {
                 workspace.noticePullRequestURL(in: call.output)
+                workspace.noticeTrunkPush(in: call.output)
             }
             if case .tool(let call) = item.kind, call.status != .running,
                 !call.fileChanges.isEmpty || ["Bash", "Edit", "Write", "MultiEdit"].contains(call.name)
