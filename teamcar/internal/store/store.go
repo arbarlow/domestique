@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS tokens (
   created_at INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS sandbox_providers (
+  id TEXT PRIMARY KEY,
+  data BLOB NOT NULL,
+  api_key TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL
+);
 `)
 	return err
 }
@@ -450,4 +456,61 @@ func (s *Store) Item(riderID, itemID string) (*radiov1.TranscriptItem, error) {
 	}
 	it := &radiov1.TranscriptItem{}
 	return it, proto.Unmarshal(b, it)
+}
+
+// ---- sandbox providers
+
+// StoredSandboxProvider is a provider saved over Race Radio, with its API key ("" = none stored).
+type StoredSandboxProvider struct {
+	Provider *radiov1.SandboxProvider
+	APIKey   string
+}
+
+func (s *Store) SandboxProviders() ([]StoredSandboxProvider, error) {
+	rows, err := s.db.Query(`SELECT data, api_key FROM sandbox_providers ORDER BY rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredSandboxProvider
+	for rows.Next() {
+		var b []byte
+		var key string
+		if err := rows.Scan(&b, &key); err != nil {
+			return nil, err
+		}
+		p := &radiov1.SandboxProvider{}
+		if err := proto.Unmarshal(b, p); err != nil {
+			return nil, err
+		}
+		out = append(out, StoredSandboxProvider{Provider: p, APIKey: key})
+	}
+	return out, rows.Err()
+}
+
+// PutSandboxProvider upserts a provider. apiKey nil keeps the stored key.
+func (s *Store) PutSandboxProvider(p *radiov1.SandboxProvider, apiKey *string) error {
+	b, err := proto.Marshal(p)
+	if err != nil {
+		return err
+	}
+	if apiKey == nil {
+		_, err = s.db.Exec(`INSERT INTO sandbox_providers (id, data, updated_at) VALUES (?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`, p.Id, b, now())
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO sandbox_providers (id, data, api_key, updated_at) VALUES (?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET data = excluded.data, api_key = excluded.api_key, updated_at = excluded.updated_at`, p.Id, b, *apiKey, now())
+	return err
+}
+
+func (s *Store) DeleteSandboxProvider(id string) error {
+	res, err := s.db.Exec(`DELETE FROM sandbox_providers WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

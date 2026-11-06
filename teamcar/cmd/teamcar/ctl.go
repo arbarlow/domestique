@@ -1,14 +1,18 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/arbarlow/domestique/teamcar/client"
 	radiov1 "github.com/arbarlow/domestique/teamcar/gen/radio/v1"
@@ -38,6 +42,11 @@ Commands:
   files WORKSPACE
   cat WORKSPACE PATH
   models claude|codex
+  sandbox-providers [--check]            list sandbox providers (--check reads each account)
+  add-sandbox-provider NAME [--id UUID] [--machine-type T] [--auto-stop MIN] [--environment E] [--from SNAPSHOT]
+                                         save a boat.dev provider; the API key is read from stdin
+  rm-sandbox-provider ID
+  sandboxes PROVIDER                     list a provider's sandboxes
 `
 
 func ctl(args []string) error {
@@ -251,10 +260,86 @@ func ctl(args []string) error {
 			}
 			fmt.Printf("%s\t%s%s\t%s\n", m.Id, m.DisplayName, def, strings.Join(m.Efforts, ","))
 		}
+	case "sandbox-providers":
+		check := len(cargs) > 0 && (cargs[0] == "--check" || cargs[0] == "-check")
+		ps, err := c.SandboxProviders(ctx, check)
+		if err != nil {
+			return err
+		}
+		for _, p := range ps {
+			src := strings.ToLower(strings.TrimPrefix(p.CredentialSource.String(), "SANDBOX_CREDENTIAL_SOURCE_"))
+			line := fmt.Sprintf("%s\t%s\tkey: %s", p.Id, p.Name, src)
+			if p.FromConfig {
+				line += "\t(teamcar.toml)"
+			}
+			if a := p.Account; a != nil {
+				if a.Error != "" {
+					line += "\t" + a.Error
+				} else {
+					line += "\t" + cmp.Or(a.Login, a.Email)
+				}
+			}
+			fmt.Println(line)
+		}
+	case "add-sandbox-provider":
+		return ctlAddSandboxProvider(ctx, c, cargs)
+	case "rm-sandbox-provider":
+		if len(cargs) != 1 {
+			return errors.New("usage: rm-sandbox-provider ID")
+		}
+		return c.RemoveSandboxProvider(ctx, cargs[0])
+	case "sandboxes":
+		if len(cargs) != 1 {
+			return errors.New("usage: sandboxes PROVIDER")
+		}
+		ss, err := c.Sandboxes(ctx, cargs[0])
+		if err != nil {
+			return err
+		}
+		for _, s := range ss {
+			phase := strings.ToLower(strings.TrimPrefix(s.Phase.String(), "SANDBOX_PHASE_"))
+			fmt.Printf("%s\t%s\t%s\t%s\n", s.Id, phase, s.MachineType, s.Name)
+		}
 	default:
 		fs.Usage()
 		return fmt.Errorf("unknown command %q", cmd)
 	}
+	return nil
+}
+
+func ctlAddSandboxProvider(ctx context.Context, c *client.Client, args []string) error {
+	f := flag.NewFlagSet("add-sandbox-provider", flag.ExitOnError)
+	id := f.String("id", "", "provider id (default: a new UUID)")
+	machine := f.String("machine-type", "", "small, default, large or xlarge")
+	autoStop := f.Int("auto-stop", 120, "auto-stop after this many minutes (0 = never)")
+	env := f.String("environment", "", "boat environment name")
+	from := f.String("from", "", "boat saved snapshot to start from")
+	_ = f.Parse(reorder(args))
+	if f.NArg() != 1 {
+		return errors.New("usage: add-sandbox-provider NAME [flags] < api-key")
+	}
+	if *id == "" {
+		*id = uuid.NewString()
+	}
+	d := &radiov1.SandboxDefaults{MachineType: *machine, Environment: *env, FromSnapshot: *from}
+	if *autoStop > 0 {
+		m := uint32(*autoStop)
+		d.AutoStopMinutes = &m
+	}
+	var key *string
+	if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice == 0 {
+		b, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+		if err != nil {
+			return err
+		}
+		k := strings.TrimSpace(string(b))
+		key = &k
+	}
+	p, err := c.SaveSandboxProvider(ctx, &radiov1.SandboxProvider{Id: *id, Name: f.Arg(0), Kind: radiov1.SandboxKind_SANDBOX_KIND_BOAT, Defaults: d}, key)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s\t%s\n", p.Id, p.Name)
 	return nil
 }
 

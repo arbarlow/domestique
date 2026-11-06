@@ -130,6 +130,16 @@ message Request {
     ListFiles list_files = 61;
     ReadFile read_file = 62;
 
+    // Sandbox providers and their sandboxes (see "Sandboxes" below).
+    ListSandboxProviders list_sandbox_providers = 80;
+    SaveSandboxProvider save_sandbox_provider = 81;
+    RemoveSandboxProvider remove_sandbox_provider = 82;
+    ListSandboxes list_sandboxes = 83;
+    GetSandbox get_sandbox = 84;
+    CreateSandbox create_sandbox = 85;
+    ChangeSandbox change_sandbox = 86;
+    OpenSandboxAccess open_sandbox_access = 87;
+
     // Running processes (see ProcessTarget).
     ProcessInput process_input = 50;
     ResizeProcess resize_process = 51;
@@ -140,8 +150,8 @@ message Request {
     RevokeToken revoke_token = 92;
   }
 
-  // Reserved for later phases: ship (70-79), sandboxes (80-89).
-  reserved 70 to 89;
+  // Reserved for later phases: ship (70-79), sandboxes (89).
+  reserved 70 to 79, 89;
 }
 
 message Response {
@@ -164,6 +174,11 @@ message Response {
     FileContent file = 62;
     CreatedToken created_token = 90;
     TokenList tokens = 91;
+    SandboxProviderList sandbox_providers = 80;
+    SandboxProvider sandbox_provider = 81;
+    SandboxList sandboxes = 83;
+    Sandbox sandbox = 84;
+    SandboxAccess sandbox_access = 87;
   }
 }
 
@@ -203,6 +218,8 @@ message ServerInfo {
   string workspaces_root = 5;
   // Which agent CLIs were found on this host.
   repeated Provider providers = 6;
+  // Sandbox services this Team Car can create workspaces' machines on (no account details).
+  repeated SandboxProvider sandbox_providers = 7;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -919,4 +936,223 @@ message TokenInfo {
 
 message RevokeToken {
   string token_id = 1;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sandboxes
+//
+// A Team Car owns its sandbox providers: accounts on a sandbox service (boat.dev) with their API
+// key and defaults. Keys stay on the Team Car; clients ask it to create, resume, stop and open
+// sandboxes. Providers come from teamcar.toml (read-only here) or are saved over Race Radio.
+//
+// Scopes: listing and reading are READ; creating, resuming, stopping, renaming and auto-stop are
+// TRIGGER; deleting, recovering and opening access (SSH keys, desktop, port URLs) are OPERATE;
+// saving and removing providers is ADMIN.
+// ---------------------------------------------------------------------------------------------
+
+enum SandboxKind {
+  SANDBOX_KIND_UNSPECIFIED = 0;
+  SANDBOX_KIND_BOAT = 1;
+}
+
+message SandboxProvider {
+  // A UUID, chosen by whoever creates the provider.
+  string id = 1;
+  SandboxKind kind = 2;
+  string name = 3;
+  SandboxDefaults defaults = 4;
+  // Where the API key comes from. Never the key itself.
+  SandboxCredentialSource credential_source = 5;
+  // Declared in teamcar.toml: SaveSandboxProvider and RemoveSandboxProvider refuse it.
+  bool from_config = 6;
+  // Filled in by ListSandboxProviders{check_account}.
+  SandboxAccount account = 7;
+}
+
+enum SandboxCredentialSource {
+  SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED = 0;
+  // No key: the provider can't be used until one is saved.
+  SANDBOX_CREDENTIAL_SOURCE_NONE = 1;
+  // Saved with SaveSandboxProvider (in the Team Car's database).
+  SANDBOX_CREDENTIAL_SOURCE_STORED = 2;
+  // teamcar.toml's api_key_env / api_key_file.
+  SANDBOX_CREDENTIAL_SOURCE_CONFIG = 3;
+  // BOAT_API_KEY in the Team Car's environment.
+  SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT = 4;
+  // The `boat login` session of the Team Car's user.
+  SANDBOX_CREDENTIAL_SOURCE_CLI = 5;
+}
+
+message SandboxDefaults {
+  // boat: small / default / large / xlarge. Empty = the service default.
+  string machine_type = 1;
+  // Auto-stop this long after a start or resume. Unset = never.
+  optional uint32 auto_stop_minutes = 2;
+  // boat environment name (repositories, secrets, AI credentials). Empty = the account default.
+  string environment = 3;
+  // boat saved snapshot to start from. Empty = a fresh machine.
+  string from_snapshot = 4;
+  // Archiving a workspace deletes its sandbox instead of stopping it.
+  bool delete_on_archive = 5;
+}
+
+message SandboxAccount {
+  string login = 1;
+  string email = 2;
+  string display_name = 3;
+  // Set when the account couldn't be read (bad key, network).
+  string error = 4;
+  bool can_start = 5;
+  string start_blocked_reason = 6;
+  // e.g. "Trial: 3 days left".
+  string trial_line = 7;
+  repeated SandboxMachineType machine_types = 8;
+}
+
+message SandboxMachineType {
+  string type = 1;
+  bool available = 2;
+  string reason = 3;
+}
+
+message SandboxProviderList {
+  repeated SandboxProvider providers = 1;
+}
+
+message ListSandboxProviders {
+  // Also read each provider's account and limits (one API call each).
+  bool check_account = 1;
+}
+
+// Creates or replaces a provider (ADMIN).
+message SaveSandboxProvider {
+  SandboxProvider provider = 1;
+  // Set: replace the stored key ("" deletes it). Unset: keep the stored key.
+  optional string api_key = 2;
+}
+
+message RemoveSandboxProvider {
+  string provider_id = 1;
+}
+
+enum SandboxPhase {
+  SANDBOX_PHASE_UNSPECIFIED = 0;
+  SANDBOX_PHASE_STARTING = 1;
+  SANDBOX_PHASE_RUNNING = 2;
+  SANDBOX_PHASE_STOPPING = 3;
+  SANDBOX_PHASE_STOPPED = 4;
+  SANDBOX_PHASE_ERROR = 5;
+  SANDBOX_PHASE_GONE = 6;
+}
+
+message Sandbox {
+  // The service's id (boat: bx_...).
+  string id = 1;
+  string provider_id = 2;
+  string name = 3;
+  // The service's own state string; `phase` is the normalised one.
+  string state = 4;
+  SandboxPhase phase = 5;
+  string error = 6;
+  string machine_type = 7;
+  int32 vcpu = 8;
+  int32 memory_gb = 9;
+  string ip = 10;
+  // host:port to SSH to, when it isn't ip:22.
+  string ssh_endpoint = 11;
+  string url = 12;
+  optional bool desktop_available = 13;
+  // When an idle stopped sandbox is archived. 0 = unknown.
+  int64 archive_after_ms = 14;
+  // Auto-stop window. Unset = never.
+  optional int32 ttl_seconds = 15;
+  string health = 16;
+  string health_reason = 17;
+  optional bool hydrated = 18;
+  int64 created_at_ms = 19;
+  int64 stopped_at_ms = 20;
+  string environment = 21;
+}
+
+message SandboxList {
+  repeated Sandbox sandboxes = 1;
+}
+
+message ListSandboxes {
+  string provider_id = 1;
+}
+
+message GetSandbox {
+  string provider_id = 1;
+  string sandbox_id = 2;
+}
+
+// Starts a sandbox and returns it straight away (usually STARTING). Pass Request.idempotency_key:
+// it is also sent to the service, so a retried create never makes two machines.
+message CreateSandbox {
+  string provider_id = 1;
+  string name = 2;
+  // Each empty / unset field falls back to the provider's defaults.
+  string machine_type = 3;
+  optional uint32 auto_stop_minutes = 4;
+  // Overrides the provider's auto_stop_minutes: never auto-stop.
+  bool disable_auto_stop = 5;
+  string environment = 6;
+  string from_snapshot = 7;
+  map<string, string> labels = 8;
+}
+
+enum SandboxAction {
+  SANDBOX_ACTION_UNSPECIFIED = 0;
+  // ttl_seconds: unset keeps the sandbox's auto-stop setting.
+  SANDBOX_ACTION_RESUME = 1;
+  SANDBOX_ACTION_STOP = 2;
+  // ttl_seconds: the new auto-stop window from now; unset turns auto-stop off.
+  SANDBOX_ACTION_SET_AUTO_STOP = 3;
+  SANDBOX_ACTION_RENAME = 4;
+  // Permanent: the sandbox and its snapshots.
+  SANDBOX_ACTION_DELETE = 5;
+  SANDBOX_ACTION_RECOVER = 6;
+}
+
+message ChangeSandbox {
+  string provider_id = 1;
+  string sandbox_id = 2;
+  SandboxAction action = 3;
+  optional int32 ttl_seconds = 4;
+  // RENAME.
+  string name = 5;
+}
+
+message OpenSandboxAccess {
+  string provider_id = 1;
+  string sandbox_id = 2;
+  oneof kind {
+    // Authorize this OpenSSH public key; the answer says where to connect and which host key to pin.
+    string ssh_public_key = 3;
+    DesktopAccess desktop = 4;
+    PortAccess port = 5;
+  }
+}
+
+message DesktopAccess {
+  // Unset = the service default theme.
+  optional bool dark = 1;
+}
+
+message PortAccess {
+  uint32 port = 1;
+  // Public URLs need no token; private ones carry one.
+  bool public = 2;
+  string title = 3;
+}
+
+message SandboxAccess {
+  // ssh_public_key.
+  string ssh_user = 1;
+  string machine_ip = 2;
+  string ssh_endpoint = 3;
+  string host_key = 4;
+  // desktop / port: a secret-bearing URL.
+  string url = 5;
 }

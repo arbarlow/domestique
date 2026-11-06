@@ -8,8 +8,8 @@ and connect the Mac app, the iPhone app, or your own backend (via the Go SDK) to
 
 > Status: phase 1 of the [Team Car spec](https://claude.ai/artifact/CXRoVibEkfUz6gycWteGjU). The server,
 > protocol, Go SDK, `teamcar ctl` and `teamcar exec` (remote processes) work end to end. The Mac app
-> doesn't use Team Car yet (phase 2). Ship (PRs, trunk) and sandboxes come later (the request ids are
-> reserved).
+> doesn't use Team Car yet (phase 2). Sandbox providers (below) work: each car owns its boat.dev
+> accounts and keys. Ship (PRs, trunk) comes later (the request ids are reserved).
 
 ## Run it
 
@@ -44,6 +44,47 @@ codex = "codex"
 
 The host needs `git`, plus `claude` and/or `codex` installed and logged in.
 
+## Sandbox providers
+
+Each Team Car owns its sandbox providers: boat.dev accounts with their API key and defaults for new
+sandboxes. The key stays on the car. Clients (the Mac app, the phone, your own backends through the
+Go SDK) ask the car to create, resume, stop and open sandboxes, so a car on your laptop can be
+local-only while one on a server spawns boat.dev machines for everything that connects to it.
+
+Fix providers in `teamcar.toml` (clients can't edit these):
+
+```toml
+[[sandbox_providers]]
+id = "6f9d1c2e-8a43-4f61-9d0b-2b7f5e1c9a10"   # a UUID; keep it stable
+name = "boat · stride"
+api_key_env = "STRIDE_BOAT_API_KEY"            # or api_key_file = "/etc/teamcar/boat.key"
+machine_type = "large"                          # small, default, large, xlarge
+auto_stop_minutes = 120                         # unset or 0 = never
+environment = "base"                            # boat environment (repos, secrets, AI logins)
+from_snapshot = "stride"                        # boat saved snapshot to start from
+delete_on_archive = false
+```
+
+Without `api_key_env` / `api_key_file`, a provider uses `BOAT_API_KEY`, then the car user's
+`boat login` session. Providers can also be saved over Race Radio with an `admin` token, which is
+what the Mac app's Settings → Sandbox Providers does (keys are stored in `teamcar.sqlite`, inside the
+`0700` Team Car home):
+
+```sh
+teamcar ctl sandbox-providers --check                # where each key comes from, and the account
+echo "$BOAT_KEY" | teamcar ctl add-sandbox-provider "boat · large" --machine-type large --from stride
+teamcar ctl sandboxes <provider-id>
+teamcar ctl rm-sandbox-provider <provider-id>
+```
+
+Scopes: listing is `read`; creating, resuming, stopping, renaming and auto-stop are `trigger`;
+deleting, recovering and access (authorizing an SSH key, desktop and port URLs) are `operate`;
+saving and removing providers is `admin`. `TEAMCAR_BOAT_URL` points the boat.dev calls elsewhere
+(tests, staging).
+
+For now the Mac app still drives the workspace inside the sandbox over SSH (the car authorizes the
+app's key); running the agents inside the sandbox from the car is the next step.
+
 ## Security
 
 You own the network: Tailscale, a VPN, a reverse proxy, TLS. Team Car only does the minimum:
@@ -58,7 +99,7 @@ You own the network: Tailscale, a VPN, a reverse proxy, TLS. Team Car only does 
 | `read` | Subscriptions, lists, transcripts, diffs, files |
 | `trigger` | `read`, plus adding repositories, creating, importing and archiving workspaces, riders, prompts, approvals |
 | `operate` | `trigger`, plus removing repositories, deleting archived workspaces, and running processes (`teamcar exec`, terminals) |
-| `admin` | Everything, including managing tokens |
+| `admin` | Everything, including managing tokens and sandbox providers |
 
 ```sh
 teamcar token create --name iphone --scope operate   # prints the secret once
@@ -79,6 +120,7 @@ teamcar ctl riders
 teamcar ctl watch <rider-id>
 teamcar ctl chat <rider-id> --approve "now add a test"
 teamcar ctl diff <workspace>
+teamcar ctl sandbox-providers --check
 ```
 
 ## Run commands: `teamcar exec`
@@ -264,7 +306,9 @@ docker exec teamcar teamcar token create --name mac --scope operate   # or: sudo
 
 The secret is printed once. In the Mac app, add the Team Car with its URL (`wss://car.example.com`
 behind a TLS proxy, `ws://100.x.y.z:7420` on a tailnet) and the token. The app needs the `operate`
-scope, because it runs git, scripts and terminals with `teamcar exec`. To check from any machine:
+scope, because it runs git, scripts and terminals with `teamcar exec`, and opens SSH access to the
+car's sandboxes. Use an `admin` token to manage the car's sandbox providers from the app. To check
+from any machine:
 
 ```sh
 TEAMCAR_URL=wss://car.example.com TEAMCAR_TOKEN=tc_… teamcar exec -- uname -a

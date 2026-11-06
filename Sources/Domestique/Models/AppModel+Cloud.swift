@@ -19,6 +19,9 @@ extension AppModel {
         let boat = provider.boat
         let client = BoatClient.client(account: provider.credentialAccount)
         guard BoatClient.isConfigured(account: provider.credentialAccount) else {
+            if let home = provider.home, link(for: home)?.isConnected != true {
+                throw HostError("\(carName(for: home)) isn't connected, so it can't start a sandbox on \(provider.name).")
+            }
             throw HostError("Sign \(provider.name) in first: add an API key in Settings → Sandbox Providers, or run `boat login`.")
         }
 
@@ -27,6 +30,7 @@ extension AppModel {
             name: "\(repo.name) · \(ws.name)", type: boat.machineType,
             ttlSeconds: boat.autoStopMinutes.map { $0 * 60 }, disableAutoStop: boat.autoStopMinutes == nil,
             environment: boat.environment?.isEmpty == false ? boat.environment : nil,
+            from: boat.fromSnapshot?.isEmpty == false ? boat.fromSnapshot : nil,
             labels: ["domestique": "1", "repo": repo.name, "workspace": ws.name])
         let machineID = try await client.create(request, idempotencyKey: wsID.uuidString)
         updateWorkspace(wsID) {

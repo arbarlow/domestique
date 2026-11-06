@@ -34,6 +34,58 @@ struct IntegrationTests {
         await c.close()
     }
 
+    // MARK: Sandbox providers
+
+    @Test func sandboxProvidersLiveOnTheCar() async throws {
+        defer { server.cleanup() }
+        let c = client()
+        _ = try await c.connect()
+        #expect(try await c.sandboxProviders().isEmpty)
+
+        var p = Radio_SandboxProvider()
+        p.id = UUID().uuidString  // upper-case, as the app sends it
+        p.kind = .boat
+        p.name = "boat · large"
+        p.defaults.machineType = "large"
+        p.defaults.autoStopMinutes = 120
+        p.defaults.fromSnapshot = "stride"
+        let saved = try await c.saveSandboxProvider(p, apiKey: "boat_test_key")
+        #expect(saved.id == p.id.lowercased())
+        #expect(saved.credentialSource == .stored)
+
+        // Listed (in ServerInfo too) with its defaults, never with the key.
+        let info = try await c.serverInfo()
+        #expect(info.sandboxProviders.map(\.name) == ["boat · large"])
+        let listed = try #require(try await c.sandboxProviders().first)
+        #expect(listed.defaults.fromSnapshot == "stride" && listed.defaults.autoStopMinutes == 120)
+        #expect(!(try listed.serializedData().contains(Data("boat_test_key".utf8))))
+
+        // A call that has to reach boat.dev fails as UNAVAILABLE (the harness points it at a closed
+        // port), not as a bad Team Car token.
+        let e = await #expect(throws: TeamCarError.self) { try await c.sandboxes(providerID: p.id) }
+        #expect(e?.code == .unavailable)
+
+        try await c.removeSandboxProvider(id: p.id)
+        #expect(try await c.sandboxProviders().isEmpty)
+        let gone = await #expect(throws: TeamCarError.self) { try await c.sandbox(providerID: p.id, sandboxID: "bx_1") }
+        #expect(gone?.code == .notFound)
+        await c.close()
+    }
+
+    @Test func savingProvidersNeedsAdmin() async throws {
+        defer { server.cleanup() }
+        let token = try server.createToken(scope: "operate")
+        let c = client(server.tcp, token: token)
+        _ = try await c.connect()
+        var p = Radio_SandboxProvider()
+        p.id = UUID().uuidString
+        p.kind = .boat
+        p.name = "nope"
+        let e = await #expect(throws: TeamCarError.self) { try await c.saveSandboxProvider(p, apiKey: "k") }
+        #expect(e?.code == .permissionDenied)
+        await c.close()
+    }
+
     @Test func handshakeOverTCPWithToken() async throws {
         defer { server.cleanup() }
         let token = try server.createToken(scope: "admin")

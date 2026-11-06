@@ -108,6 +108,9 @@ final class TeamCarServer: @unchecked Sendable {
         e["TEAMCAR_HOME"] = home.path
         e["TEAMCAR_WORKSPACES_ROOT"] = workspacesRoot.path
         e["TEAMCAR_REPOS_ROOT"] = reposRoot.path
+        // Sandbox providers never reach the real boat.dev from tests (port 9 is discard: refused).
+        e["TEAMCAR_BOAT_URL"] = "http://127.0.0.1:9/api/v1"
+        e["BOAT_API_KEY"] = nil
         return e
     }
 

@@ -17,6 +17,7 @@ import (
 
 	radiov1 "github.com/arbarlow/domestique/teamcar/gen/radio/v1"
 	"github.com/arbarlow/domestique/teamcar/internal/core"
+	"github.com/arbarlow/domestique/teamcar/internal/sandbox"
 	"github.com/arbarlow/domestique/teamcar/internal/store"
 )
 
@@ -44,7 +45,12 @@ type Server struct {
 	store *store.Store
 	log   *slog.Logger
 	idem  *idempotency
+	// Sandbox providers; nil = none (every sandbox request answers UNIMPLEMENTED).
+	sandboxes *sandbox.Manager
 }
+
+// SetSandboxes attaches this Team Car's sandbox providers. Call before Serve.
+func (s *Server) SetSandboxes(m *sandbox.Manager) { s.sandboxes = m }
 
 func NewServer(car *core.Car, st *store.Store, log *slog.Logger) *Server {
 	if log == nil {
@@ -320,7 +326,31 @@ func errResponse(code radiov1.ErrorCode, format string, a ...any) *radiov1.Respo
 
 func fromError(err error) *radiov1.Response {
 	code := radiov1.ErrorCode_ERROR_CODE_INTERNAL
+	var api *sandbox.APIError
 	switch {
+	case errors.As(err, &api):
+		// The sandbox service's answer. Never UNAUTHENTICATED: that would read as a bad Team Car token.
+		msg := api.Message
+		if api.URL != "" {
+			msg += " (" + api.URL + ")"
+		}
+		switch {
+		case api.Status == 404:
+			code = radiov1.ErrorCode_ERROR_CODE_NOT_FOUND
+		case api.Status == 400 || api.Status == 422:
+			code = radiov1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
+		case api.Status == 429 || api.Status >= 500 || api.Status == 0:
+			code = radiov1.ErrorCode_ERROR_CODE_UNAVAILABLE
+		default:
+			code = radiov1.ErrorCode_ERROR_CODE_FAILED_PRECONDITION
+		}
+		return &radiov1.Response{Result: &radiov1.Response_Error{Error: &radiov1.Error{Code: code, Message: msg}}}
+	case errors.Is(err, sandbox.ErrNotFound):
+		code = radiov1.ErrorCode_ERROR_CODE_NOT_FOUND
+	case errors.Is(err, sandbox.ErrInvalid):
+		code = radiov1.ErrorCode_ERROR_CODE_INVALID_ARGUMENT
+	case errors.Is(err, sandbox.ErrPrecondition):
+		code = radiov1.ErrorCode_ERROR_CODE_FAILED_PRECONDITION
 	case errors.Is(err, core.ErrNotFound), errors.Is(err, store.ErrNotFound):
 		code = radiov1.ErrorCode_ERROR_CODE_NOT_FOUND
 	case errors.Is(err, core.ErrInvalid):

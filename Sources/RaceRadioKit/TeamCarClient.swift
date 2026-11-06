@@ -689,6 +689,69 @@ public actor TeamCarClient {
         return v
     }
 
+    // MARK: Sandboxes
+
+    /// The Team Car's sandbox providers (never their keys). `checkAccount` also reads each account.
+    public func sandboxProviders(checkAccount: Bool = false) async throws -> [Radio_SandboxProvider] {
+        var req = Radio_ListSandboxProviders()
+        req.checkAccount = checkAccount
+        let r = try await send(.listSandboxProviders(req))
+        guard case .sandboxProviders(let v) = r.result else { throw unexpected(r) }
+        return v.providers
+    }
+
+    /// Creates or replaces a provider (ADMIN). `apiKey` nil keeps the stored key; "" deletes it.
+    public func saveSandboxProvider(_ provider: Radio_SandboxProvider, apiKey: String? = nil) async throws -> Radio_SandboxProvider {
+        var req = Radio_SaveSandboxProvider()
+        req.provider = provider
+        if let apiKey { req.apiKey = apiKey }
+        let r = try await send(.saveSandboxProvider(req))
+        guard case .sandboxProvider(let v) = r.result else { throw unexpected(r) }
+        return v
+    }
+
+    public func removeSandboxProvider(id: String) async throws {
+        var req = Radio_RemoveSandboxProvider()
+        req.providerID = id
+        _ = try await send(.removeSandboxProvider(req))
+    }
+
+    public func sandboxes(providerID: String) async throws -> [Radio_Sandbox] {
+        var req = Radio_ListSandboxes()
+        req.providerID = providerID
+        let r = try await send(.listSandboxes(req))
+        guard case .sandboxes(let v) = r.result else { throw unexpected(r) }
+        return v.sandboxes
+    }
+
+    public func sandbox(providerID: String, sandboxID: String) async throws -> Radio_Sandbox {
+        var req = Radio_GetSandbox()
+        req.providerID = providerID
+        req.sandboxID = sandboxID
+        let r = try await send(.getSandbox(req))
+        guard case .sandbox(let v) = r.result else { throw unexpected(r) }
+        return v
+    }
+
+    /// Starts a sandbox. The idempotency key also reaches the sandbox service, so a retry never
+    /// makes a second machine.
+    public func createSandbox(_ req: Radio_CreateSandbox, idempotencyKey: String? = nil) async throws -> Radio_Sandbox {
+        let r = try await send(.createSandbox(req), idempotencyKey: idempotencyKey)
+        guard case .sandbox(let v) = r.result else { throw unexpected(r) }
+        return v
+    }
+
+    public func changeSandbox(_ req: Radio_ChangeSandbox) async throws {
+        _ = try await send(.changeSandbox(req))
+    }
+
+    /// Authorizes an SSH key, or returns a desktop or port URL (OPERATE).
+    public func openSandboxAccess(_ req: Radio_OpenSandboxAccess) async throws -> Radio_SandboxAccess {
+        let r = try await send(.openSandboxAccess(req))
+        guard case .sandboxAccess(let v) = r.result else { throw unexpected(r) }
+        return v
+    }
+
     private func unexpected(_ r: Radio_Response) -> TeamCarError {
         .protocolError("Unexpected response: \(String(describing: r.result))")
     }

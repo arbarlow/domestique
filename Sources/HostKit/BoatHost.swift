@@ -116,7 +116,7 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
         for attempt in 1...6 {
             do { return try await body() } catch {
                 last = error
-                if let e = error as? BoatAPIError, e.status == 401 || e.status == 404 { throw e }
+                if let e = error as? BoatAPIError, [401, 403, 404].contains(e.status) { throw e }
                 try await Task.sleep(for: .seconds(Double(attempt)))
             }
         }

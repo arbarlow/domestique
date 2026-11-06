@@ -10,6 +10,9 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	radiov1 "github.com/arbarlow/domestique/teamcar/gen/radio/v1"
+	"github.com/arbarlow/domestique/teamcar/internal/sandbox"
 )
 
 // Config is teamcar.toml. Every field is optional.
@@ -33,9 +36,49 @@ type Config struct {
 		Claude string `toml:"claude"`
 		Codex  string `toml:"codex"`
 	} `toml:"agents"`
+	// Sandbox providers fixed in the file (clients can't edit them). More can be saved over Race
+	// Radio, e.g. from the Mac app's Team Car settings.
+	SandboxProviders []SandboxProviderConfig `toml:"sandbox_providers"`
 
 	// Resolved, not from the file.
 	home string
+}
+
+// SandboxProviderConfig is one [[sandbox_providers]] table.
+type SandboxProviderConfig struct {
+	// A UUID. Keep it stable: clients remember which provider each workspace's sandbox is on.
+	ID   string `toml:"id"`
+	Name string `toml:"name"`
+	// "boat" (the default and only kind today).
+	Kind string `toml:"kind"`
+	// The API key: an environment variable or a file (0600). Neither = BOAT_API_KEY, then the
+	// Team Car user's `boat login` session.
+	APIKeyEnv  string `toml:"api_key_env"`
+	APIKeyFile string `toml:"api_key_file"`
+	// Defaults for new sandboxes.
+	MachineType     string `toml:"machine_type"`
+	AutoStopMinutes *int   `toml:"auto_stop_minutes"` // unset or 0 = never
+	Environment     string `toml:"environment"`
+	FromSnapshot    string `toml:"from_snapshot"`
+	DeleteOnArchive bool   `toml:"delete_on_archive"`
+}
+
+func (c SandboxProviderConfig) configured() (sandbox.Configured, error) {
+	kind := radiov1.SandboxKind_SANDBOX_KIND_BOAT
+	if c.Kind != "" && c.Kind != "boat" {
+		return sandbox.Configured{}, fmt.Errorf("sandbox provider %q: unknown kind %q (want \"boat\")", c.Name, c.Kind)
+	}
+	d := &radiov1.SandboxDefaults{
+		MachineType: c.MachineType, Environment: c.Environment, FromSnapshot: c.FromSnapshot, DeleteOnArchive: c.DeleteOnArchive,
+	}
+	if c.AutoStopMinutes != nil && *c.AutoStopMinutes > 0 {
+		m := uint32(*c.AutoStopMinutes)
+		d.AutoStopMinutes = &m
+	}
+	return sandbox.Configured{
+		Provider:  &radiov1.SandboxProvider{Id: c.ID, Name: c.Name, Kind: kind, Defaults: d},
+		APIKeyEnv: c.APIKeyEnv, APIKeyFile: c.APIKeyFile,
+	}, nil
 }
 
 // homeDir is where Team Car keeps its database, socket and config.

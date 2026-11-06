@@ -29,6 +29,7 @@ import (
 	"github.com/arbarlow/domestique/teamcar/internal/agent/codex"
 	"github.com/arbarlow/domestique/teamcar/internal/core"
 	"github.com/arbarlow/domestique/teamcar/internal/radio"
+	"github.com/arbarlow/domestique/teamcar/internal/sandbox"
 	"github.com/arbarlow/domestique/teamcar/internal/store"
 )
 
@@ -145,6 +146,20 @@ func serve(args []string) error {
 	defer stop()
 
 	srv := radio.NewServer(car, st, log)
+	var fixed []sandbox.Configured
+	for _, p := range cfg.SandboxProviders {
+		c, err := p.configured()
+		if err != nil {
+			return err
+		}
+		fixed = append(fixed, c)
+	}
+	// TEAMCAR_BOAT_URL points boat.dev calls elsewhere (tests, staging).
+	sandboxes, err := sandbox.New(sandbox.Options{Store: st, Configured: fixed, BoatURL: os.Getenv("TEAMCAR_BOAT_URL")})
+	if err != nil {
+		return err
+	}
+	srv.SetSandboxes(sandboxes)
 	errs := make(chan error, len(cfg.Listen))
 	for _, addr := range cfg.Listen {
 		l, trusted, err := listenOn(addr, cfg, log)

@@ -324,3 +324,70 @@ func (c *Client) RevokeToken(ctx context.Context, id string) error {
 	_, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_RevokeToken{RevokeToken: &radiov1.RevokeToken{TokenId: id}}})
 	return err
 }
+
+// ---- sandboxes
+
+// SandboxProviders lists this Team Car's sandbox providers. checkAccount also reads each account.
+func (c *Client) SandboxProviders(ctx context.Context, checkAccount bool) ([]*radiov1.SandboxProvider, error) {
+	r, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_ListSandboxProviders{ListSandboxProviders: &radiov1.ListSandboxProviders{CheckAccount: checkAccount}}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandboxProviders().GetProviders(), nil
+}
+
+// SaveSandboxProvider creates or replaces a provider (ADMIN). apiKey nil keeps the stored key; ""
+// deletes it.
+func (c *Client) SaveSandboxProvider(ctx context.Context, p *radiov1.SandboxProvider, apiKey *string) (*radiov1.SandboxProvider, error) {
+	r, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_SaveSandboxProvider{SaveSandboxProvider: &radiov1.SaveSandboxProvider{Provider: p, ApiKey: apiKey}}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandboxProvider(), nil
+}
+
+func (c *Client) RemoveSandboxProvider(ctx context.Context, id string) error {
+	_, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_RemoveSandboxProvider{RemoveSandboxProvider: &radiov1.RemoveSandboxProvider{ProviderId: id}}})
+	return err
+}
+
+func (c *Client) Sandboxes(ctx context.Context, providerID string) ([]*radiov1.Sandbox, error) {
+	r, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_ListSandboxes{ListSandboxes: &radiov1.ListSandboxes{ProviderId: providerID}}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandboxes().GetSandboxes(), nil
+}
+
+func (c *Client) Sandbox(ctx context.Context, providerID, sandboxID string) (*radiov1.Sandbox, error) {
+	r, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_GetSandbox{GetSandbox: &radiov1.GetSandbox{ProviderId: providerID, SandboxId: sandboxID}}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandbox(), nil
+}
+
+// CreateSandbox starts a sandbox on one of the Team Car's providers. Pass Idempotent(key): the key
+// also reaches the sandbox service, so a retry never makes two machines.
+func (c *Client) CreateSandbox(ctx context.Context, req *radiov1.CreateSandbox, opts ...CallOption) (*radiov1.Sandbox, error) {
+	r, err := c.call(ctx, &radiov1.Request{Command: &radiov1.Request_CreateSandbox{CreateSandbox: req}}, opts)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandbox(), nil
+}
+
+// ChangeSandbox resumes, stops, renames, deletes or recovers a sandbox, or sets its auto-stop.
+func (c *Client) ChangeSandbox(ctx context.Context, req *radiov1.ChangeSandbox) error {
+	_, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_ChangeSandbox{ChangeSandbox: req}})
+	return err
+}
+
+// OpenSandboxAccess authorizes an SSH key, or returns a desktop or port URL (OPERATE).
+func (c *Client) OpenSandboxAccess(ctx context.Context, req *radiov1.OpenSandboxAccess) (*radiov1.SandboxAccess, error) {
+	r, err := c.Do(ctx, &radiov1.Request{Command: &radiov1.Request_OpenSandboxAccess{OpenSandboxAccess: req}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSandboxAccess(), nil
+}

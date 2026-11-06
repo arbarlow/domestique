@@ -680,6 +680,214 @@ public nonisolated enum Radio_TokenScope: SwiftProtobuf.Enum, Swift.CaseIterable
 
 }
 
+public nonisolated enum Radio_SandboxKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case boat // = 1
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .boat
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .boat: return 1
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Radio_SandboxKind] = [
+    .unspecified,
+    .boat,
+  ]
+
+}
+
+public nonisolated enum Radio_SandboxCredentialSource: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// No key: the provider can't be used until one is saved.
+  case none // = 1
+
+  /// Saved with SaveSandboxProvider (in the Team Car's database).
+  case stored // = 2
+
+  /// teamcar.toml's api_key_env / api_key_file.
+  case config // = 3
+
+  /// BOAT_API_KEY in the Team Car's environment.
+  case environment // = 4
+
+  /// The `boat login` session of the Team Car's user.
+  case cli // = 5
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .none
+    case 2: self = .stored
+    case 3: self = .config
+    case 4: self = .environment
+    case 5: self = .cli
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .none: return 1
+    case .stored: return 2
+    case .config: return 3
+    case .environment: return 4
+    case .cli: return 5
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Radio_SandboxCredentialSource] = [
+    .unspecified,
+    .none,
+    .stored,
+    .config,
+    .environment,
+    .cli,
+  ]
+
+}
+
+public nonisolated enum Radio_SandboxPhase: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case starting // = 1
+  case running // = 2
+  case stopping // = 3
+  case stopped // = 4
+  case error // = 5
+  case gone // = 6
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .starting
+    case 2: self = .running
+    case 3: self = .stopping
+    case 4: self = .stopped
+    case 5: self = .error
+    case 6: self = .gone
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .starting: return 1
+    case .running: return 2
+    case .stopping: return 3
+    case .stopped: return 4
+    case .error: return 5
+    case .gone: return 6
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Radio_SandboxPhase] = [
+    .unspecified,
+    .starting,
+    .running,
+    .stopping,
+    .stopped,
+    .error,
+    .gone,
+  ]
+
+}
+
+public nonisolated enum Radio_SandboxAction: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// ttl_seconds: unset keeps the sandbox's auto-stop setting.
+  case resume // = 1
+  case stop // = 2
+
+  /// ttl_seconds: the new auto-stop window from now; unset turns auto-stop off.
+  case setAutoStop // = 3
+  case rename // = 4
+
+  /// Permanent: the sandbox and its snapshots.
+  case delete // = 5
+  case recover // = 6
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .resume
+    case 2: self = .stop
+    case 3: self = .setAutoStop
+    case 4: self = .rename
+    case 5: self = .delete
+    case 6: self = .recover
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .resume: return 1
+    case .stop: return 2
+    case .setAutoStop: return 3
+    case .rename: return 4
+    case .delete: return 5
+    case .recover: return 6
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Radio_SandboxAction] = [
+    .unspecified,
+    .resume,
+    .stop,
+    .setAutoStop,
+    .rename,
+    .delete,
+    .recover,
+  ]
+
+}
+
 public nonisolated struct Radio_ClientFrame: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1113,6 +1321,71 @@ public nonisolated struct Radio_Request: @unchecked Sendable {
     set {_uniqueStorage()._command = .readFile(newValue)}
   }
 
+  /// Sandbox providers and their sandboxes (see "Sandboxes" below).
+  public var listSandboxProviders: Radio_ListSandboxProviders {
+    get {
+      if case .listSandboxProviders(let v)? = _storage._command {return v}
+      return Radio_ListSandboxProviders()
+    }
+    set {_uniqueStorage()._command = .listSandboxProviders(newValue)}
+  }
+
+  public var saveSandboxProvider: Radio_SaveSandboxProvider {
+    get {
+      if case .saveSandboxProvider(let v)? = _storage._command {return v}
+      return Radio_SaveSandboxProvider()
+    }
+    set {_uniqueStorage()._command = .saveSandboxProvider(newValue)}
+  }
+
+  public var removeSandboxProvider: Radio_RemoveSandboxProvider {
+    get {
+      if case .removeSandboxProvider(let v)? = _storage._command {return v}
+      return Radio_RemoveSandboxProvider()
+    }
+    set {_uniqueStorage()._command = .removeSandboxProvider(newValue)}
+  }
+
+  public var listSandboxes: Radio_ListSandboxes {
+    get {
+      if case .listSandboxes(let v)? = _storage._command {return v}
+      return Radio_ListSandboxes()
+    }
+    set {_uniqueStorage()._command = .listSandboxes(newValue)}
+  }
+
+  public var getSandbox: Radio_GetSandbox {
+    get {
+      if case .getSandbox(let v)? = _storage._command {return v}
+      return Radio_GetSandbox()
+    }
+    set {_uniqueStorage()._command = .getSandbox(newValue)}
+  }
+
+  public var createSandbox: Radio_CreateSandbox {
+    get {
+      if case .createSandbox(let v)? = _storage._command {return v}
+      return Radio_CreateSandbox()
+    }
+    set {_uniqueStorage()._command = .createSandbox(newValue)}
+  }
+
+  public var changeSandbox: Radio_ChangeSandbox {
+    get {
+      if case .changeSandbox(let v)? = _storage._command {return v}
+      return Radio_ChangeSandbox()
+    }
+    set {_uniqueStorage()._command = .changeSandbox(newValue)}
+  }
+
+  public var openSandboxAccess: Radio_OpenSandboxAccess {
+    get {
+      if case .openSandboxAccess(let v)? = _storage._command {return v}
+      return Radio_OpenSandboxAccess()
+    }
+    set {_uniqueStorage()._command = .openSandboxAccess(newValue)}
+  }
+
   /// Running processes (see ProcessTarget).
   public var processInput: Radio_ProcessInput {
     get {
@@ -1188,6 +1461,15 @@ public nonisolated struct Radio_Request: @unchecked Sendable {
     case getDiff(Radio_GetDiff)
     case listFiles(Radio_ListFiles)
     case readFile(Radio_ReadFile)
+    /// Sandbox providers and their sandboxes (see "Sandboxes" below).
+    case listSandboxProviders(Radio_ListSandboxProviders)
+    case saveSandboxProvider(Radio_SaveSandboxProvider)
+    case removeSandboxProvider(Radio_RemoveSandboxProvider)
+    case listSandboxes(Radio_ListSandboxes)
+    case getSandbox(Radio_GetSandbox)
+    case createSandbox(Radio_CreateSandbox)
+    case changeSandbox(Radio_ChangeSandbox)
+    case openSandboxAccess(Radio_OpenSandboxAccess)
     /// Running processes (see ProcessTarget).
     case processInput(Radio_ProcessInput)
     case resizeProcess(Radio_ResizeProcess)
@@ -1340,6 +1622,46 @@ public nonisolated struct Radio_Response: Sendable {
     set {result = .tokens(newValue)}
   }
 
+  public var sandboxProviders: Radio_SandboxProviderList {
+    get {
+      if case .sandboxProviders(let v)? = result {return v}
+      return Radio_SandboxProviderList()
+    }
+    set {result = .sandboxProviders(newValue)}
+  }
+
+  public var sandboxProvider: Radio_SandboxProvider {
+    get {
+      if case .sandboxProvider(let v)? = result {return v}
+      return Radio_SandboxProvider()
+    }
+    set {result = .sandboxProvider(newValue)}
+  }
+
+  public var sandboxes: Radio_SandboxList {
+    get {
+      if case .sandboxes(let v)? = result {return v}
+      return Radio_SandboxList()
+    }
+    set {result = .sandboxes(newValue)}
+  }
+
+  public var sandbox: Radio_Sandbox {
+    get {
+      if case .sandbox(let v)? = result {return v}
+      return Radio_Sandbox()
+    }
+    set {result = .sandbox(newValue)}
+  }
+
+  public var sandboxAccess: Radio_SandboxAccess {
+    get {
+      if case .sandboxAccess(let v)? = result {return v}
+      return Radio_SandboxAccess()
+    }
+    set {result = .sandboxAccess(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Result: Equatable, Sendable {
@@ -1359,6 +1681,11 @@ public nonisolated struct Radio_Response: Sendable {
     case file(Radio_FileContent)
     case createdToken(Radio_CreatedToken)
     case tokens(Radio_TokenList)
+    case sandboxProviders(Radio_SandboxProviderList)
+    case sandboxProvider(Radio_SandboxProvider)
+    case sandboxes(Radio_SandboxList)
+    case sandbox(Radio_Sandbox)
+    case sandboxAccess(Radio_SandboxAccess)
 
   }
 
@@ -1418,6 +1745,9 @@ public nonisolated struct Radio_ServerInfo: Sendable {
 
   /// Which agent CLIs were found on this host.
   public var providers: [Radio_Provider] = []
+
+  /// Sandbox services this Team Car can create workspaces' machines on (no account details).
+  public var sandboxProviders: [Radio_SandboxProvider] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3183,6 +3513,564 @@ public nonisolated struct Radio_RevokeToken: Sendable {
   public init() {}
 }
 
+public nonisolated struct Radio_SandboxProvider: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// A UUID, chosen by whoever creates the provider.
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
+
+  public var kind: Radio_SandboxKind {
+    get {_storage._kind}
+    set {_uniqueStorage()._kind = newValue}
+  }
+
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
+
+  public var defaults: Radio_SandboxDefaults {
+    get {_storage._defaults ?? Radio_SandboxDefaults()}
+    set {_uniqueStorage()._defaults = newValue}
+  }
+  /// Returns true if `defaults` has been explicitly set.
+  public var hasDefaults: Bool {_storage._defaults != nil}
+  /// Clears the value of `defaults`. Subsequent reads from it will return its default value.
+  public mutating func clearDefaults() {_uniqueStorage()._defaults = nil}
+
+  /// Where the API key comes from. Never the key itself.
+  public var credentialSource: Radio_SandboxCredentialSource {
+    get {_storage._credentialSource}
+    set {_uniqueStorage()._credentialSource = newValue}
+  }
+
+  /// Declared in teamcar.toml: SaveSandboxProvider and RemoveSandboxProvider refuse it.
+  public var fromConfig: Bool {
+    get {_storage._fromConfig}
+    set {_uniqueStorage()._fromConfig = newValue}
+  }
+
+  /// Filled in by ListSandboxProviders{check_account}.
+  public var account: Radio_SandboxAccount {
+    get {_storage._account ?? Radio_SandboxAccount()}
+    set {_uniqueStorage()._account = newValue}
+  }
+  /// Returns true if `account` has been explicitly set.
+  public var hasAccount: Bool {_storage._account != nil}
+  /// Clears the value of `account`. Subsequent reads from it will return its default value.
+  public mutating func clearAccount() {_uniqueStorage()._account = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Radio_SandboxDefaults: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// boat: small / default / large / xlarge. Empty = the service default.
+  public var machineType: String = String()
+
+  /// Auto-stop this long after a start or resume. Unset = never.
+  public var autoStopMinutes: UInt32 {
+    get {_autoStopMinutes ?? 0}
+    set {_autoStopMinutes = newValue}
+  }
+  /// Returns true if `autoStopMinutes` has been explicitly set.
+  public var hasAutoStopMinutes: Bool {self._autoStopMinutes != nil}
+  /// Clears the value of `autoStopMinutes`. Subsequent reads from it will return its default value.
+  public mutating func clearAutoStopMinutes() {self._autoStopMinutes = nil}
+
+  /// boat environment name (repositories, secrets, AI credentials). Empty = the account default.
+  public var environment: String = String()
+
+  /// boat saved snapshot to start from. Empty = a fresh machine.
+  public var fromSnapshot: String = String()
+
+  /// Archiving a workspace deletes its sandbox instead of stopping it.
+  public var deleteOnArchive: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _autoStopMinutes: UInt32? = nil
+}
+
+public nonisolated struct Radio_SandboxAccount: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var login: String = String()
+
+  public var email: String = String()
+
+  public var displayName: String = String()
+
+  /// Set when the account couldn't be read (bad key, network).
+  public var error: String = String()
+
+  public var canStart: Bool = false
+
+  public var startBlockedReason: String = String()
+
+  /// e.g. "Trial: 3 days left".
+  public var trialLine: String = String()
+
+  public var machineTypes: [Radio_SandboxMachineType] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_SandboxMachineType: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var type: String = String()
+
+  public var available: Bool = false
+
+  public var reason: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_SandboxProviderList: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providers: [Radio_SandboxProvider] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_ListSandboxProviders: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Also read each provider's account and limits (one API call each).
+  public var checkAccount: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Creates or replaces a provider (ADMIN).
+public nonisolated struct Radio_SaveSandboxProvider: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var provider: Radio_SandboxProvider {
+    get {_provider ?? Radio_SandboxProvider()}
+    set {_provider = newValue}
+  }
+  /// Returns true if `provider` has been explicitly set.
+  public var hasProvider: Bool {self._provider != nil}
+  /// Clears the value of `provider`. Subsequent reads from it will return its default value.
+  public mutating func clearProvider() {self._provider = nil}
+
+  /// Set: replace the stored key ("" deletes it). Unset: keep the stored key.
+  public var apiKey: String {
+    get {_apiKey ?? String()}
+    set {_apiKey = newValue}
+  }
+  /// Returns true if `apiKey` has been explicitly set.
+  public var hasApiKey: Bool {self._apiKey != nil}
+  /// Clears the value of `apiKey`. Subsequent reads from it will return its default value.
+  public mutating func clearApiKey() {self._apiKey = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _provider: Radio_SandboxProvider? = nil
+  fileprivate var _apiKey: String? = nil
+}
+
+public nonisolated struct Radio_RemoveSandboxProvider: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_Sandbox: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The service's id (boat: bx_...).
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
+
+  public var providerID: String {
+    get {_storage._providerID}
+    set {_uniqueStorage()._providerID = newValue}
+  }
+
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
+
+  /// The service's own state string; `phase` is the normalised one.
+  public var state: String {
+    get {_storage._state}
+    set {_uniqueStorage()._state = newValue}
+  }
+
+  public var phase: Radio_SandboxPhase {
+    get {_storage._phase}
+    set {_uniqueStorage()._phase = newValue}
+  }
+
+  public var error: String {
+    get {_storage._error}
+    set {_uniqueStorage()._error = newValue}
+  }
+
+  public var machineType: String {
+    get {_storage._machineType}
+    set {_uniqueStorage()._machineType = newValue}
+  }
+
+  public var vcpu: Int32 {
+    get {_storage._vcpu}
+    set {_uniqueStorage()._vcpu = newValue}
+  }
+
+  public var memoryGb: Int32 {
+    get {_storage._memoryGb}
+    set {_uniqueStorage()._memoryGb = newValue}
+  }
+
+  public var ip: String {
+    get {_storage._ip}
+    set {_uniqueStorage()._ip = newValue}
+  }
+
+  /// host:port to SSH to, when it isn't ip:22.
+  public var sshEndpoint: String {
+    get {_storage._sshEndpoint}
+    set {_uniqueStorage()._sshEndpoint = newValue}
+  }
+
+  public var url: String {
+    get {_storage._url}
+    set {_uniqueStorage()._url = newValue}
+  }
+
+  public var desktopAvailable: Bool {
+    get {_storage._desktopAvailable ?? false}
+    set {_uniqueStorage()._desktopAvailable = newValue}
+  }
+  /// Returns true if `desktopAvailable` has been explicitly set.
+  public var hasDesktopAvailable: Bool {_storage._desktopAvailable != nil}
+  /// Clears the value of `desktopAvailable`. Subsequent reads from it will return its default value.
+  public mutating func clearDesktopAvailable() {_uniqueStorage()._desktopAvailable = nil}
+
+  /// When an idle stopped sandbox is archived. 0 = unknown.
+  public var archiveAfterMs: Int64 {
+    get {_storage._archiveAfterMs}
+    set {_uniqueStorage()._archiveAfterMs = newValue}
+  }
+
+  /// Auto-stop window. Unset = never.
+  public var ttlSeconds: Int32 {
+    get {_storage._ttlSeconds ?? 0}
+    set {_uniqueStorage()._ttlSeconds = newValue}
+  }
+  /// Returns true if `ttlSeconds` has been explicitly set.
+  public var hasTtlSeconds: Bool {_storage._ttlSeconds != nil}
+  /// Clears the value of `ttlSeconds`. Subsequent reads from it will return its default value.
+  public mutating func clearTtlSeconds() {_uniqueStorage()._ttlSeconds = nil}
+
+  public var health: String {
+    get {_storage._health}
+    set {_uniqueStorage()._health = newValue}
+  }
+
+  public var healthReason: String {
+    get {_storage._healthReason}
+    set {_uniqueStorage()._healthReason = newValue}
+  }
+
+  public var hydrated: Bool {
+    get {_storage._hydrated ?? false}
+    set {_uniqueStorage()._hydrated = newValue}
+  }
+  /// Returns true if `hydrated` has been explicitly set.
+  public var hasHydrated: Bool {_storage._hydrated != nil}
+  /// Clears the value of `hydrated`. Subsequent reads from it will return its default value.
+  public mutating func clearHydrated() {_uniqueStorage()._hydrated = nil}
+
+  public var createdAtMs: Int64 {
+    get {_storage._createdAtMs}
+    set {_uniqueStorage()._createdAtMs = newValue}
+  }
+
+  public var stoppedAtMs: Int64 {
+    get {_storage._stoppedAtMs}
+    set {_uniqueStorage()._stoppedAtMs = newValue}
+  }
+
+  public var environment: String {
+    get {_storage._environment}
+    set {_uniqueStorage()._environment = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Radio_SandboxList: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var sandboxes: [Radio_Sandbox] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_ListSandboxes: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_GetSandbox: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var sandboxID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Starts a sandbox and returns it straight away (usually STARTING). Pass Request.idempotency_key:
+/// it is also sent to the service, so a retried create never makes two machines.
+public nonisolated struct Radio_CreateSandbox: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var name: String = String()
+
+  /// Each empty / unset field falls back to the provider's defaults.
+  public var machineType: String = String()
+
+  public var autoStopMinutes: UInt32 {
+    get {_autoStopMinutes ?? 0}
+    set {_autoStopMinutes = newValue}
+  }
+  /// Returns true if `autoStopMinutes` has been explicitly set.
+  public var hasAutoStopMinutes: Bool {self._autoStopMinutes != nil}
+  /// Clears the value of `autoStopMinutes`. Subsequent reads from it will return its default value.
+  public mutating func clearAutoStopMinutes() {self._autoStopMinutes = nil}
+
+  /// Overrides the provider's auto_stop_minutes: never auto-stop.
+  public var disableAutoStop: Bool = false
+
+  public var environment: String = String()
+
+  public var fromSnapshot: String = String()
+
+  public var labels: Dictionary<String,String> = [:]
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _autoStopMinutes: UInt32? = nil
+}
+
+public nonisolated struct Radio_ChangeSandbox: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var sandboxID: String = String()
+
+  public var action: Radio_SandboxAction = .unspecified
+
+  public var ttlSeconds: Int32 {
+    get {_ttlSeconds ?? 0}
+    set {_ttlSeconds = newValue}
+  }
+  /// Returns true if `ttlSeconds` has been explicitly set.
+  public var hasTtlSeconds: Bool {self._ttlSeconds != nil}
+  /// Clears the value of `ttlSeconds`. Subsequent reads from it will return its default value.
+  public mutating func clearTtlSeconds() {self._ttlSeconds = nil}
+
+  /// RENAME.
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _ttlSeconds: Int32? = nil
+}
+
+public nonisolated struct Radio_OpenSandboxAccess: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var providerID: String = String()
+
+  public var sandboxID: String = String()
+
+  public var kind: Radio_OpenSandboxAccess.OneOf_Kind? = nil
+
+  /// Authorize this OpenSSH public key; the answer says where to connect and which host key to pin.
+  public var sshPublicKey: String {
+    get {
+      if case .sshPublicKey(let v)? = kind {return v}
+      return String()
+    }
+    set {kind = .sshPublicKey(newValue)}
+  }
+
+  public var desktop: Radio_DesktopAccess {
+    get {
+      if case .desktop(let v)? = kind {return v}
+      return Radio_DesktopAccess()
+    }
+    set {kind = .desktop(newValue)}
+  }
+
+  public var port: Radio_PortAccess {
+    get {
+      if case .port(let v)? = kind {return v}
+      return Radio_PortAccess()
+    }
+    set {kind = .port(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Kind: Equatable, Sendable {
+    /// Authorize this OpenSSH public key; the answer says where to connect and which host key to pin.
+    case sshPublicKey(String)
+    case desktop(Radio_DesktopAccess)
+    case port(Radio_PortAccess)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Radio_DesktopAccess: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Unset = the service default theme.
+  public var dark: Bool {
+    get {_dark ?? false}
+    set {_dark = newValue}
+  }
+  /// Returns true if `dark` has been explicitly set.
+  public var hasDark: Bool {self._dark != nil}
+  /// Clears the value of `dark`. Subsequent reads from it will return its default value.
+  public mutating func clearDark() {self._dark = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _dark: Bool? = nil
+}
+
+public nonisolated struct Radio_PortAccess: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var port: UInt32 = 0
+
+  /// Public URLs need no token; private ones carry one.
+  public var `public`: Bool = false
+
+  public var title: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Radio_SandboxAccess: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// ssh_public_key.
+  public var sshUser: String = String()
+
+  public var machineIp: String = String()
+
+  public var sshEndpoint: String = String()
+
+  public var hostKey: String = String()
+
+  /// desktop / port: a secret-bearing URL.
+  public var url: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "radio.v1"
@@ -3241,6 +4129,22 @@ nonisolated extension Radio_FileDiffStatus: SwiftProtobuf._ProtoNameProviding {
 
 nonisolated extension Radio_TokenScope: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TOKEN_SCOPE_UNSPECIFIED\0\u{1}TOKEN_SCOPE_READ\0\u{1}TOKEN_SCOPE_TRIGGER\0\u{1}TOKEN_SCOPE_OPERATE\0\u{1}TOKEN_SCOPE_ADMIN\0")
+}
+
+nonisolated extension Radio_SandboxKind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SANDBOX_KIND_UNSPECIFIED\0\u{1}SANDBOX_KIND_BOAT\0")
+}
+
+nonisolated extension Radio_SandboxCredentialSource: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED\0\u{1}SANDBOX_CREDENTIAL_SOURCE_NONE\0\u{1}SANDBOX_CREDENTIAL_SOURCE_STORED\0\u{1}SANDBOX_CREDENTIAL_SOURCE_CONFIG\0\u{1}SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT\0\u{1}SANDBOX_CREDENTIAL_SOURCE_CLI\0")
+}
+
+nonisolated extension Radio_SandboxPhase: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SANDBOX_PHASE_UNSPECIFIED\0\u{1}SANDBOX_PHASE_STARTING\0\u{1}SANDBOX_PHASE_RUNNING\0\u{1}SANDBOX_PHASE_STOPPING\0\u{1}SANDBOX_PHASE_STOPPED\0\u{1}SANDBOX_PHASE_ERROR\0\u{1}SANDBOX_PHASE_GONE\0")
+}
+
+nonisolated extension Radio_SandboxAction: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SANDBOX_ACTION_UNSPECIFIED\0\u{1}SANDBOX_ACTION_RESUME\0\u{1}SANDBOX_ACTION_STOP\0\u{1}SANDBOX_ACTION_SET_AUTO_STOP\0\u{1}SANDBOX_ACTION_RENAME\0\u{1}SANDBOX_ACTION_DELETE\0\u{1}SANDBOX_ACTION_RECOVER\0")
 }
 
 nonisolated extension Radio_ClientFrame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -3704,7 +4608,7 @@ nonisolated extension Radio_Gap: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 nonisolated extension Radio_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}idempotency_key\0\u{4}\u{8}get_server_info\0\u{1}subscribe\0\u{1}unsubscribe\0\u{4}\u{8}list_repositories\0\u{3}add_repository\0\u{3}remove_repository\0\u{4}\u{8}list_workspaces\0\u{3}create_workspace\0\u{3}archive_workspace\0\u{3}delete_workspace\0\u{3}import_workspace\0\u{4}\u{6}open_rider\0\u{3}close_rider\0\u{3}send_message\0\u{1}interrupt\0\u{3}respond_approval\0\u{3}answer_question\0\u{3}update_rider\0\u{3}list_models\0\u{3}get_transcript\0\u{4}\u{2}process_input\0\u{3}resize_process\0\u{3}signal_process\0\u{4}\u{8}get_diff\0\u{3}list_files\0\u{3}read_file\0\u{4}\u{1c}create_token\0\u{3}list_tokens\0\u{3}revoke_token\0\u{c}F\u{1}\u{14}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}idempotency_key\0\u{4}\u{8}get_server_info\0\u{1}subscribe\0\u{1}unsubscribe\0\u{4}\u{8}list_repositories\0\u{3}add_repository\0\u{3}remove_repository\0\u{4}\u{8}list_workspaces\0\u{3}create_workspace\0\u{3}archive_workspace\0\u{3}delete_workspace\0\u{3}import_workspace\0\u{4}\u{6}open_rider\0\u{3}close_rider\0\u{3}send_message\0\u{1}interrupt\0\u{3}respond_approval\0\u{3}answer_question\0\u{3}update_rider\0\u{3}list_models\0\u{3}get_transcript\0\u{4}\u{2}process_input\0\u{3}resize_process\0\u{3}signal_process\0\u{4}\u{8}get_diff\0\u{3}list_files\0\u{3}read_file\0\u{4}\u{12}list_sandbox_providers\0\u{3}save_sandbox_provider\0\u{3}remove_sandbox_provider\0\u{3}list_sandboxes\0\u{3}get_sandbox\0\u{3}create_sandbox\0\u{3}change_sandbox\0\u{3}open_sandbox_access\0\u{4}\u{3}create_token\0\u{3}list_tokens\0\u{3}revoke_token\0\u{c}F\u{1}\u{a}\u{c}Y\u{1}\u{1}")
 
   fileprivate class _StorageClass {
     var _id: UInt64 = 0
@@ -4081,6 +4985,110 @@ nonisolated extension Radio_Request: SwiftProtobuf.Message, SwiftProtobuf._Messa
             _storage._command = .readFile(v)
           }
         }()
+        case 80: try {
+          var v: Radio_ListSandboxProviders?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .listSandboxProviders(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .listSandboxProviders(v)
+          }
+        }()
+        case 81: try {
+          var v: Radio_SaveSandboxProvider?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .saveSandboxProvider(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .saveSandboxProvider(v)
+          }
+        }()
+        case 82: try {
+          var v: Radio_RemoveSandboxProvider?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .removeSandboxProvider(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .removeSandboxProvider(v)
+          }
+        }()
+        case 83: try {
+          var v: Radio_ListSandboxes?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .listSandboxes(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .listSandboxes(v)
+          }
+        }()
+        case 84: try {
+          var v: Radio_GetSandbox?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .getSandbox(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .getSandbox(v)
+          }
+        }()
+        case 85: try {
+          var v: Radio_CreateSandbox?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .createSandbox(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .createSandbox(v)
+          }
+        }()
+        case 86: try {
+          var v: Radio_ChangeSandbox?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .changeSandbox(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .changeSandbox(v)
+          }
+        }()
+        case 87: try {
+          var v: Radio_OpenSandboxAccess?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .openSandboxAccess(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .openSandboxAccess(v)
+          }
+        }()
         case 90: try {
           var v: Radio_CreateToken?
           var hadOneofValue = false
@@ -4243,6 +5251,38 @@ nonisolated extension Radio_Request: SwiftProtobuf.Message, SwiftProtobuf._Messa
         guard case .readFile(let v)? = _storage._command else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 62)
       }()
+      case .listSandboxProviders?: try {
+        guard case .listSandboxProviders(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 80)
+      }()
+      case .saveSandboxProvider?: try {
+        guard case .saveSandboxProvider(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 81)
+      }()
+      case .removeSandboxProvider?: try {
+        guard case .removeSandboxProvider(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 82)
+      }()
+      case .listSandboxes?: try {
+        guard case .listSandboxes(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 83)
+      }()
+      case .getSandbox?: try {
+        guard case .getSandbox(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 84)
+      }()
+      case .createSandbox?: try {
+        guard case .createSandbox(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 85)
+      }()
+      case .changeSandbox?: try {
+        guard case .changeSandbox(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 86)
+      }()
+      case .openSandboxAccess?: try {
+        guard case .openSandboxAccess(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 87)
+      }()
       case .createToken?: try {
         guard case .createToken(let v)? = _storage._command else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 90)
@@ -4280,7 +5320,7 @@ nonisolated extension Radio_Request: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
 nonisolated extension Radio_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}error\0\u{1}empty\0\u{4}\u{7}server_info\0\u{1}subscribe\0\u{2}\u{9}repositories\0\u{1}repository\0\u{2}\u{9}workspaces\0\u{1}workspace\0\u{2}\u{9}rider\0\u{2}\u{7}models\0\u{1}transcript\0\u{2}\u{c}diff\0\u{1}files\0\u{1}file\0\u{4}\u{1c}created_token\0\u{1}tokens\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}error\0\u{1}empty\0\u{4}\u{7}server_info\0\u{1}subscribe\0\u{2}\u{9}repositories\0\u{1}repository\0\u{2}\u{9}workspaces\0\u{1}workspace\0\u{2}\u{9}rider\0\u{2}\u{7}models\0\u{1}transcript\0\u{2}\u{c}diff\0\u{1}files\0\u{1}file\0\u{4}\u{12}sandbox_providers\0\u{3}sandbox_provider\0\u{2}\u{2}sandboxes\0\u{1}sandbox\0\u{4}\u{3}sandbox_access\0\u{4}\u{3}created_token\0\u{1}tokens\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4471,6 +5511,71 @@ nonisolated extension Radio_Response: SwiftProtobuf.Message, SwiftProtobuf._Mess
           self.result = .file(v)
         }
       }()
+      case 80: try {
+        var v: Radio_SandboxProviderList?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sandboxProviders(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sandboxProviders(v)
+        }
+      }()
+      case 81: try {
+        var v: Radio_SandboxProvider?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sandboxProvider(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sandboxProvider(v)
+        }
+      }()
+      case 83: try {
+        var v: Radio_SandboxList?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sandboxes(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sandboxes(v)
+        }
+      }()
+      case 84: try {
+        var v: Radio_Sandbox?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sandbox(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sandbox(v)
+        }
+      }()
+      case 87: try {
+        var v: Radio_SandboxAccess?
+        var hadOneofValue = false
+        if let current = self.result {
+          hadOneofValue = true
+          if case .sandboxAccess(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.result = .sandboxAccess(v)
+        }
+      }()
       case 90: try {
         var v: Radio_CreatedToken?
         var hadOneofValue = false
@@ -4566,6 +5671,26 @@ nonisolated extension Radio_Response: SwiftProtobuf.Message, SwiftProtobuf._Mess
     case .file?: try {
       guard case .file(let v)? = self.result else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 62)
+    }()
+    case .sandboxProviders?: try {
+      guard case .sandboxProviders(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 80)
+    }()
+    case .sandboxProvider?: try {
+      guard case .sandboxProvider(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 81)
+    }()
+    case .sandboxes?: try {
+      guard case .sandboxes(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 83)
+    }()
+    case .sandbox?: try {
+      guard case .sandbox(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 84)
+    }()
+    case .sandboxAccess?: try {
+      guard case .sandboxAccess(let v)? = self.result else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 87)
     }()
     case .createdToken?: try {
       guard case .createdToken(let v)? = self.result else { preconditionFailure() }
@@ -4663,7 +5788,7 @@ nonisolated extension Radio_GetServerInfo: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Radio_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ServerInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}server_id\0\u{3}server_name\0\u{3}server_version\0\u{1}platform\0\u{3}workspaces_root\0\u{1}providers\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}server_id\0\u{3}server_name\0\u{3}server_version\0\u{1}platform\0\u{3}workspaces_root\0\u{1}providers\0\u{3}sandbox_providers\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4677,6 +5802,7 @@ nonisolated extension Radio_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 4: try { try decoder.decodeSingularStringField(value: &self.platform) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.workspacesRoot) }()
       case 6: try { try decoder.decodeRepeatedEnumField(value: &self.providers) }()
+      case 7: try { try decoder.decodeRepeatedMessageField(value: &self.sandboxProviders) }()
       default: break
       }
     }
@@ -4701,6 +5827,9 @@ nonisolated extension Radio_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
     if !self.providers.isEmpty {
       try visitor.visitPackedEnumField(value: self.providers, fieldNumber: 6)
     }
+    if !self.sandboxProviders.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.sandboxProviders, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4711,6 +5840,7 @@ nonisolated extension Radio_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.platform != rhs.platform {return false}
     if lhs.workspacesRoot != rhs.workspacesRoot {return false}
     if lhs.providers != rhs.providers {return false}
+    if lhs.sandboxProviders != rhs.sandboxProviders {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8298,6 +9428,1047 @@ nonisolated extension Radio_RevokeToken: SwiftProtobuf.Message, SwiftProtobuf._M
 
   public static func ==(lhs: Radio_RevokeToken, rhs: Radio_RevokeToken) -> Bool {
     if lhs.tokenID != rhs.tokenID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxProvider"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}kind\0\u{1}name\0\u{1}defaults\0\u{3}credential_source\0\u{3}from_config\0\u{1}account\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _kind: Radio_SandboxKind = .unspecified
+    var _name: String = String()
+    var _defaults: Radio_SandboxDefaults? = nil
+    var _credentialSource: Radio_SandboxCredentialSource = .unspecified
+    var _fromConfig: Bool = false
+    var _account: Radio_SandboxAccount? = nil
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _kind = source._kind
+      _name = source._name
+      _defaults = source._defaults
+      _credentialSource = source._credentialSource
+      _fromConfig = source._fromConfig
+      _account = source._account
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularEnumField(value: &_storage._kind) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._defaults) }()
+        case 5: try { try decoder.decodeSingularEnumField(value: &_storage._credentialSource) }()
+        case 6: try { try decoder.decodeSingularBoolField(value: &_storage._fromConfig) }()
+        case 7: try { try decoder.decodeSingularMessageField(value: &_storage._account) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if _storage._kind != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._kind, fieldNumber: 2)
+      }
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 3)
+      }
+      try { if let v = _storage._defaults {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      if _storage._credentialSource != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._credentialSource, fieldNumber: 5)
+      }
+      if _storage._fromConfig != false {
+        try visitor.visitSingularBoolField(value: _storage._fromConfig, fieldNumber: 6)
+      }
+      try { if let v = _storage._account {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
+      } }()
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxProvider, rhs: Radio_SandboxProvider) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._kind != rhs_storage._kind {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._defaults != rhs_storage._defaults {return false}
+        if _storage._credentialSource != rhs_storage._credentialSource {return false}
+        if _storage._fromConfig != rhs_storage._fromConfig {return false}
+        if _storage._account != rhs_storage._account {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxDefaults: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxDefaults"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}machine_type\0\u{3}auto_stop_minutes\0\u{1}environment\0\u{3}from_snapshot\0\u{3}delete_on_archive\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.machineType) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self._autoStopMinutes) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.environment) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.fromSnapshot) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.deleteOnArchive) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.machineType.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineType, fieldNumber: 1)
+    }
+    try { if let v = self._autoStopMinutes {
+      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 2)
+    } }()
+    if !self.environment.isEmpty {
+      try visitor.visitSingularStringField(value: self.environment, fieldNumber: 3)
+    }
+    if !self.fromSnapshot.isEmpty {
+      try visitor.visitSingularStringField(value: self.fromSnapshot, fieldNumber: 4)
+    }
+    if self.deleteOnArchive != false {
+      try visitor.visitSingularBoolField(value: self.deleteOnArchive, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxDefaults, rhs: Radio_SandboxDefaults) -> Bool {
+    if lhs.machineType != rhs.machineType {return false}
+    if lhs._autoStopMinutes != rhs._autoStopMinutes {return false}
+    if lhs.environment != rhs.environment {return false}
+    if lhs.fromSnapshot != rhs.fromSnapshot {return false}
+    if lhs.deleteOnArchive != rhs.deleteOnArchive {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxAccount: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxAccount"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}login\0\u{1}email\0\u{3}display_name\0\u{1}error\0\u{3}can_start\0\u{3}start_blocked_reason\0\u{3}trial_line\0\u{3}machine_types\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.login) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.email) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.displayName) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.error) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.canStart) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.startBlockedReason) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.trialLine) }()
+      case 8: try { try decoder.decodeRepeatedMessageField(value: &self.machineTypes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.login.isEmpty {
+      try visitor.visitSingularStringField(value: self.login, fieldNumber: 1)
+    }
+    if !self.email.isEmpty {
+      try visitor.visitSingularStringField(value: self.email, fieldNumber: 2)
+    }
+    if !self.displayName.isEmpty {
+      try visitor.visitSingularStringField(value: self.displayName, fieldNumber: 3)
+    }
+    if !self.error.isEmpty {
+      try visitor.visitSingularStringField(value: self.error, fieldNumber: 4)
+    }
+    if self.canStart != false {
+      try visitor.visitSingularBoolField(value: self.canStart, fieldNumber: 5)
+    }
+    if !self.startBlockedReason.isEmpty {
+      try visitor.visitSingularStringField(value: self.startBlockedReason, fieldNumber: 6)
+    }
+    if !self.trialLine.isEmpty {
+      try visitor.visitSingularStringField(value: self.trialLine, fieldNumber: 7)
+    }
+    if !self.machineTypes.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.machineTypes, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxAccount, rhs: Radio_SandboxAccount) -> Bool {
+    if lhs.login != rhs.login {return false}
+    if lhs.email != rhs.email {return false}
+    if lhs.displayName != rhs.displayName {return false}
+    if lhs.error != rhs.error {return false}
+    if lhs.canStart != rhs.canStart {return false}
+    if lhs.startBlockedReason != rhs.startBlockedReason {return false}
+    if lhs.trialLine != rhs.trialLine {return false}
+    if lhs.machineTypes != rhs.machineTypes {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxMachineType: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxMachineType"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}type\0\u{1}available\0\u{1}reason\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.type) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.available) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.reason) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.type.isEmpty {
+      try visitor.visitSingularStringField(value: self.type, fieldNumber: 1)
+    }
+    if self.available != false {
+      try visitor.visitSingularBoolField(value: self.available, fieldNumber: 2)
+    }
+    if !self.reason.isEmpty {
+      try visitor.visitSingularStringField(value: self.reason, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxMachineType, rhs: Radio_SandboxMachineType) -> Bool {
+    if lhs.type != rhs.type {return false}
+    if lhs.available != rhs.available {return false}
+    if lhs.reason != rhs.reason {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxProviderList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxProviderList"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}providers\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.providers) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providers.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.providers, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxProviderList, rhs: Radio_SandboxProviderList) -> Bool {
+    if lhs.providers != rhs.providers {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_ListSandboxProviders: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListSandboxProviders"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}check_account\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.checkAccount) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.checkAccount != false {
+      try visitor.visitSingularBoolField(value: self.checkAccount, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_ListSandboxProviders, rhs: Radio_ListSandboxProviders) -> Bool {
+    if lhs.checkAccount != rhs.checkAccount {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SaveSandboxProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SaveSandboxProvider"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}provider\0\u{3}api_key\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._provider) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._apiKey) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._provider {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._apiKey {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SaveSandboxProvider, rhs: Radio_SaveSandboxProvider) -> Bool {
+    if lhs._provider != rhs._provider {return false}
+    if lhs._apiKey != rhs._apiKey {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_RemoveSandboxProvider: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveSandboxProvider"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_RemoveSandboxProvider, rhs: Radio_RemoveSandboxProvider) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_Sandbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Sandbox"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}provider_id\0\u{1}name\0\u{1}state\0\u{1}phase\0\u{1}error\0\u{3}machine_type\0\u{1}vcpu\0\u{3}memory_gb\0\u{1}ip\0\u{3}ssh_endpoint\0\u{1}url\0\u{3}desktop_available\0\u{3}archive_after_ms\0\u{3}ttl_seconds\0\u{1}health\0\u{3}health_reason\0\u{1}hydrated\0\u{3}created_at_ms\0\u{3}stopped_at_ms\0\u{1}environment\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _providerID: String = String()
+    var _name: String = String()
+    var _state: String = String()
+    var _phase: Radio_SandboxPhase = .unspecified
+    var _error: String = String()
+    var _machineType: String = String()
+    var _vcpu: Int32 = 0
+    var _memoryGb: Int32 = 0
+    var _ip: String = String()
+    var _sshEndpoint: String = String()
+    var _url: String = String()
+    var _desktopAvailable: Bool? = nil
+    var _archiveAfterMs: Int64 = 0
+    var _ttlSeconds: Int32? = nil
+    var _health: String = String()
+    var _healthReason: String = String()
+    var _hydrated: Bool? = nil
+    var _createdAtMs: Int64 = 0
+    var _stoppedAtMs: Int64 = 0
+    var _environment: String = String()
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _providerID = source._providerID
+      _name = source._name
+      _state = source._state
+      _phase = source._phase
+      _error = source._error
+      _machineType = source._machineType
+      _vcpu = source._vcpu
+      _memoryGb = source._memoryGb
+      _ip = source._ip
+      _sshEndpoint = source._sshEndpoint
+      _url = source._url
+      _desktopAvailable = source._desktopAvailable
+      _archiveAfterMs = source._archiveAfterMs
+      _ttlSeconds = source._ttlSeconds
+      _health = source._health
+      _healthReason = source._healthReason
+      _hydrated = source._hydrated
+      _createdAtMs = source._createdAtMs
+      _stoppedAtMs = source._stoppedAtMs
+      _environment = source._environment
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._providerID) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._state) }()
+        case 5: try { try decoder.decodeSingularEnumField(value: &_storage._phase) }()
+        case 6: try { try decoder.decodeSingularStringField(value: &_storage._error) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._machineType) }()
+        case 8: try { try decoder.decodeSingularInt32Field(value: &_storage._vcpu) }()
+        case 9: try { try decoder.decodeSingularInt32Field(value: &_storage._memoryGb) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._ip) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._sshEndpoint) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._url) }()
+        case 13: try { try decoder.decodeSingularBoolField(value: &_storage._desktopAvailable) }()
+        case 14: try { try decoder.decodeSingularInt64Field(value: &_storage._archiveAfterMs) }()
+        case 15: try { try decoder.decodeSingularInt32Field(value: &_storage._ttlSeconds) }()
+        case 16: try { try decoder.decodeSingularStringField(value: &_storage._health) }()
+        case 17: try { try decoder.decodeSingularStringField(value: &_storage._healthReason) }()
+        case 18: try { try decoder.decodeSingularBoolField(value: &_storage._hydrated) }()
+        case 19: try { try decoder.decodeSingularInt64Field(value: &_storage._createdAtMs) }()
+        case 20: try { try decoder.decodeSingularInt64Field(value: &_storage._stoppedAtMs) }()
+        case 21: try { try decoder.decodeSingularStringField(value: &_storage._environment) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._providerID.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._providerID, fieldNumber: 2)
+      }
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 3)
+      }
+      if !_storage._state.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._state, fieldNumber: 4)
+      }
+      if _storage._phase != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._phase, fieldNumber: 5)
+      }
+      if !_storage._error.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._error, fieldNumber: 6)
+      }
+      if !_storage._machineType.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._machineType, fieldNumber: 7)
+      }
+      if _storage._vcpu != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._vcpu, fieldNumber: 8)
+      }
+      if _storage._memoryGb != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._memoryGb, fieldNumber: 9)
+      }
+      if !_storage._ip.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._ip, fieldNumber: 10)
+      }
+      if !_storage._sshEndpoint.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._sshEndpoint, fieldNumber: 11)
+      }
+      if !_storage._url.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._url, fieldNumber: 12)
+      }
+      try { if let v = _storage._desktopAvailable {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 13)
+      } }()
+      if _storage._archiveAfterMs != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._archiveAfterMs, fieldNumber: 14)
+      }
+      try { if let v = _storage._ttlSeconds {
+        try visitor.visitSingularInt32Field(value: v, fieldNumber: 15)
+      } }()
+      if !_storage._health.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._health, fieldNumber: 16)
+      }
+      if !_storage._healthReason.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._healthReason, fieldNumber: 17)
+      }
+      try { if let v = _storage._hydrated {
+        try visitor.visitSingularBoolField(value: v, fieldNumber: 18)
+      } }()
+      if _storage._createdAtMs != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._createdAtMs, fieldNumber: 19)
+      }
+      if _storage._stoppedAtMs != 0 {
+        try visitor.visitSingularInt64Field(value: _storage._stoppedAtMs, fieldNumber: 20)
+      }
+      if !_storage._environment.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._environment, fieldNumber: 21)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_Sandbox, rhs: Radio_Sandbox) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._providerID != rhs_storage._providerID {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._state != rhs_storage._state {return false}
+        if _storage._phase != rhs_storage._phase {return false}
+        if _storage._error != rhs_storage._error {return false}
+        if _storage._machineType != rhs_storage._machineType {return false}
+        if _storage._vcpu != rhs_storage._vcpu {return false}
+        if _storage._memoryGb != rhs_storage._memoryGb {return false}
+        if _storage._ip != rhs_storage._ip {return false}
+        if _storage._sshEndpoint != rhs_storage._sshEndpoint {return false}
+        if _storage._url != rhs_storage._url {return false}
+        if _storage._desktopAvailable != rhs_storage._desktopAvailable {return false}
+        if _storage._archiveAfterMs != rhs_storage._archiveAfterMs {return false}
+        if _storage._ttlSeconds != rhs_storage._ttlSeconds {return false}
+        if _storage._health != rhs_storage._health {return false}
+        if _storage._healthReason != rhs_storage._healthReason {return false}
+        if _storage._hydrated != rhs_storage._hydrated {return false}
+        if _storage._createdAtMs != rhs_storage._createdAtMs {return false}
+        if _storage._stoppedAtMs != rhs_storage._stoppedAtMs {return false}
+        if _storage._environment != rhs_storage._environment {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxList"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}sandboxes\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.sandboxes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sandboxes.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.sandboxes, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxList, rhs: Radio_SandboxList) -> Bool {
+    if lhs.sandboxes != rhs.sandboxes {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_ListSandboxes: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListSandboxes"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_ListSandboxes, rhs: Radio_ListSandboxes) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_GetSandbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetSandbox"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}sandbox_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.sandboxID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.sandboxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sandboxID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_GetSandbox, rhs: Radio_GetSandbox) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.sandboxID != rhs.sandboxID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_CreateSandbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateSandbox"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{1}name\0\u{3}machine_type\0\u{3}auto_stop_minutes\0\u{3}disable_auto_stop\0\u{1}environment\0\u{3}from_snapshot\0\u{1}labels\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.machineType) }()
+      case 4: try { try decoder.decodeSingularUInt32Field(value: &self._autoStopMinutes) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.disableAutoStop) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.environment) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.fromSnapshot) }()
+      case 8: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: &self.labels) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if !self.machineType.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineType, fieldNumber: 3)
+    }
+    try { if let v = self._autoStopMinutes {
+      try visitor.visitSingularUInt32Field(value: v, fieldNumber: 4)
+    } }()
+    if self.disableAutoStop != false {
+      try visitor.visitSingularBoolField(value: self.disableAutoStop, fieldNumber: 5)
+    }
+    if !self.environment.isEmpty {
+      try visitor.visitSingularStringField(value: self.environment, fieldNumber: 6)
+    }
+    if !self.fromSnapshot.isEmpty {
+      try visitor.visitSingularStringField(value: self.fromSnapshot, fieldNumber: 7)
+    }
+    if !self.labels.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufString>.self, value: self.labels, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_CreateSandbox, rhs: Radio_CreateSandbox) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.machineType != rhs.machineType {return false}
+    if lhs._autoStopMinutes != rhs._autoStopMinutes {return false}
+    if lhs.disableAutoStop != rhs.disableAutoStop {return false}
+    if lhs.environment != rhs.environment {return false}
+    if lhs.fromSnapshot != rhs.fromSnapshot {return false}
+    if lhs.labels != rhs.labels {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_ChangeSandbox: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ChangeSandbox"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}sandbox_id\0\u{1}action\0\u{3}ttl_seconds\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.sandboxID) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.action) }()
+      case 4: try { try decoder.decodeSingularInt32Field(value: &self._ttlSeconds) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.sandboxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sandboxID, fieldNumber: 2)
+    }
+    if self.action != .unspecified {
+      try visitor.visitSingularEnumField(value: self.action, fieldNumber: 3)
+    }
+    try { if let v = self._ttlSeconds {
+      try visitor.visitSingularInt32Field(value: v, fieldNumber: 4)
+    } }()
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_ChangeSandbox, rhs: Radio_ChangeSandbox) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.sandboxID != rhs.sandboxID {return false}
+    if lhs.action != rhs.action {return false}
+    if lhs._ttlSeconds != rhs._ttlSeconds {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_OpenSandboxAccess: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OpenSandboxAccess"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}provider_id\0\u{3}sandbox_id\0\u{3}ssh_public_key\0\u{1}desktop\0\u{1}port\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.providerID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.sandboxID) }()
+      case 3: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.kind != nil {try decoder.handleConflictingOneOf()}
+          self.kind = .sshPublicKey(v)
+        }
+      }()
+      case 4: try {
+        var v: Radio_DesktopAccess?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .desktop(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .desktop(v)
+        }
+      }()
+      case 5: try {
+        var v: Radio_PortAccess?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .port(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .port(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.providerID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerID, fieldNumber: 1)
+    }
+    if !self.sandboxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sandboxID, fieldNumber: 2)
+    }
+    switch self.kind {
+    case .sshPublicKey?: try {
+      guard case .sshPublicKey(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 3)
+    }()
+    case .desktop?: try {
+      guard case .desktop(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    }()
+    case .port?: try {
+      guard case .port(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_OpenSandboxAccess, rhs: Radio_OpenSandboxAccess) -> Bool {
+    if lhs.providerID != rhs.providerID {return false}
+    if lhs.sandboxID != rhs.sandboxID {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_DesktopAccess: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DesktopAccess"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}dark\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self._dark) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._dark {
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_DesktopAccess, rhs: Radio_DesktopAccess) -> Bool {
+    if lhs._dark != rhs._dark {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_PortAccess: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PortAccess"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}port\0\u{1}public\0\u{1}title\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.port) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.`public`) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.title) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.port != 0 {
+      try visitor.visitSingularUInt32Field(value: self.port, fieldNumber: 1)
+    }
+    if self.`public` != false {
+      try visitor.visitSingularBoolField(value: self.`public`, fieldNumber: 2)
+    }
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_PortAccess, rhs: Radio_PortAccess) -> Bool {
+    if lhs.port != rhs.port {return false}
+    if lhs.`public` != rhs.`public` {return false}
+    if lhs.title != rhs.title {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Radio_SandboxAccess: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SandboxAccess"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}ssh_user\0\u{3}machine_ip\0\u{3}ssh_endpoint\0\u{3}host_key\0\u{1}url\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.sshUser) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.machineIp) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.sshEndpoint) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.hostKey) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.url) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sshUser.isEmpty {
+      try visitor.visitSingularStringField(value: self.sshUser, fieldNumber: 1)
+    }
+    if !self.machineIp.isEmpty {
+      try visitor.visitSingularStringField(value: self.machineIp, fieldNumber: 2)
+    }
+    if !self.sshEndpoint.isEmpty {
+      try visitor.visitSingularStringField(value: self.sshEndpoint, fieldNumber: 3)
+    }
+    if !self.hostKey.isEmpty {
+      try visitor.visitSingularStringField(value: self.hostKey, fieldNumber: 4)
+    }
+    if !self.url.isEmpty {
+      try visitor.visitSingularStringField(value: self.url, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Radio_SandboxAccess, rhs: Radio_SandboxAccess) -> Bool {
+    if lhs.sshUser != rhs.sshUser {return false}
+    if lhs.machineIp != rhs.machineIp {return false}
+    if lhs.sshEndpoint != rhs.sshEndpoint {return false}
+    if lhs.hostKey != rhs.hostKey {return false}
+    if lhs.url != rhs.url {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

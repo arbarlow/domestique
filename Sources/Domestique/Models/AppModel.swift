@@ -39,6 +39,8 @@ final class AppModel {
     @ObservationIgnored private(set) var teamCar: TeamCarLink!
     /// Remote Team Cars from Settings → Team Cars, by id.
     private(set) var remoteCars: [UUID: TeamCarLink] = [:]
+    /// Pending saves of edited sandbox providers to their Team Car (debounced per provider).
+    @ObservationIgnored var providerSaveTasks: [UUID: Task<Void, Never>] = [:]
     /// Progress line for workspaces being created ("Cloning …").
     var creationSteps: [UUID: String] = [:]
     /// Brief confirmation shown at the bottom of the window.
@@ -93,6 +95,7 @@ final class AppModel {
         TeamCarDirectory.shared.update(state.settings.teamCars)
         Hosts.teamCarResolver = { h in TeamCarDirectory.shared.host(for: h) }
         for cfg in state.settings.teamCars { startCar(cfg) }
+        installSandboxRouting()
         // Coming back to the app (e.g. after editing domestique.toml elsewhere): re-check the config.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
             [weak self] _ in
@@ -258,69 +261,6 @@ final class AppModel {
         [teamCar] + settings.teamCars.compactMap { remoteCars[$0.id] }
     }
 
-    /// Where new workspaces can run: This Mac, each sandbox provider, then each remote Team Car.
-    var workspaceLocations: [WorkspaceLocation] {
-        [.local] + settings.sandboxProviders.map { .sandbox($0.id) } + settings.teamCars.map { .teamCar($0.id) }
-    }
-
-    /// What the sidebar's + offers when there's more than one usable place to run (nil otherwise: +
-    /// just creates on the default). Connected remote cars and signed-in sandbox providers only; the
-    /// default stays even if it's offline.
-    func newWorkspaceChoices(for repo: Repository) -> [WorkspaceLocation]? {
-        let def = defaultLocation(for: repo)
-        let choices = workspaceLocations.filter { loc in
-            if loc == def { return true }
-            switch loc {
-            case .teamCar(let id): return remoteCars[id]?.isConnected == true
-            case .sandbox, .cloud:
-                return settings.provider(for: loc).map { BoatClient.isConfigured(account: $0.credentialAccount) } ?? false
-            case .local: return true
-            }
-        }
-        return choices.count > 1 ? choices : nil
-    }
-
-    func locationName(_ loc: WorkspaceLocation) -> String {
-        switch loc {
-        case .teamCar(let id): return settings.teamCars.first { $0.id == id }?.name ?? "Missing Team Car"
-        case .sandbox, .cloud: return settings.provider(for: loc)?.name ?? "Missing sandbox provider"
-        case .local: return loc.displayName
-        }
-    }
-
-    // MARK: sandbox providers
-
-    /// Adds a boat.dev provider. `apiKey` nil = use `BOAT_API_KEY` / the `boat login` session.
-    func addSandboxProvider(name: String, apiKey: String?, boat: BoatSettings = BoatSettings()) {
-        let p = SandboxProviderConfig(name: name, boat: boat)
-        if let apiKey, !apiKey.isEmpty { BoatClient.saveAPIKey(apiKey, account: p.credentialAccount) }
-        settings.sandboxProviders.append(p)
-        cloud.refreshCredentialState()
-    }
-
-    func updateSandboxProvider(_ p: SandboxProviderConfig) {
-        guard let i = settings.sandboxProviders.firstIndex(where: { $0.id == p.id }) else { return }
-        settings.sandboxProviders[i] = p
-    }
-
-    /// Workspaces still on this provider (removing it would orphan their sandboxes).
-    func activeWorkspaces(on p: SandboxProviderConfig) -> [Workspace] {
-        state.workspaces.filter { !$0.isArchived && p.owns($0.host) }
-    }
-
-    func removeSandboxProvider(_ p: SandboxProviderConfig) {
-        guard activeWorkspaces(on: p).isEmpty else {
-            alert = AppAlert(title: "Archive its workspaces first", message: "\(p.name) still has active workspaces.")
-            return
-        }
-        settings.sandboxProviders.removeAll { $0.id == p.id }
-        BoatClient.saveAPIKey(nil, account: p.credentialAccount)
-        for repo in state.repositories where defaultLocation(for: repo) == .sandbox(p.id) {
-            updateRepo(repo.id) { $0.defaultLocation = nil }
-        }
-        cloud.refreshCredentialState()
-    }
-
     private func startCar(_ cfg: TeamCarConfig) {
         let link = TeamCarLink(app: self, car: .remote(cfg))
         remoteCars[cfg.id] = link
@@ -352,6 +292,10 @@ final class AppModel {
         remoteCars[id]?.close()
         remoteCars[id] = nil
         for ws in state.workspaces where ws.teamCarID == id { forgetWorkspace(ws.id) }
+        // Its sandbox providers go with it (their sandboxes stay on the service).
+        for p in settings.sandboxProviders where p.remoteCarID == id && activeWorkspaces(on: p).isEmpty {
+            forgetSandboxProvider(p)
+        }
         settings.teamCars.removeAll { $0.id == id }
         TeamCarDirectory.shared.update(settings.teamCars)
         TeamCarTokens.delete(id)

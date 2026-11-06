@@ -69,6 +69,13 @@ public struct BoatSSHAccess: Codable, Sendable, Hashable {
     public var sshUser: String?
     public var sshEndpoint: String?
     public var hostKey: String
+
+    public init(machineIp: String?, sshUser: String?, sshEndpoint: String?, hostKey: String) {
+        self.machineIp = machineIp
+        self.sshUser = sshUser
+        self.sshEndpoint = sshEndpoint
+        self.hostKey = hostKey
+    }
 }
 
 public struct BoatUser: Codable, Sendable, Hashable {
@@ -76,6 +83,13 @@ public struct BoatUser: Codable, Sendable, Hashable {
     public var login: String?
     public var email: String?
     public var displayName: String?
+
+    public init(id: String? = nil, login: String?, email: String?, displayName: String?) {
+        self.id = id
+        self.login = login
+        self.email = email
+        self.displayName = displayName
+    }
 }
 
 public struct BoatLimits: Codable, Sendable, Hashable {
@@ -85,10 +99,24 @@ public struct BoatLimits: Codable, Sendable, Hashable {
     public var startBlockedReason: String?
     public var machineTypes: [MachineType]?
 
+    public init(canStart: Bool?, trialLine: String?, accessTier: String? = nil, startBlockedReason: String?, machineTypes: [MachineType]?) {
+        self.canStart = canStart
+        self.trialLine = trialLine
+        self.accessTier = accessTier
+        self.startBlockedReason = startBlockedReason
+        self.machineTypes = machineTypes
+    }
+
     public struct MachineType: Codable, Sendable, Hashable {
         public var type: String
         public var available: Bool
         public var reason: String?
+
+        public init(type: String, available: Bool, reason: String?) {
+            self.type = type
+            self.available = available
+            self.reason = reason
+        }
     }
 }
 
@@ -99,18 +127,24 @@ public struct BoatCreateRequest: Encodable, Sendable {
     public var ttlSeconds: Int?
     public var disableAutoStop = false
     public var environment: String?
+    /// Saved snapshot to start from (`boat new --from`). nil = a fresh machine.
+    public var from: String?
     public var labels: [String: String]?
 
-    public init(name: String?, type: String?, ttlSeconds: Int?, disableAutoStop: Bool = false, environment: String?, labels: [String: String]?) {
+    public init(
+        name: String?, type: String?, ttlSeconds: Int?, disableAutoStop: Bool = false, environment: String?, from: String? = nil,
+        labels: [String: String]?
+    ) {
         self.name = name
         self.type = type
         self.ttlSeconds = ttlSeconds
         self.disableAutoStop = disableAutoStop
         self.environment = environment
+        self.from = from
         self.labels = labels
     }
 
-    enum CodingKeys: String, CodingKey { case name, type, ttlSeconds, environment, labels }
+    enum CodingKeys: String, CodingKey { case name, type, ttlSeconds, environment, from, labels }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -118,6 +152,7 @@ public struct BoatCreateRequest: Encodable, Sendable {
         try c.encodeIfPresent(type, forKey: .type)
         if disableAutoStop { try c.encodeNil(forKey: .ttlSeconds) } else { try c.encodeIfPresent(ttlSeconds, forKey: .ttlSeconds) }
         try c.encodeIfPresent(environment, forKey: .environment)
+        try c.encodeIfPresent(from, forKey: .from)
         try c.encodeIfPresent(labels, forKey: .labels)
     }
 }
@@ -129,6 +164,13 @@ public struct BoatAPIError: Error, LocalizedError, Sendable {
     /// e.g. the setup / billing URL boat returns with some errors.
     public var url: String?
     public var errorDescription: String? { message }
+
+    public init(status: Int, code: String?, message: String, url: String? = nil) {
+        self.status = status
+        self.code = code
+        self.message = message
+        self.url = url
+    }
 }
 
 /// Where the API key came from (shown in Settings).
@@ -171,6 +213,13 @@ public actor BoatClient {
 
     /// Which Keychain item this client's API key lives in.
     public let account: String
+
+    /// Set by the app: providers that live on a Team Car route their calls there instead of using a
+    /// key on this Mac.
+    nonisolated(unsafe) public static var routing: SandboxRouting?
+
+    /// The Team Car backend for this client's provider, if it has one.
+    private var backend: (any SandboxBackend)? { Self.routing?.backend(account) }
 
     public static let dashboardURL = URL(string: "https://boat.dev/dashboard")!
     public static let agentsSetupURL = URL(string: "https://boat.dev/dashboard?tab=agents")!
@@ -240,21 +289,30 @@ public actor BoatClient {
         return nil
     }
 
-    public nonisolated static var isConfigured: Bool { credential() != nil }
-    public nonisolated static func isConfigured(account: String?) -> Bool { credential(account: account) != nil }
+    public nonisolated static var isConfigured: Bool { isConfigured(account: nil) }
+    /// Whether this provider can make calls: its Team Car is connected and has a key, or (for a
+    /// provider on this Mac) there's a Keychain key, `BOAT_API_KEY` or a `boat login` session.
+    public nonisolated static func isConfigured(account: String?) -> Bool {
+        let account = account ?? defaultAccount
+        if let r = routing, r.backend(account) != nil { return r.isConfigured(account) }
+        return credential(account: account) != nil
+    }
 
     // MARK: sandboxes
 
     public func sandbox(_ id: String) async throws -> BoatSandbox {
-        try await call("GET", "/sandboxes/\(id)", as: BoatSandbox.self, key: "sandbox")
+        if let b = backend { return try await b.sandbox(id) }
+        return try await call("GET", "/sandboxes/\(id)", as: BoatSandbox.self, key: "sandbox")
     }
 
     public func list() async throws -> [BoatSandbox] {
-        try await call("GET", "/sandboxes?limit=200", as: [BoatSandbox].self, key: "sandboxes")
+        if let b = backend { return try await b.list() }
+        return try await call("GET", "/sandboxes?limit=200", as: [BoatSandbox].self, key: "sandboxes")
     }
 
     /// Creates a sandbox and returns its id straight away (it is still starting).
     public func create(_ request: BoatCreateRequest, idempotencyKey: String) async throws -> String {
+        if let b = backend { return try await b.create(request, idempotencyKey: idempotencyKey) }
         let body = try JSONEncoder().encode(request)
         let obj = try await raw("POST", "/sandboxes", body: body, headers: ["Idempotency-Key": idempotencyKey])
         if let sandbox = obj["sandbox"] as? [String: Any], let id = sandbox["id"] as? String { return id }
@@ -263,11 +321,13 @@ public actor BoatClient {
     }
 
     public func stop(_ id: String) async throws {
+        if let b = backend { return try await b.stop(id) }
         _ = try await raw("POST", "/sandboxes/\(id)/stop", body: Data("{}".utf8))
     }
 
     /// Resume a stopped sandbox. `ttlSeconds` nil keeps its current auto-stop setting.
     public func resume(_ id: String, ttlSeconds: Int? = nil) async throws {
+        if let b = backend { return try await b.resume(id, ttlSeconds: ttlSeconds) }
         var body: [String: Any] = [:]
         if let ttlSeconds { body["ttlSeconds"] = ttlSeconds }
         _ = try await raw("POST", "/sandboxes/\(id)/resume", body: try JSONSerialization.data(withJSONObject: body))
@@ -275,25 +335,30 @@ public actor BoatClient {
 
     /// Sets the auto-stop deadline to now + `ttlSeconds`; nil turns auto-stop off.
     public func setAutoStop(_ id: String, ttlSeconds: Int?) async throws {
+        if let b = backend { return try await b.setAutoStop(id, ttlSeconds: ttlSeconds) }
         let body: [String: Any] = ["ttlSeconds": ttlSeconds.map { $0 as Any } ?? NSNull()]
         _ = try await raw("PATCH", "/sandboxes/\(id)", body: try JSONSerialization.data(withJSONObject: body))
     }
 
     public func rename(_ id: String, name: String) async throws {
+        if let b = backend { return try await b.rename(id, name: name) }
         _ = try await raw("PATCH", "/sandboxes/\(id)", body: try JSONSerialization.data(withJSONObject: ["name": name]))
     }
 
     /// Permanently deletes the sandbox and its snapshots.
     public func delete(_ id: String) async throws {
+        if let b = backend { return try await b.delete(id) }
         _ = try await raw("DELETE", "/sandboxes/\(id)", body: nil, headers: ["X-Ascii-Confirm-Delete": id])
     }
 
     public func recover(_ id: String) async throws {
+        if let b = backend { return try await b.recover(id) }
         _ = try await raw("POST", "/sandboxes/\(id)/recover", body: Data("{}".utf8))
     }
 
     /// Authorizes `publicKey` on the sandbox and returns where to connect plus the host key to pin.
     public func sshAccess(_ id: String, publicKey: String) async throws -> BoatSSHAccess {
+        if let b = backend { return try await b.sshAccess(id, publicKey: publicKey) }
         let body = try JSONSerialization.data(withJSONObject: ["key": publicKey])
         let data = try await rawData("POST", "/sandboxes/\(id)/sshkey", body: body)
         return try Self.decoder.decode(BoatSSHAccess.self, from: data)
@@ -301,6 +366,7 @@ public actor BoatClient {
 
     /// Secret-bearing URL of the 60fps desktop stream.
     public func desktopURL(_ id: String, dark: Bool? = nil) async throws -> URL {
+        if let b = backend { return try await b.desktopURL(id, dark: dark) }
         let theme = dark.map { $0 ? "?theme=dark" : "?theme=light" } ?? ""
         let obj = try await raw("POST", "/sandboxes/\(id)/desktop\(theme)", body: Data("{}".utf8))
         guard let s = obj["desktopUrl"] as? String ?? obj["viewerUrl"] as? String ?? obj["url"] as? String, let url = URL(string: s)
@@ -310,6 +376,7 @@ public actor BoatClient {
 
     /// A stable HTTPS URL for a port inside the sandbox. Private URLs carry an access token.
     public func hostedURL(_ id: String, port: Int, public isPublic: Bool, title: String? = nil) async throws -> URL {
+        if let b = backend { return try await b.hostedURL(id, port: port, public: isPublic, title: title) }
         var body: [String: Any] = ["port": port, "public": isPublic, "localhost": true]
         if let title { body["title"] = title }
         let obj = try await raw("POST", "/sandboxes/\(id)/host", body: try JSONSerialization.data(withJSONObject: body))
@@ -320,10 +387,12 @@ public actor BoatClient {
     }
 
     public func me() async throws -> BoatUser {
-        try await call("GET", "/me", as: BoatUser.self, key: "user")
+        if let b = backend { return try await b.me() }
+        return try await call("GET", "/me", as: BoatUser.self, key: "user")
     }
 
     public func limits() async throws -> BoatLimits {
+        if let b = backend { return try await b.limits() }
         let data = try await rawData("GET", "/limits", body: nil)
         return try Self.decoder.decode(BoatLimits.self, from: data)
     }
@@ -412,7 +481,7 @@ public actor BoatClient {
         if message.isEmpty { message = "HTTP \(status)" }
         let details = inner?["details"] as? [String: Any]
         let url = details?["setupUrl"] as? String ?? details?["billingUrl"] as? String ?? obj["url"] as? String
-        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Cloud." }
+        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Sandbox Providers." }
         return BoatAPIError(status: status, code: code, message: message, url: url)
     }
 }

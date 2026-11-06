@@ -122,6 +122,8 @@ public struct BoatSettings: Codable, Sendable, Hashable {
     public var autoForwardPorts: Bool = true
     /// Archiving a workspace stops its sandbox (resumable for 14 days); deleting it deletes the sandbox.
     public var deleteOnArchive: Bool = false
+    /// boat saved snapshot new sandboxes start from (`boat new --from`). nil = a fresh machine.
+    public var fromSnapshot: String?
 
     public init() {}
 
@@ -135,6 +137,7 @@ public struct BoatSettings: Codable, Sendable, Hashable {
         shareGitHubToken = try c.decodeIfPresent(Bool.self, forKey: .shareGitHubToken) ?? d.shareGitHubToken
         autoForwardPorts = try c.decodeIfPresent(Bool.self, forKey: .autoForwardPorts) ?? d.autoForwardPorts
         deleteOnArchive = try c.decodeIfPresent(Bool.self, forKey: .deleteOnArchive) ?? d.deleteOnArchive
+        fromSnapshot = try c.decodeIfPresent(String.self, forKey: .fromSnapshot)
     }
 }
 

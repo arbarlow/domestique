@@ -798,6 +798,240 @@ func (TokenScope) EnumDescriptor() ([]byte, []int) {
 	return file_radio_v1_radio_proto_rawDescGZIP(), []int{13}
 }
 
+type SandboxKind int32
+
+const (
+	SandboxKind_SANDBOX_KIND_UNSPECIFIED SandboxKind = 0
+	SandboxKind_SANDBOX_KIND_BOAT        SandboxKind = 1
+)
+
+// Enum value maps for SandboxKind.
+var (
+	SandboxKind_name = map[int32]string{
+		0: "SANDBOX_KIND_UNSPECIFIED",
+		1: "SANDBOX_KIND_BOAT",
+	}
+	SandboxKind_value = map[string]int32{
+		"SANDBOX_KIND_UNSPECIFIED": 0,
+		"SANDBOX_KIND_BOAT":        1,
+	}
+)
+
+func (x SandboxKind) Enum() *SandboxKind {
+	p := new(SandboxKind)
+	*p = x
+	return p
+}
+
+func (x SandboxKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SandboxKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_radio_v1_radio_proto_enumTypes[14].Descriptor()
+}
+
+func (SandboxKind) Type() protoreflect.EnumType {
+	return &file_radio_v1_radio_proto_enumTypes[14]
+}
+
+func (x SandboxKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SandboxKind.Descriptor instead.
+func (SandboxKind) EnumDescriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{14}
+}
+
+type SandboxCredentialSource int32
+
+const (
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED SandboxCredentialSource = 0
+	// No key: the provider can't be used until one is saved.
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_NONE SandboxCredentialSource = 1
+	// Saved with SaveSandboxProvider (in the Team Car's database).
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_STORED SandboxCredentialSource = 2
+	// teamcar.toml's api_key_env / api_key_file.
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_CONFIG SandboxCredentialSource = 3
+	// BOAT_API_KEY in the Team Car's environment.
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT SandboxCredentialSource = 4
+	// The `boat login` session of the Team Car's user.
+	SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_CLI SandboxCredentialSource = 5
+)
+
+// Enum value maps for SandboxCredentialSource.
+var (
+	SandboxCredentialSource_name = map[int32]string{
+		0: "SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED",
+		1: "SANDBOX_CREDENTIAL_SOURCE_NONE",
+		2: "SANDBOX_CREDENTIAL_SOURCE_STORED",
+		3: "SANDBOX_CREDENTIAL_SOURCE_CONFIG",
+		4: "SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT",
+		5: "SANDBOX_CREDENTIAL_SOURCE_CLI",
+	}
+	SandboxCredentialSource_value = map[string]int32{
+		"SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED": 0,
+		"SANDBOX_CREDENTIAL_SOURCE_NONE":        1,
+		"SANDBOX_CREDENTIAL_SOURCE_STORED":      2,
+		"SANDBOX_CREDENTIAL_SOURCE_CONFIG":      3,
+		"SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT": 4,
+		"SANDBOX_CREDENTIAL_SOURCE_CLI":         5,
+	}
+)
+
+func (x SandboxCredentialSource) Enum() *SandboxCredentialSource {
+	p := new(SandboxCredentialSource)
+	*p = x
+	return p
+}
+
+func (x SandboxCredentialSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SandboxCredentialSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_radio_v1_radio_proto_enumTypes[15].Descriptor()
+}
+
+func (SandboxCredentialSource) Type() protoreflect.EnumType {
+	return &file_radio_v1_radio_proto_enumTypes[15]
+}
+
+func (x SandboxCredentialSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SandboxCredentialSource.Descriptor instead.
+func (SandboxCredentialSource) EnumDescriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{15}
+}
+
+type SandboxPhase int32
+
+const (
+	SandboxPhase_SANDBOX_PHASE_UNSPECIFIED SandboxPhase = 0
+	SandboxPhase_SANDBOX_PHASE_STARTING    SandboxPhase = 1
+	SandboxPhase_SANDBOX_PHASE_RUNNING     SandboxPhase = 2
+	SandboxPhase_SANDBOX_PHASE_STOPPING    SandboxPhase = 3
+	SandboxPhase_SANDBOX_PHASE_STOPPED     SandboxPhase = 4
+	SandboxPhase_SANDBOX_PHASE_ERROR       SandboxPhase = 5
+	SandboxPhase_SANDBOX_PHASE_GONE        SandboxPhase = 6
+)
+
+// Enum value maps for SandboxPhase.
+var (
+	SandboxPhase_name = map[int32]string{
+		0: "SANDBOX_PHASE_UNSPECIFIED",
+		1: "SANDBOX_PHASE_STARTING",
+		2: "SANDBOX_PHASE_RUNNING",
+		3: "SANDBOX_PHASE_STOPPING",
+		4: "SANDBOX_PHASE_STOPPED",
+		5: "SANDBOX_PHASE_ERROR",
+		6: "SANDBOX_PHASE_GONE",
+	}
+	SandboxPhase_value = map[string]int32{
+		"SANDBOX_PHASE_UNSPECIFIED": 0,
+		"SANDBOX_PHASE_STARTING":    1,
+		"SANDBOX_PHASE_RUNNING":     2,
+		"SANDBOX_PHASE_STOPPING":    3,
+		"SANDBOX_PHASE_STOPPED":     4,
+		"SANDBOX_PHASE_ERROR":       5,
+		"SANDBOX_PHASE_GONE":        6,
+	}
+)
+
+func (x SandboxPhase) Enum() *SandboxPhase {
+	p := new(SandboxPhase)
+	*p = x
+	return p
+}
+
+func (x SandboxPhase) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SandboxPhase) Descriptor() protoreflect.EnumDescriptor {
+	return file_radio_v1_radio_proto_enumTypes[16].Descriptor()
+}
+
+func (SandboxPhase) Type() protoreflect.EnumType {
+	return &file_radio_v1_radio_proto_enumTypes[16]
+}
+
+func (x SandboxPhase) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SandboxPhase.Descriptor instead.
+func (SandboxPhase) EnumDescriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{16}
+}
+
+type SandboxAction int32
+
+const (
+	SandboxAction_SANDBOX_ACTION_UNSPECIFIED SandboxAction = 0
+	// ttl_seconds: unset keeps the sandbox's auto-stop setting.
+	SandboxAction_SANDBOX_ACTION_RESUME SandboxAction = 1
+	SandboxAction_SANDBOX_ACTION_STOP   SandboxAction = 2
+	// ttl_seconds: the new auto-stop window from now; unset turns auto-stop off.
+	SandboxAction_SANDBOX_ACTION_SET_AUTO_STOP SandboxAction = 3
+	SandboxAction_SANDBOX_ACTION_RENAME        SandboxAction = 4
+	// Permanent: the sandbox and its snapshots.
+	SandboxAction_SANDBOX_ACTION_DELETE  SandboxAction = 5
+	SandboxAction_SANDBOX_ACTION_RECOVER SandboxAction = 6
+)
+
+// Enum value maps for SandboxAction.
+var (
+	SandboxAction_name = map[int32]string{
+		0: "SANDBOX_ACTION_UNSPECIFIED",
+		1: "SANDBOX_ACTION_RESUME",
+		2: "SANDBOX_ACTION_STOP",
+		3: "SANDBOX_ACTION_SET_AUTO_STOP",
+		4: "SANDBOX_ACTION_RENAME",
+		5: "SANDBOX_ACTION_DELETE",
+		6: "SANDBOX_ACTION_RECOVER",
+	}
+	SandboxAction_value = map[string]int32{
+		"SANDBOX_ACTION_UNSPECIFIED":   0,
+		"SANDBOX_ACTION_RESUME":        1,
+		"SANDBOX_ACTION_STOP":          2,
+		"SANDBOX_ACTION_SET_AUTO_STOP": 3,
+		"SANDBOX_ACTION_RENAME":        4,
+		"SANDBOX_ACTION_DELETE":        5,
+		"SANDBOX_ACTION_RECOVER":       6,
+	}
+)
+
+func (x SandboxAction) Enum() *SandboxAction {
+	p := new(SandboxAction)
+	*p = x
+	return p
+}
+
+func (x SandboxAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SandboxAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_radio_v1_radio_proto_enumTypes[17].Descriptor()
+}
+
+func (SandboxAction) Type() protoreflect.EnumType {
+	return &file_radio_v1_radio_proto_enumTypes[17]
+}
+
+func (x SandboxAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SandboxAction.Descriptor instead.
+func (SandboxAction) EnumDescriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{17}
+}
+
 type ClientFrame struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Frame:
@@ -1446,6 +1680,14 @@ type Request struct {
 	//	*Request_GetDiff
 	//	*Request_ListFiles
 	//	*Request_ReadFile
+	//	*Request_ListSandboxProviders
+	//	*Request_SaveSandboxProvider
+	//	*Request_RemoveSandboxProvider
+	//	*Request_ListSandboxes
+	//	*Request_GetSandbox
+	//	*Request_CreateSandbox
+	//	*Request_ChangeSandbox
+	//	*Request_OpenSandboxAccess
 	//	*Request_ProcessInput
 	//	*Request_ResizeProcess
 	//	*Request_SignalProcess
@@ -1715,6 +1957,78 @@ func (x *Request) GetReadFile() *ReadFile {
 	return nil
 }
 
+func (x *Request) GetListSandboxProviders() *ListSandboxProviders {
+	if x != nil {
+		if x, ok := x.Command.(*Request_ListSandboxProviders); ok {
+			return x.ListSandboxProviders
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetSaveSandboxProvider() *SaveSandboxProvider {
+	if x != nil {
+		if x, ok := x.Command.(*Request_SaveSandboxProvider); ok {
+			return x.SaveSandboxProvider
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetRemoveSandboxProvider() *RemoveSandboxProvider {
+	if x != nil {
+		if x, ok := x.Command.(*Request_RemoveSandboxProvider); ok {
+			return x.RemoveSandboxProvider
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetListSandboxes() *ListSandboxes {
+	if x != nil {
+		if x, ok := x.Command.(*Request_ListSandboxes); ok {
+			return x.ListSandboxes
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetGetSandbox() *GetSandbox {
+	if x != nil {
+		if x, ok := x.Command.(*Request_GetSandbox); ok {
+			return x.GetSandbox
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetCreateSandbox() *CreateSandbox {
+	if x != nil {
+		if x, ok := x.Command.(*Request_CreateSandbox); ok {
+			return x.CreateSandbox
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetChangeSandbox() *ChangeSandbox {
+	if x != nil {
+		if x, ok := x.Command.(*Request_ChangeSandbox); ok {
+			return x.ChangeSandbox
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetOpenSandboxAccess() *OpenSandboxAccess {
+	if x != nil {
+		if x, ok := x.Command.(*Request_OpenSandboxAccess); ok {
+			return x.OpenSandboxAccess
+		}
+	}
+	return nil
+}
+
 func (x *Request) GetProcessInput() *ProcessInput {
 	if x != nil {
 		if x, ok := x.Command.(*Request_ProcessInput); ok {
@@ -1865,6 +2179,39 @@ type Request_ReadFile struct {
 	ReadFile *ReadFile `protobuf:"bytes,62,opt,name=read_file,json=readFile,proto3,oneof"`
 }
 
+type Request_ListSandboxProviders struct {
+	// Sandbox providers and their sandboxes (see "Sandboxes" below).
+	ListSandboxProviders *ListSandboxProviders `protobuf:"bytes,80,opt,name=list_sandbox_providers,json=listSandboxProviders,proto3,oneof"`
+}
+
+type Request_SaveSandboxProvider struct {
+	SaveSandboxProvider *SaveSandboxProvider `protobuf:"bytes,81,opt,name=save_sandbox_provider,json=saveSandboxProvider,proto3,oneof"`
+}
+
+type Request_RemoveSandboxProvider struct {
+	RemoveSandboxProvider *RemoveSandboxProvider `protobuf:"bytes,82,opt,name=remove_sandbox_provider,json=removeSandboxProvider,proto3,oneof"`
+}
+
+type Request_ListSandboxes struct {
+	ListSandboxes *ListSandboxes `protobuf:"bytes,83,opt,name=list_sandboxes,json=listSandboxes,proto3,oneof"`
+}
+
+type Request_GetSandbox struct {
+	GetSandbox *GetSandbox `protobuf:"bytes,84,opt,name=get_sandbox,json=getSandbox,proto3,oneof"`
+}
+
+type Request_CreateSandbox struct {
+	CreateSandbox *CreateSandbox `protobuf:"bytes,85,opt,name=create_sandbox,json=createSandbox,proto3,oneof"`
+}
+
+type Request_ChangeSandbox struct {
+	ChangeSandbox *ChangeSandbox `protobuf:"bytes,86,opt,name=change_sandbox,json=changeSandbox,proto3,oneof"`
+}
+
+type Request_OpenSandboxAccess struct {
+	OpenSandboxAccess *OpenSandboxAccess `protobuf:"bytes,87,opt,name=open_sandbox_access,json=openSandboxAccess,proto3,oneof"`
+}
+
 type Request_ProcessInput struct {
 	// Running processes (see ProcessTarget).
 	ProcessInput *ProcessInput `protobuf:"bytes,50,opt,name=process_input,json=processInput,proto3,oneof"`
@@ -1936,6 +2283,22 @@ func (*Request_ListFiles) isRequest_Command() {}
 
 func (*Request_ReadFile) isRequest_Command() {}
 
+func (*Request_ListSandboxProviders) isRequest_Command() {}
+
+func (*Request_SaveSandboxProvider) isRequest_Command() {}
+
+func (*Request_RemoveSandboxProvider) isRequest_Command() {}
+
+func (*Request_ListSandboxes) isRequest_Command() {}
+
+func (*Request_GetSandbox) isRequest_Command() {}
+
+func (*Request_CreateSandbox) isRequest_Command() {}
+
+func (*Request_ChangeSandbox) isRequest_Command() {}
+
+func (*Request_OpenSandboxAccess) isRequest_Command() {}
+
 func (*Request_ProcessInput) isRequest_Command() {}
 
 func (*Request_ResizeProcess) isRequest_Command() {}
@@ -1969,6 +2332,11 @@ type Response struct {
 	//	*Response_File
 	//	*Response_CreatedToken
 	//	*Response_Tokens
+	//	*Response_SandboxProviders
+	//	*Response_SandboxProvider
+	//	*Response_Sandboxes
+	//	*Response_Sandbox
+	//	*Response_SandboxAccess
 	Result        isResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2162,6 +2530,51 @@ func (x *Response) GetTokens() *TokenList {
 	return nil
 }
 
+func (x *Response) GetSandboxProviders() *SandboxProviderList {
+	if x != nil {
+		if x, ok := x.Result.(*Response_SandboxProviders); ok {
+			return x.SandboxProviders
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSandboxProvider() *SandboxProvider {
+	if x != nil {
+		if x, ok := x.Result.(*Response_SandboxProvider); ok {
+			return x.SandboxProvider
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSandboxes() *SandboxList {
+	if x != nil {
+		if x, ok := x.Result.(*Response_Sandboxes); ok {
+			return x.Sandboxes
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSandbox() *Sandbox {
+	if x != nil {
+		if x, ok := x.Result.(*Response_Sandbox); ok {
+			return x.Sandbox
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSandboxAccess() *SandboxAccess {
+	if x != nil {
+		if x, ok := x.Result.(*Response_SandboxAccess); ok {
+			return x.SandboxAccess
+		}
+	}
+	return nil
+}
+
 type isResponse_Result interface {
 	isResponse_Result()
 }
@@ -2230,6 +2643,26 @@ type Response_Tokens struct {
 	Tokens *TokenList `protobuf:"bytes,91,opt,name=tokens,proto3,oneof"`
 }
 
+type Response_SandboxProviders struct {
+	SandboxProviders *SandboxProviderList `protobuf:"bytes,80,opt,name=sandbox_providers,json=sandboxProviders,proto3,oneof"`
+}
+
+type Response_SandboxProvider struct {
+	SandboxProvider *SandboxProvider `protobuf:"bytes,81,opt,name=sandbox_provider,json=sandboxProvider,proto3,oneof"`
+}
+
+type Response_Sandboxes struct {
+	Sandboxes *SandboxList `protobuf:"bytes,83,opt,name=sandboxes,proto3,oneof"`
+}
+
+type Response_Sandbox struct {
+	Sandbox *Sandbox `protobuf:"bytes,84,opt,name=sandbox,proto3,oneof"`
+}
+
+type Response_SandboxAccess struct {
+	SandboxAccess *SandboxAccess `protobuf:"bytes,87,opt,name=sandbox_access,json=sandboxAccess,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Result() {}
 
 func (*Response_Empty) isResponse_Result() {}
@@ -2261,6 +2694,16 @@ func (*Response_File) isResponse_Result() {}
 func (*Response_CreatedToken) isResponse_Result() {}
 
 func (*Response_Tokens) isResponse_Result() {}
+
+func (*Response_SandboxProviders) isResponse_Result() {}
+
+func (*Response_SandboxProvider) isResponse_Result() {}
+
+func (*Response_Sandboxes) isResponse_Result() {}
+
+func (*Response_Sandbox) isResponse_Result() {}
+
+func (*Response_SandboxAccess) isResponse_Result() {}
 
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2396,9 +2839,11 @@ type ServerInfo struct {
 	// Where worktrees live on this host.
 	WorkspacesRoot string `protobuf:"bytes,5,opt,name=workspaces_root,json=workspacesRoot,proto3" json:"workspaces_root,omitempty"`
 	// Which agent CLIs were found on this host.
-	Providers     []Provider `protobuf:"varint,6,rep,packed,name=providers,proto3,enum=radio.v1.Provider" json:"providers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Providers []Provider `protobuf:"varint,6,rep,packed,name=providers,proto3,enum=radio.v1.Provider" json:"providers,omitempty"`
+	// Sandbox services this Team Car can create workspaces' machines on (no account details).
+	SandboxProviders []*SandboxProvider `protobuf:"bytes,7,rep,name=sandbox_providers,json=sandboxProviders,proto3" json:"sandbox_providers,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ServerInfo) Reset() {
@@ -2469,6 +2914,13 @@ func (x *ServerInfo) GetWorkspacesRoot() string {
 func (x *ServerInfo) GetProviders() []Provider {
 	if x != nil {
 		return x.Providers
+	}
+	return nil
+}
+
+func (x *ServerInfo) GetSandboxProviders() []*SandboxProvider {
+	if x != nil {
+		return x.SandboxProviders
 	}
 	return nil
 }
@@ -7659,6 +8111,1361 @@ func (x *RevokeToken) GetTokenId() string {
 	return ""
 }
 
+type SandboxProvider struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A UUID, chosen by whoever creates the provider.
+	Id       string           `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind     SandboxKind      `protobuf:"varint,2,opt,name=kind,proto3,enum=radio.v1.SandboxKind" json:"kind,omitempty"`
+	Name     string           `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Defaults *SandboxDefaults `protobuf:"bytes,4,opt,name=defaults,proto3" json:"defaults,omitempty"`
+	// Where the API key comes from. Never the key itself.
+	CredentialSource SandboxCredentialSource `protobuf:"varint,5,opt,name=credential_source,json=credentialSource,proto3,enum=radio.v1.SandboxCredentialSource" json:"credential_source,omitempty"`
+	// Declared in teamcar.toml: SaveSandboxProvider and RemoveSandboxProvider refuse it.
+	FromConfig bool `protobuf:"varint,6,opt,name=from_config,json=fromConfig,proto3" json:"from_config,omitempty"`
+	// Filled in by ListSandboxProviders{check_account}.
+	Account       *SandboxAccount `protobuf:"bytes,7,opt,name=account,proto3" json:"account,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxProvider) Reset() {
+	*x = SandboxProvider{}
+	mi := &file_radio_v1_radio_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxProvider) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxProvider) ProtoMessage() {}
+
+func (x *SandboxProvider) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxProvider.ProtoReflect.Descriptor instead.
+func (*SandboxProvider) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *SandboxProvider) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SandboxProvider) GetKind() SandboxKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SandboxKind_SANDBOX_KIND_UNSPECIFIED
+}
+
+func (x *SandboxProvider) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SandboxProvider) GetDefaults() *SandboxDefaults {
+	if x != nil {
+		return x.Defaults
+	}
+	return nil
+}
+
+func (x *SandboxProvider) GetCredentialSource() SandboxCredentialSource {
+	if x != nil {
+		return x.CredentialSource
+	}
+	return SandboxCredentialSource_SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED
+}
+
+func (x *SandboxProvider) GetFromConfig() bool {
+	if x != nil {
+		return x.FromConfig
+	}
+	return false
+}
+
+func (x *SandboxProvider) GetAccount() *SandboxAccount {
+	if x != nil {
+		return x.Account
+	}
+	return nil
+}
+
+type SandboxDefaults struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// boat: small / default / large / xlarge. Empty = the service default.
+	MachineType string `protobuf:"bytes,1,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"`
+	// Auto-stop this long after a start or resume. Unset = never.
+	AutoStopMinutes *uint32 `protobuf:"varint,2,opt,name=auto_stop_minutes,json=autoStopMinutes,proto3,oneof" json:"auto_stop_minutes,omitempty"`
+	// boat environment name (repositories, secrets, AI credentials). Empty = the account default.
+	Environment string `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	// boat saved snapshot to start from. Empty = a fresh machine.
+	FromSnapshot string `protobuf:"bytes,4,opt,name=from_snapshot,json=fromSnapshot,proto3" json:"from_snapshot,omitempty"`
+	// Archiving a workspace deletes its sandbox instead of stopping it.
+	DeleteOnArchive bool `protobuf:"varint,5,opt,name=delete_on_archive,json=deleteOnArchive,proto3" json:"delete_on_archive,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SandboxDefaults) Reset() {
+	*x = SandboxDefaults{}
+	mi := &file_radio_v1_radio_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxDefaults) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxDefaults) ProtoMessage() {}
+
+func (x *SandboxDefaults) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxDefaults.ProtoReflect.Descriptor instead.
+func (*SandboxDefaults) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *SandboxDefaults) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *SandboxDefaults) GetAutoStopMinutes() uint32 {
+	if x != nil && x.AutoStopMinutes != nil {
+		return *x.AutoStopMinutes
+	}
+	return 0
+}
+
+func (x *SandboxDefaults) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *SandboxDefaults) GetFromSnapshot() string {
+	if x != nil {
+		return x.FromSnapshot
+	}
+	return ""
+}
+
+func (x *SandboxDefaults) GetDeleteOnArchive() bool {
+	if x != nil {
+		return x.DeleteOnArchive
+	}
+	return false
+}
+
+type SandboxAccount struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Login       string                 `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
+	Email       string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Set when the account couldn't be read (bad key, network).
+	Error              string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	CanStart           bool   `protobuf:"varint,5,opt,name=can_start,json=canStart,proto3" json:"can_start,omitempty"`
+	StartBlockedReason string `protobuf:"bytes,6,opt,name=start_blocked_reason,json=startBlockedReason,proto3" json:"start_blocked_reason,omitempty"`
+	// e.g. "Trial: 3 days left".
+	TrialLine     string                `protobuf:"bytes,7,opt,name=trial_line,json=trialLine,proto3" json:"trial_line,omitempty"`
+	MachineTypes  []*SandboxMachineType `protobuf:"bytes,8,rep,name=machine_types,json=machineTypes,proto3" json:"machine_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxAccount) Reset() {
+	*x = SandboxAccount{}
+	mi := &file_radio_v1_radio_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxAccount) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxAccount) ProtoMessage() {}
+
+func (x *SandboxAccount) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxAccount.ProtoReflect.Descriptor instead.
+func (*SandboxAccount) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *SandboxAccount) GetLogin() string {
+	if x != nil {
+		return x.Login
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetCanStart() bool {
+	if x != nil {
+		return x.CanStart
+	}
+	return false
+}
+
+func (x *SandboxAccount) GetStartBlockedReason() string {
+	if x != nil {
+		return x.StartBlockedReason
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetTrialLine() string {
+	if x != nil {
+		return x.TrialLine
+	}
+	return ""
+}
+
+func (x *SandboxAccount) GetMachineTypes() []*SandboxMachineType {
+	if x != nil {
+		return x.MachineTypes
+	}
+	return nil
+}
+
+type SandboxMachineType struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Available     bool                   `protobuf:"varint,2,opt,name=available,proto3" json:"available,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxMachineType) Reset() {
+	*x = SandboxMachineType{}
+	mi := &file_radio_v1_radio_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxMachineType) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxMachineType) ProtoMessage() {}
+
+func (x *SandboxMachineType) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxMachineType.ProtoReflect.Descriptor instead.
+func (*SandboxMachineType) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *SandboxMachineType) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *SandboxMachineType) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *SandboxMachineType) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SandboxProviderList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Providers     []*SandboxProvider     `protobuf:"bytes,1,rep,name=providers,proto3" json:"providers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxProviderList) Reset() {
+	*x = SandboxProviderList{}
+	mi := &file_radio_v1_radio_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxProviderList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxProviderList) ProtoMessage() {}
+
+func (x *SandboxProviderList) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxProviderList.ProtoReflect.Descriptor instead.
+func (*SandboxProviderList) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *SandboxProviderList) GetProviders() []*SandboxProvider {
+	if x != nil {
+		return x.Providers
+	}
+	return nil
+}
+
+type ListSandboxProviders struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Also read each provider's account and limits (one API call each).
+	CheckAccount  bool `protobuf:"varint,1,opt,name=check_account,json=checkAccount,proto3" json:"check_account,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSandboxProviders) Reset() {
+	*x = ListSandboxProviders{}
+	mi := &file_radio_v1_radio_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSandboxProviders) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSandboxProviders) ProtoMessage() {}
+
+func (x *ListSandboxProviders) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSandboxProviders.ProtoReflect.Descriptor instead.
+func (*ListSandboxProviders) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *ListSandboxProviders) GetCheckAccount() bool {
+	if x != nil {
+		return x.CheckAccount
+	}
+	return false
+}
+
+// Creates or replaces a provider (ADMIN).
+type SaveSandboxProvider struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Provider *SandboxProvider       `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	// Set: replace the stored key ("" deletes it). Unset: keep the stored key.
+	ApiKey        *string `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3,oneof" json:"api_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveSandboxProvider) Reset() {
+	*x = SaveSandboxProvider{}
+	mi := &file_radio_v1_radio_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveSandboxProvider) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveSandboxProvider) ProtoMessage() {}
+
+func (x *SaveSandboxProvider) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveSandboxProvider.ProtoReflect.Descriptor instead.
+func (*SaveSandboxProvider) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{93}
+}
+
+func (x *SaveSandboxProvider) GetProvider() *SandboxProvider {
+	if x != nil {
+		return x.Provider
+	}
+	return nil
+}
+
+func (x *SaveSandboxProvider) GetApiKey() string {
+	if x != nil && x.ApiKey != nil {
+		return *x.ApiKey
+	}
+	return ""
+}
+
+type RemoveSandboxProvider struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveSandboxProvider) Reset() {
+	*x = RemoveSandboxProvider{}
+	mi := &file_radio_v1_radio_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveSandboxProvider) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveSandboxProvider) ProtoMessage() {}
+
+func (x *RemoveSandboxProvider) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveSandboxProvider.ProtoReflect.Descriptor instead.
+func (*RemoveSandboxProvider) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *RemoveSandboxProvider) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+type Sandbox struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The service's id (boat: bx_...).
+	Id         string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProviderId string `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	Name       string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// The service's own state string; `phase` is the normalised one.
+	State       string       `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	Phase       SandboxPhase `protobuf:"varint,5,opt,name=phase,proto3,enum=radio.v1.SandboxPhase" json:"phase,omitempty"`
+	Error       string       `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	MachineType string       `protobuf:"bytes,7,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"`
+	Vcpu        int32        `protobuf:"varint,8,opt,name=vcpu,proto3" json:"vcpu,omitempty"`
+	MemoryGb    int32        `protobuf:"varint,9,opt,name=memory_gb,json=memoryGb,proto3" json:"memory_gb,omitempty"`
+	Ip          string       `protobuf:"bytes,10,opt,name=ip,proto3" json:"ip,omitempty"`
+	// host:port to SSH to, when it isn't ip:22.
+	SshEndpoint      string `protobuf:"bytes,11,opt,name=ssh_endpoint,json=sshEndpoint,proto3" json:"ssh_endpoint,omitempty"`
+	Url              string `protobuf:"bytes,12,opt,name=url,proto3" json:"url,omitempty"`
+	DesktopAvailable *bool  `protobuf:"varint,13,opt,name=desktop_available,json=desktopAvailable,proto3,oneof" json:"desktop_available,omitempty"`
+	// When an idle stopped sandbox is archived. 0 = unknown.
+	ArchiveAfterMs int64 `protobuf:"varint,14,opt,name=archive_after_ms,json=archiveAfterMs,proto3" json:"archive_after_ms,omitempty"`
+	// Auto-stop window. Unset = never.
+	TtlSeconds    *int32 `protobuf:"varint,15,opt,name=ttl_seconds,json=ttlSeconds,proto3,oneof" json:"ttl_seconds,omitempty"`
+	Health        string `protobuf:"bytes,16,opt,name=health,proto3" json:"health,omitempty"`
+	HealthReason  string `protobuf:"bytes,17,opt,name=health_reason,json=healthReason,proto3" json:"health_reason,omitempty"`
+	Hydrated      *bool  `protobuf:"varint,18,opt,name=hydrated,proto3,oneof" json:"hydrated,omitempty"`
+	CreatedAtMs   int64  `protobuf:"varint,19,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
+	StoppedAtMs   int64  `protobuf:"varint,20,opt,name=stopped_at_ms,json=stoppedAtMs,proto3" json:"stopped_at_ms,omitempty"`
+	Environment   string `protobuf:"bytes,21,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Sandbox) Reset() {
+	*x = Sandbox{}
+	mi := &file_radio_v1_radio_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Sandbox) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Sandbox) ProtoMessage() {}
+
+func (x *Sandbox) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Sandbox.ProtoReflect.Descriptor instead.
+func (*Sandbox) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *Sandbox) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Sandbox) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *Sandbox) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Sandbox) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Sandbox) GetPhase() SandboxPhase {
+	if x != nil {
+		return x.Phase
+	}
+	return SandboxPhase_SANDBOX_PHASE_UNSPECIFIED
+}
+
+func (x *Sandbox) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *Sandbox) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *Sandbox) GetVcpu() int32 {
+	if x != nil {
+		return x.Vcpu
+	}
+	return 0
+}
+
+func (x *Sandbox) GetMemoryGb() int32 {
+	if x != nil {
+		return x.MemoryGb
+	}
+	return 0
+}
+
+func (x *Sandbox) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *Sandbox) GetSshEndpoint() string {
+	if x != nil {
+		return x.SshEndpoint
+	}
+	return ""
+}
+
+func (x *Sandbox) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *Sandbox) GetDesktopAvailable() bool {
+	if x != nil && x.DesktopAvailable != nil {
+		return *x.DesktopAvailable
+	}
+	return false
+}
+
+func (x *Sandbox) GetArchiveAfterMs() int64 {
+	if x != nil {
+		return x.ArchiveAfterMs
+	}
+	return 0
+}
+
+func (x *Sandbox) GetTtlSeconds() int32 {
+	if x != nil && x.TtlSeconds != nil {
+		return *x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *Sandbox) GetHealth() string {
+	if x != nil {
+		return x.Health
+	}
+	return ""
+}
+
+func (x *Sandbox) GetHealthReason() string {
+	if x != nil {
+		return x.HealthReason
+	}
+	return ""
+}
+
+func (x *Sandbox) GetHydrated() bool {
+	if x != nil && x.Hydrated != nil {
+		return *x.Hydrated
+	}
+	return false
+}
+
+func (x *Sandbox) GetCreatedAtMs() int64 {
+	if x != nil {
+		return x.CreatedAtMs
+	}
+	return 0
+}
+
+func (x *Sandbox) GetStoppedAtMs() int64 {
+	if x != nil {
+		return x.StoppedAtMs
+	}
+	return 0
+}
+
+func (x *Sandbox) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+type SandboxList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sandboxes     []*Sandbox             `protobuf:"bytes,1,rep,name=sandboxes,proto3" json:"sandboxes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxList) Reset() {
+	*x = SandboxList{}
+	mi := &file_radio_v1_radio_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxList) ProtoMessage() {}
+
+func (x *SandboxList) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxList.ProtoReflect.Descriptor instead.
+func (*SandboxList) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *SandboxList) GetSandboxes() []*Sandbox {
+	if x != nil {
+		return x.Sandboxes
+	}
+	return nil
+}
+
+type ListSandboxes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSandboxes) Reset() {
+	*x = ListSandboxes{}
+	mi := &file_radio_v1_radio_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSandboxes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSandboxes) ProtoMessage() {}
+
+func (x *ListSandboxes) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSandboxes.ProtoReflect.Descriptor instead.
+func (*ListSandboxes) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{97}
+}
+
+func (x *ListSandboxes) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+type GetSandbox struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	SandboxId     string                 `protobuf:"bytes,2,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSandbox) Reset() {
+	*x = GetSandbox{}
+	mi := &file_radio_v1_radio_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSandbox) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSandbox) ProtoMessage() {}
+
+func (x *GetSandbox) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSandbox.ProtoReflect.Descriptor instead.
+func (*GetSandbox) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *GetSandbox) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *GetSandbox) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+// Starts a sandbox and returns it straight away (usually STARTING). Pass Request.idempotency_key:
+// it is also sent to the service, so a retried create never makes two machines.
+type CreateSandbox struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	Name       string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Each empty / unset field falls back to the provider's defaults.
+	MachineType     string  `protobuf:"bytes,3,opt,name=machine_type,json=machineType,proto3" json:"machine_type,omitempty"`
+	AutoStopMinutes *uint32 `protobuf:"varint,4,opt,name=auto_stop_minutes,json=autoStopMinutes,proto3,oneof" json:"auto_stop_minutes,omitempty"`
+	// Overrides the provider's auto_stop_minutes: never auto-stop.
+	DisableAutoStop bool              `protobuf:"varint,5,opt,name=disable_auto_stop,json=disableAutoStop,proto3" json:"disable_auto_stop,omitempty"`
+	Environment     string            `protobuf:"bytes,6,opt,name=environment,proto3" json:"environment,omitempty"`
+	FromSnapshot    string            `protobuf:"bytes,7,opt,name=from_snapshot,json=fromSnapshot,proto3" json:"from_snapshot,omitempty"`
+	Labels          map[string]string `protobuf:"bytes,8,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CreateSandbox) Reset() {
+	*x = CreateSandbox{}
+	mi := &file_radio_v1_radio_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSandbox) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSandbox) ProtoMessage() {}
+
+func (x *CreateSandbox) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSandbox.ProtoReflect.Descriptor instead.
+func (*CreateSandbox) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *CreateSandbox) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *CreateSandbox) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateSandbox) GetMachineType() string {
+	if x != nil {
+		return x.MachineType
+	}
+	return ""
+}
+
+func (x *CreateSandbox) GetAutoStopMinutes() uint32 {
+	if x != nil && x.AutoStopMinutes != nil {
+		return *x.AutoStopMinutes
+	}
+	return 0
+}
+
+func (x *CreateSandbox) GetDisableAutoStop() bool {
+	if x != nil {
+		return x.DisableAutoStop
+	}
+	return false
+}
+
+func (x *CreateSandbox) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *CreateSandbox) GetFromSnapshot() string {
+	if x != nil {
+		return x.FromSnapshot
+	}
+	return ""
+}
+
+func (x *CreateSandbox) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+type ChangeSandbox struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	SandboxId  string                 `protobuf:"bytes,2,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Action     SandboxAction          `protobuf:"varint,3,opt,name=action,proto3,enum=radio.v1.SandboxAction" json:"action,omitempty"`
+	TtlSeconds *int32                 `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3,oneof" json:"ttl_seconds,omitempty"`
+	// RENAME.
+	Name          string `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeSandbox) Reset() {
+	*x = ChangeSandbox{}
+	mi := &file_radio_v1_radio_proto_msgTypes[100]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeSandbox) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeSandbox) ProtoMessage() {}
+
+func (x *ChangeSandbox) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[100]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeSandbox.ProtoReflect.Descriptor instead.
+func (*ChangeSandbox) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{100}
+}
+
+func (x *ChangeSandbox) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ChangeSandbox) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *ChangeSandbox) GetAction() SandboxAction {
+	if x != nil {
+		return x.Action
+	}
+	return SandboxAction_SANDBOX_ACTION_UNSPECIFIED
+}
+
+func (x *ChangeSandbox) GetTtlSeconds() int32 {
+	if x != nil && x.TtlSeconds != nil {
+		return *x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *ChangeSandbox) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type OpenSandboxAccess struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	SandboxId  string                 `protobuf:"bytes,2,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*OpenSandboxAccess_SshPublicKey
+	//	*OpenSandboxAccess_Desktop
+	//	*OpenSandboxAccess_Port
+	Kind          isOpenSandboxAccess_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenSandboxAccess) Reset() {
+	*x = OpenSandboxAccess{}
+	mi := &file_radio_v1_radio_proto_msgTypes[101]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenSandboxAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenSandboxAccess) ProtoMessage() {}
+
+func (x *OpenSandboxAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[101]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenSandboxAccess.ProtoReflect.Descriptor instead.
+func (*OpenSandboxAccess) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{101}
+}
+
+func (x *OpenSandboxAccess) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *OpenSandboxAccess) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *OpenSandboxAccess) GetKind() isOpenSandboxAccess_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *OpenSandboxAccess) GetSshPublicKey() string {
+	if x != nil {
+		if x, ok := x.Kind.(*OpenSandboxAccess_SshPublicKey); ok {
+			return x.SshPublicKey
+		}
+	}
+	return ""
+}
+
+func (x *OpenSandboxAccess) GetDesktop() *DesktopAccess {
+	if x != nil {
+		if x, ok := x.Kind.(*OpenSandboxAccess_Desktop); ok {
+			return x.Desktop
+		}
+	}
+	return nil
+}
+
+func (x *OpenSandboxAccess) GetPort() *PortAccess {
+	if x != nil {
+		if x, ok := x.Kind.(*OpenSandboxAccess_Port); ok {
+			return x.Port
+		}
+	}
+	return nil
+}
+
+type isOpenSandboxAccess_Kind interface {
+	isOpenSandboxAccess_Kind()
+}
+
+type OpenSandboxAccess_SshPublicKey struct {
+	// Authorize this OpenSSH public key; the answer says where to connect and which host key to pin.
+	SshPublicKey string `protobuf:"bytes,3,opt,name=ssh_public_key,json=sshPublicKey,proto3,oneof"`
+}
+
+type OpenSandboxAccess_Desktop struct {
+	Desktop *DesktopAccess `protobuf:"bytes,4,opt,name=desktop,proto3,oneof"`
+}
+
+type OpenSandboxAccess_Port struct {
+	Port *PortAccess `protobuf:"bytes,5,opt,name=port,proto3,oneof"`
+}
+
+func (*OpenSandboxAccess_SshPublicKey) isOpenSandboxAccess_Kind() {}
+
+func (*OpenSandboxAccess_Desktop) isOpenSandboxAccess_Kind() {}
+
+func (*OpenSandboxAccess_Port) isOpenSandboxAccess_Kind() {}
+
+type DesktopAccess struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unset = the service default theme.
+	Dark          *bool `protobuf:"varint,1,opt,name=dark,proto3,oneof" json:"dark,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DesktopAccess) Reset() {
+	*x = DesktopAccess{}
+	mi := &file_radio_v1_radio_proto_msgTypes[102]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DesktopAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DesktopAccess) ProtoMessage() {}
+
+func (x *DesktopAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[102]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DesktopAccess.ProtoReflect.Descriptor instead.
+func (*DesktopAccess) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{102}
+}
+
+func (x *DesktopAccess) GetDark() bool {
+	if x != nil && x.Dark != nil {
+		return *x.Dark
+	}
+	return false
+}
+
+type PortAccess struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Port  uint32                 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	// Public URLs need no token; private ones carry one.
+	Public        bool   `protobuf:"varint,2,opt,name=public,proto3" json:"public,omitempty"`
+	Title         string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PortAccess) Reset() {
+	*x = PortAccess{}
+	mi := &file_radio_v1_radio_proto_msgTypes[103]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PortAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PortAccess) ProtoMessage() {}
+
+func (x *PortAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[103]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PortAccess.ProtoReflect.Descriptor instead.
+func (*PortAccess) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{103}
+}
+
+func (x *PortAccess) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *PortAccess) GetPublic() bool {
+	if x != nil {
+		return x.Public
+	}
+	return false
+}
+
+func (x *PortAccess) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+type SandboxAccess struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ssh_public_key.
+	SshUser     string `protobuf:"bytes,1,opt,name=ssh_user,json=sshUser,proto3" json:"ssh_user,omitempty"`
+	MachineIp   string `protobuf:"bytes,2,opt,name=machine_ip,json=machineIp,proto3" json:"machine_ip,omitempty"`
+	SshEndpoint string `protobuf:"bytes,3,opt,name=ssh_endpoint,json=sshEndpoint,proto3" json:"ssh_endpoint,omitempty"`
+	HostKey     string `protobuf:"bytes,4,opt,name=host_key,json=hostKey,proto3" json:"host_key,omitempty"`
+	// desktop / port: a secret-bearing URL.
+	Url           string `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxAccess) Reset() {
+	*x = SandboxAccess{}
+	mi := &file_radio_v1_radio_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxAccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxAccess) ProtoMessage() {}
+
+func (x *SandboxAccess) ProtoReflect() protoreflect.Message {
+	mi := &file_radio_v1_radio_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxAccess.ProtoReflect.Descriptor instead.
+func (*SandboxAccess) Descriptor() ([]byte, []int) {
+	return file_radio_v1_radio_proto_rawDescGZIP(), []int{104}
+}
+
+func (x *SandboxAccess) GetSshUser() string {
+	if x != nil {
+		return x.SshUser
+	}
+	return ""
+}
+
+func (x *SandboxAccess) GetMachineIp() string {
+	if x != nil {
+		return x.MachineIp
+	}
+	return ""
+}
+
+func (x *SandboxAccess) GetSshEndpoint() string {
+	if x != nil {
+		return x.SshEndpoint
+	}
+	return ""
+}
+
+func (x *SandboxAccess) GetHostKey() string {
+	if x != nil {
+		return x.HostKey
+	}
+	return ""
+}
+
+func (x *SandboxAccess) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
 var File_radio_v1_radio_proto protoreflect.FileDescriptor
 
 const file_radio_v1_radio_proto_rawDesc = "" +
@@ -7703,7 +9510,7 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\x0fsubscription_id\x18\x01 \x01(\x04R\x0esubscriptionId\x12\x1d\n" +
 	"\n" +
 	"resume_seq\x18\x02 \x01(\x04R\tresumeSeq\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xf7\x0e\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd3\x13\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12A\n" +
@@ -7734,7 +9541,16 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\bget_diff\x18< \x01(\v2\x11.radio.v1.GetDiffH\x00R\agetDiff\x124\n" +
 	"\n" +
 	"list_files\x18= \x01(\v2\x13.radio.v1.ListFilesH\x00R\tlistFiles\x121\n" +
-	"\tread_file\x18> \x01(\v2\x12.radio.v1.ReadFileH\x00R\breadFile\x12=\n" +
+	"\tread_file\x18> \x01(\v2\x12.radio.v1.ReadFileH\x00R\breadFile\x12V\n" +
+	"\x16list_sandbox_providers\x18P \x01(\v2\x1e.radio.v1.ListSandboxProvidersH\x00R\x14listSandboxProviders\x12S\n" +
+	"\x15save_sandbox_provider\x18Q \x01(\v2\x1d.radio.v1.SaveSandboxProviderH\x00R\x13saveSandboxProvider\x12Y\n" +
+	"\x17remove_sandbox_provider\x18R \x01(\v2\x1f.radio.v1.RemoveSandboxProviderH\x00R\x15removeSandboxProvider\x12@\n" +
+	"\x0elist_sandboxes\x18S \x01(\v2\x17.radio.v1.ListSandboxesH\x00R\rlistSandboxes\x127\n" +
+	"\vget_sandbox\x18T \x01(\v2\x14.radio.v1.GetSandboxH\x00R\n" +
+	"getSandbox\x12@\n" +
+	"\x0ecreate_sandbox\x18U \x01(\v2\x17.radio.v1.CreateSandboxH\x00R\rcreateSandbox\x12@\n" +
+	"\x0echange_sandbox\x18V \x01(\v2\x17.radio.v1.ChangeSandboxH\x00R\rchangeSandbox\x12M\n" +
+	"\x13open_sandbox_access\x18W \x01(\v2\x1b.radio.v1.OpenSandboxAccessH\x00R\x11openSandboxAccess\x12=\n" +
 	"\rprocess_input\x182 \x01(\v2\x16.radio.v1.ProcessInputH\x00R\fprocessInput\x12@\n" +
 	"\x0eresize_process\x183 \x01(\v2\x17.radio.v1.ResizeProcessH\x00R\rresizeProcess\x12@\n" +
 	"\x0esignal_process\x184 \x01(\v2\x17.radio.v1.SignalProcessH\x00R\rsignalProcess\x12:\n" +
@@ -7742,7 +9558,7 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\vlist_tokens\x18[ \x01(\v2\x14.radio.v1.ListTokensH\x00R\n" +
 	"listTokens\x12:\n" +
 	"\frevoke_token\x18\\ \x01(\v2\x15.radio.v1.RevokeTokenH\x00R\vrevokeTokenB\t\n" +
-	"\acommandJ\x04\bF\x10Z\"\xd3\x06\n" +
+	"\acommandJ\x04\bF\x10PJ\x04\bY\x10Z\"\x91\t\n" +
 	"\bResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x05error\x18\x02 \x01(\v2\x0f.radio.v1.ErrorH\x00R\x05error\x12'\n" +
@@ -7768,13 +9584,18 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\x05files\x18= \x01(\v2\x12.radio.v1.FileListH\x00R\x05files\x12+\n" +
 	"\x04file\x18> \x01(\v2\x15.radio.v1.FileContentH\x00R\x04file\x12=\n" +
 	"\rcreated_token\x18Z \x01(\v2\x16.radio.v1.CreatedTokenH\x00R\fcreatedToken\x12-\n" +
-	"\x06tokens\x18[ \x01(\v2\x13.radio.v1.TokenListH\x00R\x06tokensB\b\n" +
+	"\x06tokens\x18[ \x01(\v2\x13.radio.v1.TokenListH\x00R\x06tokens\x12L\n" +
+	"\x11sandbox_providers\x18P \x01(\v2\x1d.radio.v1.SandboxProviderListH\x00R\x10sandboxProviders\x12F\n" +
+	"\x10sandbox_provider\x18Q \x01(\v2\x19.radio.v1.SandboxProviderH\x00R\x0fsandboxProvider\x125\n" +
+	"\tsandboxes\x18S \x01(\v2\x15.radio.v1.SandboxListH\x00R\tsandboxes\x12-\n" +
+	"\asandbox\x18T \x01(\v2\x11.radio.v1.SandboxH\x00R\asandbox\x12@\n" +
+	"\x0esandbox_access\x18W \x01(\v2\x17.radio.v1.SandboxAccessH\x00R\rsandboxAccessB\b\n" +
 	"\x06result\"\a\n" +
 	"\x05Empty\"J\n" +
 	"\x05Error\x12'\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x13.radio.v1.ErrorCodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x0f\n" +
-	"\rGetServerInfo\"\xe8\x01\n" +
+	"\rGetServerInfo\"\xb0\x02\n" +
 	"\n" +
 	"ServerInfo\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1f\n" +
@@ -7783,7 +9604,8 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\x0eserver_version\x18\x03 \x01(\tR\rserverVersion\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12'\n" +
 	"\x0fworkspaces_root\x18\x05 \x01(\tR\x0eworkspacesRoot\x120\n" +
-	"\tproviders\x18\x06 \x03(\x0e2\x12.radio.v1.ProviderR\tproviders\"\xab\x01\n" +
+	"\tproviders\x18\x06 \x03(\x0e2\x12.radio.v1.ProviderR\tproviders\x12F\n" +
+	"\x11sandbox_providers\x18\a \x03(\v2\x19.radio.v1.SandboxProviderR\x10sandboxProviders\"\xab\x01\n" +
 	"\tSubscribe\x120\n" +
 	"\x06server\x18\x01 \x01(\v2\x16.radio.v1.ServerTargetH\x00R\x06server\x12-\n" +
 	"\x05rider\x18\x02 \x01(\v2\x15.radio.v1.RiderTargetH\x00R\x05rider\x123\n" +
@@ -8189,7 +10011,136 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\rcreated_at_ms\x18\x04 \x01(\x03R\vcreatedAtMs\x12%\n" +
 	"\x0flast_used_at_ms\x18\x05 \x01(\x03R\flastUsedAtMs\"(\n" +
 	"\vRevokeToken\x12\x19\n" +
-	"\btoken_id\x18\x01 \x01(\tR\atokenId*K\n" +
+	"\btoken_id\x18\x01 \x01(\tR\atokenId\"\xbc\x02\n" +
+	"\x0fSandboxProvider\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12)\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x15.radio.v1.SandboxKindR\x04kind\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x125\n" +
+	"\bdefaults\x18\x04 \x01(\v2\x19.radio.v1.SandboxDefaultsR\bdefaults\x12N\n" +
+	"\x11credential_source\x18\x05 \x01(\x0e2!.radio.v1.SandboxCredentialSourceR\x10credentialSource\x12\x1f\n" +
+	"\vfrom_config\x18\x06 \x01(\bR\n" +
+	"fromConfig\x122\n" +
+	"\aaccount\x18\a \x01(\v2\x18.radio.v1.SandboxAccountR\aaccount\"\xee\x01\n" +
+	"\x0fSandboxDefaults\x12!\n" +
+	"\fmachine_type\x18\x01 \x01(\tR\vmachineType\x12/\n" +
+	"\x11auto_stop_minutes\x18\x02 \x01(\rH\x00R\x0fautoStopMinutes\x88\x01\x01\x12 \n" +
+	"\venvironment\x18\x03 \x01(\tR\venvironment\x12#\n" +
+	"\rfrom_snapshot\x18\x04 \x01(\tR\ffromSnapshot\x12*\n" +
+	"\x11delete_on_archive\x18\x05 \x01(\bR\x0fdeleteOnArchiveB\x14\n" +
+	"\x12_auto_stop_minutes\"\xa6\x02\n" +
+	"\x0eSandboxAccount\x12\x14\n" +
+	"\x05login\x18\x01 \x01(\tR\x05login\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12\x1b\n" +
+	"\tcan_start\x18\x05 \x01(\bR\bcanStart\x120\n" +
+	"\x14start_blocked_reason\x18\x06 \x01(\tR\x12startBlockedReason\x12\x1d\n" +
+	"\n" +
+	"trial_line\x18\a \x01(\tR\ttrialLine\x12A\n" +
+	"\rmachine_types\x18\b \x03(\v2\x1c.radio.v1.SandboxMachineTypeR\fmachineTypes\"^\n" +
+	"\x12SandboxMachineType\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
+	"\tavailable\x18\x02 \x01(\bR\tavailable\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"N\n" +
+	"\x13SandboxProviderList\x127\n" +
+	"\tproviders\x18\x01 \x03(\v2\x19.radio.v1.SandboxProviderR\tproviders\";\n" +
+	"\x14ListSandboxProviders\x12#\n" +
+	"\rcheck_account\x18\x01 \x01(\bR\fcheckAccount\"v\n" +
+	"\x13SaveSandboxProvider\x125\n" +
+	"\bprovider\x18\x01 \x01(\v2\x19.radio.v1.SandboxProviderR\bprovider\x12\x1c\n" +
+	"\aapi_key\x18\x02 \x01(\tH\x00R\x06apiKey\x88\x01\x01B\n" +
+	"\n" +
+	"\b_api_key\"8\n" +
+	"\x15RemoveSandboxProvider\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\"\xbe\x05\n" +
+	"\aSandbox\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vprovider_id\x18\x02 \x01(\tR\n" +
+	"providerId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12,\n" +
+	"\x05phase\x18\x05 \x01(\x0e2\x16.radio.v1.SandboxPhaseR\x05phase\x12\x14\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\x12!\n" +
+	"\fmachine_type\x18\a \x01(\tR\vmachineType\x12\x12\n" +
+	"\x04vcpu\x18\b \x01(\x05R\x04vcpu\x12\x1b\n" +
+	"\tmemory_gb\x18\t \x01(\x05R\bmemoryGb\x12\x0e\n" +
+	"\x02ip\x18\n" +
+	" \x01(\tR\x02ip\x12!\n" +
+	"\fssh_endpoint\x18\v \x01(\tR\vsshEndpoint\x12\x10\n" +
+	"\x03url\x18\f \x01(\tR\x03url\x120\n" +
+	"\x11desktop_available\x18\r \x01(\bH\x00R\x10desktopAvailable\x88\x01\x01\x12(\n" +
+	"\x10archive_after_ms\x18\x0e \x01(\x03R\x0earchiveAfterMs\x12$\n" +
+	"\vttl_seconds\x18\x0f \x01(\x05H\x01R\n" +
+	"ttlSeconds\x88\x01\x01\x12\x16\n" +
+	"\x06health\x18\x10 \x01(\tR\x06health\x12#\n" +
+	"\rhealth_reason\x18\x11 \x01(\tR\fhealthReason\x12\x1f\n" +
+	"\bhydrated\x18\x12 \x01(\bH\x02R\bhydrated\x88\x01\x01\x12\"\n" +
+	"\rcreated_at_ms\x18\x13 \x01(\x03R\vcreatedAtMs\x12\"\n" +
+	"\rstopped_at_ms\x18\x14 \x01(\x03R\vstoppedAtMs\x12 \n" +
+	"\venvironment\x18\x15 \x01(\tR\venvironmentB\x14\n" +
+	"\x12_desktop_availableB\x0e\n" +
+	"\f_ttl_secondsB\v\n" +
+	"\t_hydrated\">\n" +
+	"\vSandboxList\x12/\n" +
+	"\tsandboxes\x18\x01 \x03(\v2\x11.radio.v1.SandboxR\tsandboxes\"0\n" +
+	"\rListSandboxes\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\"L\n" +
+	"\n" +
+	"GetSandbox\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x02 \x01(\tR\tsandboxId\"\x99\x03\n" +
+	"\rCreateSandbox\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
+	"\fmachine_type\x18\x03 \x01(\tR\vmachineType\x12/\n" +
+	"\x11auto_stop_minutes\x18\x04 \x01(\rH\x00R\x0fautoStopMinutes\x88\x01\x01\x12*\n" +
+	"\x11disable_auto_stop\x18\x05 \x01(\bR\x0fdisableAutoStop\x12 \n" +
+	"\venvironment\x18\x06 \x01(\tR\venvironment\x12#\n" +
+	"\rfrom_snapshot\x18\a \x01(\tR\ffromSnapshot\x12;\n" +
+	"\x06labels\x18\b \x03(\v2#.radio.v1.CreateSandbox.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x14\n" +
+	"\x12_auto_stop_minutes\"\xca\x01\n" +
+	"\rChangeSandbox\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x02 \x01(\tR\tsandboxId\x12/\n" +
+	"\x06action\x18\x03 \x01(\x0e2\x17.radio.v1.SandboxActionR\x06action\x12$\n" +
+	"\vttl_seconds\x18\x04 \x01(\x05H\x00R\n" +
+	"ttlSeconds\x88\x01\x01\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04nameB\x0e\n" +
+	"\f_ttl_seconds\"\xe4\x01\n" +
+	"\x11OpenSandboxAccess\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x02 \x01(\tR\tsandboxId\x12&\n" +
+	"\x0essh_public_key\x18\x03 \x01(\tH\x00R\fsshPublicKey\x123\n" +
+	"\adesktop\x18\x04 \x01(\v2\x17.radio.v1.DesktopAccessH\x00R\adesktop\x12*\n" +
+	"\x04port\x18\x05 \x01(\v2\x14.radio.v1.PortAccessH\x00R\x04portB\x06\n" +
+	"\x04kind\"1\n" +
+	"\rDesktopAccess\x12\x17\n" +
+	"\x04dark\x18\x01 \x01(\bH\x00R\x04dark\x88\x01\x01B\a\n" +
+	"\x05_dark\"N\n" +
+	"\n" +
+	"PortAccess\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\rR\x04port\x12\x16\n" +
+	"\x06public\x18\x02 \x01(\bR\x06public\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\"\x99\x01\n" +
+	"\rSandboxAccess\x12\x19\n" +
+	"\bssh_user\x18\x01 \x01(\tR\asshUser\x12\x1d\n" +
+	"\n" +
+	"machine_ip\x18\x02 \x01(\tR\tmachineIp\x12!\n" +
+	"\fssh_endpoint\x18\x03 \x01(\tR\vsshEndpoint\x12\x19\n" +
+	"\bhost_key\x18\x04 \x01(\tR\ahostKey\x12\x10\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url*K\n" +
 	"\x0fProtocolVersion\x12 \n" +
 	"\x1cPROTOCOL_VERSION_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12PROTOCOL_VERSION_1\x10\x01*\xb4\x02\n" +
@@ -8271,7 +10222,33 @@ const file_radio_v1_radio_proto_rawDesc = "" +
 	"\x10TOKEN_SCOPE_READ\x10\x01\x12\x17\n" +
 	"\x13TOKEN_SCOPE_TRIGGER\x10\x02\x12\x17\n" +
 	"\x13TOKEN_SCOPE_OPERATE\x10\x03\x12\x15\n" +
-	"\x11TOKEN_SCOPE_ADMIN\x10\x04BFZ;github.com/arbarlow/domestique/teamcar/gen/radio/v1;radiov1\xba\x02\x06Radio_b\x06proto3"
+	"\x11TOKEN_SCOPE_ADMIN\x10\x04*B\n" +
+	"\vSandboxKind\x12\x1c\n" +
+	"\x18SANDBOX_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11SANDBOX_KIND_BOAT\x10\x01*\x82\x02\n" +
+	"\x17SandboxCredentialSource\x12)\n" +
+	"%SANDBOX_CREDENTIAL_SOURCE_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eSANDBOX_CREDENTIAL_SOURCE_NONE\x10\x01\x12$\n" +
+	" SANDBOX_CREDENTIAL_SOURCE_STORED\x10\x02\x12$\n" +
+	" SANDBOX_CREDENTIAL_SOURCE_CONFIG\x10\x03\x12)\n" +
+	"%SANDBOX_CREDENTIAL_SOURCE_ENVIRONMENT\x10\x04\x12!\n" +
+	"\x1dSANDBOX_CREDENTIAL_SOURCE_CLI\x10\x05*\xcc\x01\n" +
+	"\fSandboxPhase\x12\x1d\n" +
+	"\x19SANDBOX_PHASE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16SANDBOX_PHASE_STARTING\x10\x01\x12\x19\n" +
+	"\x15SANDBOX_PHASE_RUNNING\x10\x02\x12\x1a\n" +
+	"\x16SANDBOX_PHASE_STOPPING\x10\x03\x12\x19\n" +
+	"\x15SANDBOX_PHASE_STOPPED\x10\x04\x12\x17\n" +
+	"\x13SANDBOX_PHASE_ERROR\x10\x05\x12\x16\n" +
+	"\x12SANDBOX_PHASE_GONE\x10\x06*\xd7\x01\n" +
+	"\rSandboxAction\x12\x1e\n" +
+	"\x1aSANDBOX_ACTION_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15SANDBOX_ACTION_RESUME\x10\x01\x12\x17\n" +
+	"\x13SANDBOX_ACTION_STOP\x10\x02\x12 \n" +
+	"\x1cSANDBOX_ACTION_SET_AUTO_STOP\x10\x03\x12\x19\n" +
+	"\x15SANDBOX_ACTION_RENAME\x10\x04\x12\x19\n" +
+	"\x15SANDBOX_ACTION_DELETE\x10\x05\x12\x1a\n" +
+	"\x16SANDBOX_ACTION_RECOVER\x10\x06BFZ;github.com/arbarlow/domestique/teamcar/gen/radio/v1;radiov1\xba\x02\x06Radio_b\x06proto3"
 
 var (
 	file_radio_v1_radio_proto_rawDescOnce sync.Once
@@ -8285,247 +10262,297 @@ func file_radio_v1_radio_proto_rawDescGZIP() []byte {
 	return file_radio_v1_radio_proto_rawDescData
 }
 
-var file_radio_v1_radio_proto_enumTypes = make([]protoimpl.EnumInfo, 14)
-var file_radio_v1_radio_proto_msgTypes = make([]protoimpl.MessageInfo, 90)
+var file_radio_v1_radio_proto_enumTypes = make([]protoimpl.EnumInfo, 18)
+var file_radio_v1_radio_proto_msgTypes = make([]protoimpl.MessageInfo, 109)
 var file_radio_v1_radio_proto_goTypes = []any{
-	(ProtocolVersion)(0),     // 0: radio.v1.ProtocolVersion
-	(ErrorCode)(0),           // 1: radio.v1.ErrorCode
-	(OutputStream)(0),        // 2: radio.v1.OutputStream
-	(ShipMode)(0),            // 3: radio.v1.ShipMode
-	(WorkspaceState)(0),      // 4: radio.v1.WorkspaceState
-	(Provider)(0),            // 5: radio.v1.Provider
-	(PermissionMode)(0),      // 6: radio.v1.PermissionMode
-	(RiderActivity)(0),       // 7: radio.v1.RiderActivity
-	(Decision)(0),            // 8: radio.v1.Decision
-	(ToolStatus)(0),          // 9: radio.v1.ToolStatus
-	(ApprovalResolution)(0),  // 10: radio.v1.ApprovalResolution
-	(AgentTaskStatus)(0),     // 11: radio.v1.AgentTaskStatus
-	(FileDiffStatus)(0),      // 12: radio.v1.FileDiffStatus
-	(TokenScope)(0),          // 13: radio.v1.TokenScope
-	(*ClientFrame)(nil),      // 14: radio.v1.ClientFrame
-	(*ServerFrame)(nil),      // 15: radio.v1.ServerFrame
-	(*Hello)(nil),            // 16: radio.v1.Hello
-	(*Welcome)(nil),          // 17: radio.v1.Welcome
-	(*Goodbye)(nil),          // 18: radio.v1.Goodbye
-	(*Ping)(nil),             // 19: radio.v1.Ping
-	(*Pong)(nil),             // 20: radio.v1.Pong
-	(*Gap)(nil),              // 21: radio.v1.Gap
-	(*Request)(nil),          // 22: radio.v1.Request
-	(*Response)(nil),         // 23: radio.v1.Response
-	(*Empty)(nil),            // 24: radio.v1.Empty
-	(*Error)(nil),            // 25: radio.v1.Error
-	(*GetServerInfo)(nil),    // 26: radio.v1.GetServerInfo
-	(*ServerInfo)(nil),       // 27: radio.v1.ServerInfo
-	(*Subscribe)(nil),        // 28: radio.v1.Subscribe
-	(*ProcessTarget)(nil),    // 29: radio.v1.ProcessTarget
-	(*ProcessStarted)(nil),   // 30: radio.v1.ProcessStarted
-	(*ProcessOutput)(nil),    // 31: radio.v1.ProcessOutput
-	(*ProcessExited)(nil),    // 32: radio.v1.ProcessExited
-	(*ProcessInput)(nil),     // 33: radio.v1.ProcessInput
-	(*ResizeProcess)(nil),    // 34: radio.v1.ResizeProcess
-	(*SignalProcess)(nil),    // 35: radio.v1.SignalProcess
-	(*ServerTarget)(nil),     // 36: radio.v1.ServerTarget
-	(*RiderTarget)(nil),      // 37: radio.v1.RiderTarget
-	(*SubscribeResult)(nil),  // 38: radio.v1.SubscribeResult
-	(*Unsubscribe)(nil),      // 39: radio.v1.Unsubscribe
-	(*Event)(nil),            // 40: radio.v1.Event
-	(*ServerSnapshot)(nil),   // 41: radio.v1.ServerSnapshot
-	(*AppendText)(nil),       // 42: radio.v1.AppendText
-	(*TurnStarted)(nil),      // 43: radio.v1.TurnStarted
-	(*TurnEnded)(nil),        // 44: radio.v1.TurnEnded
-	(*StatusLine)(nil),       // 45: radio.v1.StatusLine
-	(*AgentExited)(nil),      // 46: radio.v1.AgentExited
-	(*AutoTurnStarted)(nil),  // 47: radio.v1.AutoTurnStarted
-	(*ReplayDone)(nil),       // 48: radio.v1.ReplayDone
-	(*Repository)(nil),       // 49: radio.v1.Repository
-	(*RepositoryList)(nil),   // 50: radio.v1.RepositoryList
-	(*ListRepositories)(nil), // 51: radio.v1.ListRepositories
-	(*AddRepository)(nil),    // 52: radio.v1.AddRepository
-	(*RemoveRepository)(nil), // 53: radio.v1.RemoveRepository
-	(*Workspace)(nil),        // 54: radio.v1.Workspace
-	(*WorkspaceList)(nil),    // 55: radio.v1.WorkspaceList
-	(*ListWorkspaces)(nil),   // 56: radio.v1.ListWorkspaces
-	(*CreateWorkspace)(nil),  // 57: radio.v1.CreateWorkspace
-	(*ArchiveWorkspace)(nil), // 58: radio.v1.ArchiveWorkspace
-	(*DeleteWorkspace)(nil),  // 59: radio.v1.DeleteWorkspace
-	(*ImportWorkspace)(nil),  // 60: radio.v1.ImportWorkspace
-	(*ImportRider)(nil),      // 61: radio.v1.ImportRider
-	(*Rider)(nil),            // 62: radio.v1.Rider
-	(*OpenRider)(nil),        // 63: radio.v1.OpenRider
-	(*CloseRider)(nil),       // 64: radio.v1.CloseRider
-	(*Attachment)(nil),       // 65: radio.v1.Attachment
-	(*SendMessage)(nil),      // 66: radio.v1.SendMessage
-	(*Interrupt)(nil),        // 67: radio.v1.Interrupt
-	(*RespondApproval)(nil),  // 68: radio.v1.RespondApproval
-	(*AnswerQuestion)(nil),   // 69: radio.v1.AnswerQuestion
-	(*UpdateRider)(nil),      // 70: radio.v1.UpdateRider
-	(*ListModels)(nil),       // 71: radio.v1.ListModels
-	(*ModelOption)(nil),      // 72: radio.v1.ModelOption
-	(*ModelList)(nil),        // 73: radio.v1.ModelList
-	(*GetTranscript)(nil),    // 74: radio.v1.GetTranscript
-	(*TranscriptPage)(nil),   // 75: radio.v1.TranscriptPage
-	(*TranscriptEntry)(nil),  // 76: radio.v1.TranscriptEntry
-	(*TranscriptItem)(nil),   // 77: radio.v1.TranscriptItem
-	(*ToolCall)(nil),         // 78: radio.v1.ToolCall
-	(*FileChange)(nil),       // 79: radio.v1.FileChange
-	(*ApprovalRequest)(nil),  // 80: radio.v1.ApprovalRequest
-	(*AgentQuestion)(nil),    // 81: radio.v1.AgentQuestion
-	(*QuestionOption)(nil),   // 82: radio.v1.QuestionOption
-	(*TurnSummary)(nil),      // 83: radio.v1.TurnSummary
-	(*AgentTask)(nil),        // 84: radio.v1.AgentTask
-	(*AgentTaskStep)(nil),    // 85: radio.v1.AgentTaskStep
-	(*RateLimit)(nil),        // 86: radio.v1.RateLimit
-	(*RateLimitWindow)(nil),  // 87: radio.v1.RateLimitWindow
-	(*GetDiff)(nil),          // 88: radio.v1.GetDiff
-	(*Diff)(nil),             // 89: radio.v1.Diff
-	(*FileDiff)(nil),         // 90: radio.v1.FileDiff
-	(*ListFiles)(nil),        // 91: radio.v1.ListFiles
-	(*FileList)(nil),         // 92: radio.v1.FileList
-	(*ReadFile)(nil),         // 93: radio.v1.ReadFile
-	(*FileContent)(nil),      // 94: radio.v1.FileContent
-	(*CreateToken)(nil),      // 95: radio.v1.CreateToken
-	(*CreatedToken)(nil),     // 96: radio.v1.CreatedToken
-	(*ListTokens)(nil),       // 97: radio.v1.ListTokens
-	(*TokenList)(nil),        // 98: radio.v1.TokenList
-	(*TokenInfo)(nil),        // 99: radio.v1.TokenInfo
-	(*RevokeToken)(nil),      // 100: radio.v1.RevokeToken
-	nil,                      // 101: radio.v1.ProcessTarget.EnvEntry
-	nil,                      // 102: radio.v1.AnswerQuestion.AnswersEntry
-	nil,                      // 103: radio.v1.ApprovalRequest.AnswersEntry
+	(ProtocolVersion)(0),          // 0: radio.v1.ProtocolVersion
+	(ErrorCode)(0),                // 1: radio.v1.ErrorCode
+	(OutputStream)(0),             // 2: radio.v1.OutputStream
+	(ShipMode)(0),                 // 3: radio.v1.ShipMode
+	(WorkspaceState)(0),           // 4: radio.v1.WorkspaceState
+	(Provider)(0),                 // 5: radio.v1.Provider
+	(PermissionMode)(0),           // 6: radio.v1.PermissionMode
+	(RiderActivity)(0),            // 7: radio.v1.RiderActivity
+	(Decision)(0),                 // 8: radio.v1.Decision
+	(ToolStatus)(0),               // 9: radio.v1.ToolStatus
+	(ApprovalResolution)(0),       // 10: radio.v1.ApprovalResolution
+	(AgentTaskStatus)(0),          // 11: radio.v1.AgentTaskStatus
+	(FileDiffStatus)(0),           // 12: radio.v1.FileDiffStatus
+	(TokenScope)(0),               // 13: radio.v1.TokenScope
+	(SandboxKind)(0),              // 14: radio.v1.SandboxKind
+	(SandboxCredentialSource)(0),  // 15: radio.v1.SandboxCredentialSource
+	(SandboxPhase)(0),             // 16: radio.v1.SandboxPhase
+	(SandboxAction)(0),            // 17: radio.v1.SandboxAction
+	(*ClientFrame)(nil),           // 18: radio.v1.ClientFrame
+	(*ServerFrame)(nil),           // 19: radio.v1.ServerFrame
+	(*Hello)(nil),                 // 20: radio.v1.Hello
+	(*Welcome)(nil),               // 21: radio.v1.Welcome
+	(*Goodbye)(nil),               // 22: radio.v1.Goodbye
+	(*Ping)(nil),                  // 23: radio.v1.Ping
+	(*Pong)(nil),                  // 24: radio.v1.Pong
+	(*Gap)(nil),                   // 25: radio.v1.Gap
+	(*Request)(nil),               // 26: radio.v1.Request
+	(*Response)(nil),              // 27: radio.v1.Response
+	(*Empty)(nil),                 // 28: radio.v1.Empty
+	(*Error)(nil),                 // 29: radio.v1.Error
+	(*GetServerInfo)(nil),         // 30: radio.v1.GetServerInfo
+	(*ServerInfo)(nil),            // 31: radio.v1.ServerInfo
+	(*Subscribe)(nil),             // 32: radio.v1.Subscribe
+	(*ProcessTarget)(nil),         // 33: radio.v1.ProcessTarget
+	(*ProcessStarted)(nil),        // 34: radio.v1.ProcessStarted
+	(*ProcessOutput)(nil),         // 35: radio.v1.ProcessOutput
+	(*ProcessExited)(nil),         // 36: radio.v1.ProcessExited
+	(*ProcessInput)(nil),          // 37: radio.v1.ProcessInput
+	(*ResizeProcess)(nil),         // 38: radio.v1.ResizeProcess
+	(*SignalProcess)(nil),         // 39: radio.v1.SignalProcess
+	(*ServerTarget)(nil),          // 40: radio.v1.ServerTarget
+	(*RiderTarget)(nil),           // 41: radio.v1.RiderTarget
+	(*SubscribeResult)(nil),       // 42: radio.v1.SubscribeResult
+	(*Unsubscribe)(nil),           // 43: radio.v1.Unsubscribe
+	(*Event)(nil),                 // 44: radio.v1.Event
+	(*ServerSnapshot)(nil),        // 45: radio.v1.ServerSnapshot
+	(*AppendText)(nil),            // 46: radio.v1.AppendText
+	(*TurnStarted)(nil),           // 47: radio.v1.TurnStarted
+	(*TurnEnded)(nil),             // 48: radio.v1.TurnEnded
+	(*StatusLine)(nil),            // 49: radio.v1.StatusLine
+	(*AgentExited)(nil),           // 50: radio.v1.AgentExited
+	(*AutoTurnStarted)(nil),       // 51: radio.v1.AutoTurnStarted
+	(*ReplayDone)(nil),            // 52: radio.v1.ReplayDone
+	(*Repository)(nil),            // 53: radio.v1.Repository
+	(*RepositoryList)(nil),        // 54: radio.v1.RepositoryList
+	(*ListRepositories)(nil),      // 55: radio.v1.ListRepositories
+	(*AddRepository)(nil),         // 56: radio.v1.AddRepository
+	(*RemoveRepository)(nil),      // 57: radio.v1.RemoveRepository
+	(*Workspace)(nil),             // 58: radio.v1.Workspace
+	(*WorkspaceList)(nil),         // 59: radio.v1.WorkspaceList
+	(*ListWorkspaces)(nil),        // 60: radio.v1.ListWorkspaces
+	(*CreateWorkspace)(nil),       // 61: radio.v1.CreateWorkspace
+	(*ArchiveWorkspace)(nil),      // 62: radio.v1.ArchiveWorkspace
+	(*DeleteWorkspace)(nil),       // 63: radio.v1.DeleteWorkspace
+	(*ImportWorkspace)(nil),       // 64: radio.v1.ImportWorkspace
+	(*ImportRider)(nil),           // 65: radio.v1.ImportRider
+	(*Rider)(nil),                 // 66: radio.v1.Rider
+	(*OpenRider)(nil),             // 67: radio.v1.OpenRider
+	(*CloseRider)(nil),            // 68: radio.v1.CloseRider
+	(*Attachment)(nil),            // 69: radio.v1.Attachment
+	(*SendMessage)(nil),           // 70: radio.v1.SendMessage
+	(*Interrupt)(nil),             // 71: radio.v1.Interrupt
+	(*RespondApproval)(nil),       // 72: radio.v1.RespondApproval
+	(*AnswerQuestion)(nil),        // 73: radio.v1.AnswerQuestion
+	(*UpdateRider)(nil),           // 74: radio.v1.UpdateRider
+	(*ListModels)(nil),            // 75: radio.v1.ListModels
+	(*ModelOption)(nil),           // 76: radio.v1.ModelOption
+	(*ModelList)(nil),             // 77: radio.v1.ModelList
+	(*GetTranscript)(nil),         // 78: radio.v1.GetTranscript
+	(*TranscriptPage)(nil),        // 79: radio.v1.TranscriptPage
+	(*TranscriptEntry)(nil),       // 80: radio.v1.TranscriptEntry
+	(*TranscriptItem)(nil),        // 81: radio.v1.TranscriptItem
+	(*ToolCall)(nil),              // 82: radio.v1.ToolCall
+	(*FileChange)(nil),            // 83: radio.v1.FileChange
+	(*ApprovalRequest)(nil),       // 84: radio.v1.ApprovalRequest
+	(*AgentQuestion)(nil),         // 85: radio.v1.AgentQuestion
+	(*QuestionOption)(nil),        // 86: radio.v1.QuestionOption
+	(*TurnSummary)(nil),           // 87: radio.v1.TurnSummary
+	(*AgentTask)(nil),             // 88: radio.v1.AgentTask
+	(*AgentTaskStep)(nil),         // 89: radio.v1.AgentTaskStep
+	(*RateLimit)(nil),             // 90: radio.v1.RateLimit
+	(*RateLimitWindow)(nil),       // 91: radio.v1.RateLimitWindow
+	(*GetDiff)(nil),               // 92: radio.v1.GetDiff
+	(*Diff)(nil),                  // 93: radio.v1.Diff
+	(*FileDiff)(nil),              // 94: radio.v1.FileDiff
+	(*ListFiles)(nil),             // 95: radio.v1.ListFiles
+	(*FileList)(nil),              // 96: radio.v1.FileList
+	(*ReadFile)(nil),              // 97: radio.v1.ReadFile
+	(*FileContent)(nil),           // 98: radio.v1.FileContent
+	(*CreateToken)(nil),           // 99: radio.v1.CreateToken
+	(*CreatedToken)(nil),          // 100: radio.v1.CreatedToken
+	(*ListTokens)(nil),            // 101: radio.v1.ListTokens
+	(*TokenList)(nil),             // 102: radio.v1.TokenList
+	(*TokenInfo)(nil),             // 103: radio.v1.TokenInfo
+	(*RevokeToken)(nil),           // 104: radio.v1.RevokeToken
+	(*SandboxProvider)(nil),       // 105: radio.v1.SandboxProvider
+	(*SandboxDefaults)(nil),       // 106: radio.v1.SandboxDefaults
+	(*SandboxAccount)(nil),        // 107: radio.v1.SandboxAccount
+	(*SandboxMachineType)(nil),    // 108: radio.v1.SandboxMachineType
+	(*SandboxProviderList)(nil),   // 109: radio.v1.SandboxProviderList
+	(*ListSandboxProviders)(nil),  // 110: radio.v1.ListSandboxProviders
+	(*SaveSandboxProvider)(nil),   // 111: radio.v1.SaveSandboxProvider
+	(*RemoveSandboxProvider)(nil), // 112: radio.v1.RemoveSandboxProvider
+	(*Sandbox)(nil),               // 113: radio.v1.Sandbox
+	(*SandboxList)(nil),           // 114: radio.v1.SandboxList
+	(*ListSandboxes)(nil),         // 115: radio.v1.ListSandboxes
+	(*GetSandbox)(nil),            // 116: radio.v1.GetSandbox
+	(*CreateSandbox)(nil),         // 117: radio.v1.CreateSandbox
+	(*ChangeSandbox)(nil),         // 118: radio.v1.ChangeSandbox
+	(*OpenSandboxAccess)(nil),     // 119: radio.v1.OpenSandboxAccess
+	(*DesktopAccess)(nil),         // 120: radio.v1.DesktopAccess
+	(*PortAccess)(nil),            // 121: radio.v1.PortAccess
+	(*SandboxAccess)(nil),         // 122: radio.v1.SandboxAccess
+	nil,                           // 123: radio.v1.ProcessTarget.EnvEntry
+	nil,                           // 124: radio.v1.AnswerQuestion.AnswersEntry
+	nil,                           // 125: radio.v1.ApprovalRequest.AnswersEntry
+	nil,                           // 126: radio.v1.CreateSandbox.LabelsEntry
 }
 var file_radio_v1_radio_proto_depIdxs = []int32{
-	16,  // 0: radio.v1.ClientFrame.hello:type_name -> radio.v1.Hello
-	22,  // 1: radio.v1.ClientFrame.request:type_name -> radio.v1.Request
-	19,  // 2: radio.v1.ClientFrame.ping:type_name -> radio.v1.Ping
-	17,  // 3: radio.v1.ServerFrame.welcome:type_name -> radio.v1.Welcome
-	23,  // 4: radio.v1.ServerFrame.response:type_name -> radio.v1.Response
-	40,  // 5: radio.v1.ServerFrame.event:type_name -> radio.v1.Event
-	21,  // 6: radio.v1.ServerFrame.gap:type_name -> radio.v1.Gap
-	20,  // 7: radio.v1.ServerFrame.pong:type_name -> radio.v1.Pong
-	18,  // 8: radio.v1.ServerFrame.goodbye:type_name -> radio.v1.Goodbye
+	20,  // 0: radio.v1.ClientFrame.hello:type_name -> radio.v1.Hello
+	26,  // 1: radio.v1.ClientFrame.request:type_name -> radio.v1.Request
+	23,  // 2: radio.v1.ClientFrame.ping:type_name -> radio.v1.Ping
+	21,  // 3: radio.v1.ServerFrame.welcome:type_name -> radio.v1.Welcome
+	27,  // 4: radio.v1.ServerFrame.response:type_name -> radio.v1.Response
+	44,  // 5: radio.v1.ServerFrame.event:type_name -> radio.v1.Event
+	25,  // 6: radio.v1.ServerFrame.gap:type_name -> radio.v1.Gap
+	24,  // 7: radio.v1.ServerFrame.pong:type_name -> radio.v1.Pong
+	22,  // 8: radio.v1.ServerFrame.goodbye:type_name -> radio.v1.Goodbye
 	0,   // 9: radio.v1.Hello.protocol_version:type_name -> radio.v1.ProtocolVersion
 	0,   // 10: radio.v1.Welcome.protocol_version:type_name -> radio.v1.ProtocolVersion
 	13,  // 11: radio.v1.Welcome.scope:type_name -> radio.v1.TokenScope
 	1,   // 12: radio.v1.Goodbye.code:type_name -> radio.v1.ErrorCode
-	26,  // 13: radio.v1.Request.get_server_info:type_name -> radio.v1.GetServerInfo
-	28,  // 14: radio.v1.Request.subscribe:type_name -> radio.v1.Subscribe
-	39,  // 15: radio.v1.Request.unsubscribe:type_name -> radio.v1.Unsubscribe
-	51,  // 16: radio.v1.Request.list_repositories:type_name -> radio.v1.ListRepositories
-	52,  // 17: radio.v1.Request.add_repository:type_name -> radio.v1.AddRepository
-	53,  // 18: radio.v1.Request.remove_repository:type_name -> radio.v1.RemoveRepository
-	56,  // 19: radio.v1.Request.list_workspaces:type_name -> radio.v1.ListWorkspaces
-	57,  // 20: radio.v1.Request.create_workspace:type_name -> radio.v1.CreateWorkspace
-	58,  // 21: radio.v1.Request.archive_workspace:type_name -> radio.v1.ArchiveWorkspace
-	59,  // 22: radio.v1.Request.delete_workspace:type_name -> radio.v1.DeleteWorkspace
-	60,  // 23: radio.v1.Request.import_workspace:type_name -> radio.v1.ImportWorkspace
-	63,  // 24: radio.v1.Request.open_rider:type_name -> radio.v1.OpenRider
-	64,  // 25: radio.v1.Request.close_rider:type_name -> radio.v1.CloseRider
-	66,  // 26: radio.v1.Request.send_message:type_name -> radio.v1.SendMessage
-	67,  // 27: radio.v1.Request.interrupt:type_name -> radio.v1.Interrupt
-	68,  // 28: radio.v1.Request.respond_approval:type_name -> radio.v1.RespondApproval
-	69,  // 29: radio.v1.Request.answer_question:type_name -> radio.v1.AnswerQuestion
-	70,  // 30: radio.v1.Request.update_rider:type_name -> radio.v1.UpdateRider
-	71,  // 31: radio.v1.Request.list_models:type_name -> radio.v1.ListModels
-	74,  // 32: radio.v1.Request.get_transcript:type_name -> radio.v1.GetTranscript
-	88,  // 33: radio.v1.Request.get_diff:type_name -> radio.v1.GetDiff
-	91,  // 34: radio.v1.Request.list_files:type_name -> radio.v1.ListFiles
-	93,  // 35: radio.v1.Request.read_file:type_name -> radio.v1.ReadFile
-	33,  // 36: radio.v1.Request.process_input:type_name -> radio.v1.ProcessInput
-	34,  // 37: radio.v1.Request.resize_process:type_name -> radio.v1.ResizeProcess
-	35,  // 38: radio.v1.Request.signal_process:type_name -> radio.v1.SignalProcess
-	95,  // 39: radio.v1.Request.create_token:type_name -> radio.v1.CreateToken
-	97,  // 40: radio.v1.Request.list_tokens:type_name -> radio.v1.ListTokens
-	100, // 41: radio.v1.Request.revoke_token:type_name -> radio.v1.RevokeToken
-	25,  // 42: radio.v1.Response.error:type_name -> radio.v1.Error
-	24,  // 43: radio.v1.Response.empty:type_name -> radio.v1.Empty
-	27,  // 44: radio.v1.Response.server_info:type_name -> radio.v1.ServerInfo
-	38,  // 45: radio.v1.Response.subscribe:type_name -> radio.v1.SubscribeResult
-	50,  // 46: radio.v1.Response.repositories:type_name -> radio.v1.RepositoryList
-	49,  // 47: radio.v1.Response.repository:type_name -> radio.v1.Repository
-	55,  // 48: radio.v1.Response.workspaces:type_name -> radio.v1.WorkspaceList
-	54,  // 49: radio.v1.Response.workspace:type_name -> radio.v1.Workspace
-	62,  // 50: radio.v1.Response.rider:type_name -> radio.v1.Rider
-	73,  // 51: radio.v1.Response.models:type_name -> radio.v1.ModelList
-	75,  // 52: radio.v1.Response.transcript:type_name -> radio.v1.TranscriptPage
-	89,  // 53: radio.v1.Response.diff:type_name -> radio.v1.Diff
-	92,  // 54: radio.v1.Response.files:type_name -> radio.v1.FileList
-	94,  // 55: radio.v1.Response.file:type_name -> radio.v1.FileContent
-	96,  // 56: radio.v1.Response.created_token:type_name -> radio.v1.CreatedToken
-	98,  // 57: radio.v1.Response.tokens:type_name -> radio.v1.TokenList
-	1,   // 58: radio.v1.Error.code:type_name -> radio.v1.ErrorCode
-	5,   // 59: radio.v1.ServerInfo.providers:type_name -> radio.v1.Provider
-	36,  // 60: radio.v1.Subscribe.server:type_name -> radio.v1.ServerTarget
-	37,  // 61: radio.v1.Subscribe.rider:type_name -> radio.v1.RiderTarget
-	29,  // 62: radio.v1.Subscribe.process:type_name -> radio.v1.ProcessTarget
-	101, // 63: radio.v1.ProcessTarget.env:type_name -> radio.v1.ProcessTarget.EnvEntry
-	2,   // 64: radio.v1.ProcessOutput.stream:type_name -> radio.v1.OutputStream
-	41,  // 65: radio.v1.Event.server_snapshot:type_name -> radio.v1.ServerSnapshot
-	49,  // 66: radio.v1.Event.repository_upserted:type_name -> radio.v1.Repository
-	54,  // 67: radio.v1.Event.workspace_upserted:type_name -> radio.v1.Workspace
-	62,  // 68: radio.v1.Event.rider_upserted:type_name -> radio.v1.Rider
-	77,  // 69: radio.v1.Event.item_upserted:type_name -> radio.v1.TranscriptItem
-	42,  // 70: radio.v1.Event.append_text:type_name -> radio.v1.AppendText
-	43,  // 71: radio.v1.Event.turn_started:type_name -> radio.v1.TurnStarted
-	44,  // 72: radio.v1.Event.turn_ended:type_name -> radio.v1.TurnEnded
-	45,  // 73: radio.v1.Event.status:type_name -> radio.v1.StatusLine
-	84,  // 74: radio.v1.Event.task:type_name -> radio.v1.AgentTask
-	86,  // 75: radio.v1.Event.rate_limit:type_name -> radio.v1.RateLimit
-	46,  // 76: radio.v1.Event.exited:type_name -> radio.v1.AgentExited
-	47,  // 77: radio.v1.Event.auto_turn_started:type_name -> radio.v1.AutoTurnStarted
-	73,  // 78: radio.v1.Event.models:type_name -> radio.v1.ModelList
-	48,  // 79: radio.v1.Event.replay_done:type_name -> radio.v1.ReplayDone
-	30,  // 80: radio.v1.Event.process_started:type_name -> radio.v1.ProcessStarted
-	31,  // 81: radio.v1.Event.process_output:type_name -> radio.v1.ProcessOutput
-	32,  // 82: radio.v1.Event.process_exited:type_name -> radio.v1.ProcessExited
-	49,  // 83: radio.v1.ServerSnapshot.repositories:type_name -> radio.v1.Repository
-	54,  // 84: radio.v1.ServerSnapshot.workspaces:type_name -> radio.v1.Workspace
-	62,  // 85: radio.v1.ServerSnapshot.riders:type_name -> radio.v1.Rider
-	83,  // 86: radio.v1.TurnEnded.summary:type_name -> radio.v1.TurnSummary
-	3,   // 87: radio.v1.Repository.ship_mode:type_name -> radio.v1.ShipMode
-	49,  // 88: radio.v1.RepositoryList.repositories:type_name -> radio.v1.Repository
-	4,   // 89: radio.v1.Workspace.state:type_name -> radio.v1.WorkspaceState
-	54,  // 90: radio.v1.WorkspaceList.workspaces:type_name -> radio.v1.Workspace
-	63,  // 91: radio.v1.CreateWorkspace.rider:type_name -> radio.v1.OpenRider
-	54,  // 92: radio.v1.ImportWorkspace.workspace:type_name -> radio.v1.Workspace
-	61,  // 93: radio.v1.ImportWorkspace.riders:type_name -> radio.v1.ImportRider
-	62,  // 94: radio.v1.ImportRider.rider:type_name -> radio.v1.Rider
-	77,  // 95: radio.v1.ImportRider.items:type_name -> radio.v1.TranscriptItem
-	5,   // 96: radio.v1.Rider.provider:type_name -> radio.v1.Provider
-	6,   // 97: radio.v1.Rider.permission_mode:type_name -> radio.v1.PermissionMode
-	7,   // 98: radio.v1.Rider.activity:type_name -> radio.v1.RiderActivity
-	5,   // 99: radio.v1.OpenRider.provider:type_name -> radio.v1.Provider
-	6,   // 100: radio.v1.OpenRider.permission_mode:type_name -> radio.v1.PermissionMode
-	65,  // 101: radio.v1.SendMessage.attachments:type_name -> radio.v1.Attachment
-	8,   // 102: radio.v1.RespondApproval.decision:type_name -> radio.v1.Decision
-	102, // 103: radio.v1.AnswerQuestion.answers:type_name -> radio.v1.AnswerQuestion.AnswersEntry
-	6,   // 104: radio.v1.UpdateRider.permission_mode:type_name -> radio.v1.PermissionMode
-	5,   // 105: radio.v1.ListModels.provider:type_name -> radio.v1.Provider
-	72,  // 106: radio.v1.ModelList.models:type_name -> radio.v1.ModelOption
-	76,  // 107: radio.v1.TranscriptPage.entries:type_name -> radio.v1.TranscriptEntry
-	77,  // 108: radio.v1.TranscriptEntry.item:type_name -> radio.v1.TranscriptItem
-	78,  // 109: radio.v1.TranscriptItem.tool:type_name -> radio.v1.ToolCall
-	80,  // 110: radio.v1.TranscriptItem.approval:type_name -> radio.v1.ApprovalRequest
-	83,  // 111: radio.v1.TranscriptItem.turn_summary:type_name -> radio.v1.TurnSummary
-	9,   // 112: radio.v1.ToolCall.status:type_name -> radio.v1.ToolStatus
-	79,  // 113: radio.v1.ToolCall.file_changes:type_name -> radio.v1.FileChange
-	10,  // 114: radio.v1.ApprovalRequest.resolution:type_name -> radio.v1.ApprovalResolution
-	81,  // 115: radio.v1.ApprovalRequest.questions:type_name -> radio.v1.AgentQuestion
-	103, // 116: radio.v1.ApprovalRequest.answers:type_name -> radio.v1.ApprovalRequest.AnswersEntry
-	82,  // 117: radio.v1.AgentQuestion.options:type_name -> radio.v1.QuestionOption
-	11,  // 118: radio.v1.AgentTask.status:type_name -> radio.v1.AgentTaskStatus
-	85,  // 119: radio.v1.AgentTask.steps:type_name -> radio.v1.AgentTaskStep
-	87,  // 120: radio.v1.RateLimit.windows:type_name -> radio.v1.RateLimitWindow
-	90,  // 121: radio.v1.Diff.files:type_name -> radio.v1.FileDiff
-	12,  // 122: radio.v1.FileDiff.status:type_name -> radio.v1.FileDiffStatus
-	13,  // 123: radio.v1.CreateToken.scope:type_name -> radio.v1.TokenScope
-	99,  // 124: radio.v1.CreatedToken.info:type_name -> radio.v1.TokenInfo
-	99,  // 125: radio.v1.TokenList.tokens:type_name -> radio.v1.TokenInfo
-	13,  // 126: radio.v1.TokenInfo.scope:type_name -> radio.v1.TokenScope
-	127, // [127:127] is the sub-list for method output_type
-	127, // [127:127] is the sub-list for method input_type
-	127, // [127:127] is the sub-list for extension type_name
-	127, // [127:127] is the sub-list for extension extendee
-	0,   // [0:127] is the sub-list for field type_name
+	30,  // 13: radio.v1.Request.get_server_info:type_name -> radio.v1.GetServerInfo
+	32,  // 14: radio.v1.Request.subscribe:type_name -> radio.v1.Subscribe
+	43,  // 15: radio.v1.Request.unsubscribe:type_name -> radio.v1.Unsubscribe
+	55,  // 16: radio.v1.Request.list_repositories:type_name -> radio.v1.ListRepositories
+	56,  // 17: radio.v1.Request.add_repository:type_name -> radio.v1.AddRepository
+	57,  // 18: radio.v1.Request.remove_repository:type_name -> radio.v1.RemoveRepository
+	60,  // 19: radio.v1.Request.list_workspaces:type_name -> radio.v1.ListWorkspaces
+	61,  // 20: radio.v1.Request.create_workspace:type_name -> radio.v1.CreateWorkspace
+	62,  // 21: radio.v1.Request.archive_workspace:type_name -> radio.v1.ArchiveWorkspace
+	63,  // 22: radio.v1.Request.delete_workspace:type_name -> radio.v1.DeleteWorkspace
+	64,  // 23: radio.v1.Request.import_workspace:type_name -> radio.v1.ImportWorkspace
+	67,  // 24: radio.v1.Request.open_rider:type_name -> radio.v1.OpenRider
+	68,  // 25: radio.v1.Request.close_rider:type_name -> radio.v1.CloseRider
+	70,  // 26: radio.v1.Request.send_message:type_name -> radio.v1.SendMessage
+	71,  // 27: radio.v1.Request.interrupt:type_name -> radio.v1.Interrupt
+	72,  // 28: radio.v1.Request.respond_approval:type_name -> radio.v1.RespondApproval
+	73,  // 29: radio.v1.Request.answer_question:type_name -> radio.v1.AnswerQuestion
+	74,  // 30: radio.v1.Request.update_rider:type_name -> radio.v1.UpdateRider
+	75,  // 31: radio.v1.Request.list_models:type_name -> radio.v1.ListModels
+	78,  // 32: radio.v1.Request.get_transcript:type_name -> radio.v1.GetTranscript
+	92,  // 33: radio.v1.Request.get_diff:type_name -> radio.v1.GetDiff
+	95,  // 34: radio.v1.Request.list_files:type_name -> radio.v1.ListFiles
+	97,  // 35: radio.v1.Request.read_file:type_name -> radio.v1.ReadFile
+	110, // 36: radio.v1.Request.list_sandbox_providers:type_name -> radio.v1.ListSandboxProviders
+	111, // 37: radio.v1.Request.save_sandbox_provider:type_name -> radio.v1.SaveSandboxProvider
+	112, // 38: radio.v1.Request.remove_sandbox_provider:type_name -> radio.v1.RemoveSandboxProvider
+	115, // 39: radio.v1.Request.list_sandboxes:type_name -> radio.v1.ListSandboxes
+	116, // 40: radio.v1.Request.get_sandbox:type_name -> radio.v1.GetSandbox
+	117, // 41: radio.v1.Request.create_sandbox:type_name -> radio.v1.CreateSandbox
+	118, // 42: radio.v1.Request.change_sandbox:type_name -> radio.v1.ChangeSandbox
+	119, // 43: radio.v1.Request.open_sandbox_access:type_name -> radio.v1.OpenSandboxAccess
+	37,  // 44: radio.v1.Request.process_input:type_name -> radio.v1.ProcessInput
+	38,  // 45: radio.v1.Request.resize_process:type_name -> radio.v1.ResizeProcess
+	39,  // 46: radio.v1.Request.signal_process:type_name -> radio.v1.SignalProcess
+	99,  // 47: radio.v1.Request.create_token:type_name -> radio.v1.CreateToken
+	101, // 48: radio.v1.Request.list_tokens:type_name -> radio.v1.ListTokens
+	104, // 49: radio.v1.Request.revoke_token:type_name -> radio.v1.RevokeToken
+	29,  // 50: radio.v1.Response.error:type_name -> radio.v1.Error
+	28,  // 51: radio.v1.Response.empty:type_name -> radio.v1.Empty
+	31,  // 52: radio.v1.Response.server_info:type_name -> radio.v1.ServerInfo
+	42,  // 53: radio.v1.Response.subscribe:type_name -> radio.v1.SubscribeResult
+	54,  // 54: radio.v1.Response.repositories:type_name -> radio.v1.RepositoryList
+	53,  // 55: radio.v1.Response.repository:type_name -> radio.v1.Repository
+	59,  // 56: radio.v1.Response.workspaces:type_name -> radio.v1.WorkspaceList
+	58,  // 57: radio.v1.Response.workspace:type_name -> radio.v1.Workspace
+	66,  // 58: radio.v1.Response.rider:type_name -> radio.v1.Rider
+	77,  // 59: radio.v1.Response.models:type_name -> radio.v1.ModelList
+	79,  // 60: radio.v1.Response.transcript:type_name -> radio.v1.TranscriptPage
+	93,  // 61: radio.v1.Response.diff:type_name -> radio.v1.Diff
+	96,  // 62: radio.v1.Response.files:type_name -> radio.v1.FileList
+	98,  // 63: radio.v1.Response.file:type_name -> radio.v1.FileContent
+	100, // 64: radio.v1.Response.created_token:type_name -> radio.v1.CreatedToken
+	102, // 65: radio.v1.Response.tokens:type_name -> radio.v1.TokenList
+	109, // 66: radio.v1.Response.sandbox_providers:type_name -> radio.v1.SandboxProviderList
+	105, // 67: radio.v1.Response.sandbox_provider:type_name -> radio.v1.SandboxProvider
+	114, // 68: radio.v1.Response.sandboxes:type_name -> radio.v1.SandboxList
+	113, // 69: radio.v1.Response.sandbox:type_name -> radio.v1.Sandbox
+	122, // 70: radio.v1.Response.sandbox_access:type_name -> radio.v1.SandboxAccess
+	1,   // 71: radio.v1.Error.code:type_name -> radio.v1.ErrorCode
+	5,   // 72: radio.v1.ServerInfo.providers:type_name -> radio.v1.Provider
+	105, // 73: radio.v1.ServerInfo.sandbox_providers:type_name -> radio.v1.SandboxProvider
+	40,  // 74: radio.v1.Subscribe.server:type_name -> radio.v1.ServerTarget
+	41,  // 75: radio.v1.Subscribe.rider:type_name -> radio.v1.RiderTarget
+	33,  // 76: radio.v1.Subscribe.process:type_name -> radio.v1.ProcessTarget
+	123, // 77: radio.v1.ProcessTarget.env:type_name -> radio.v1.ProcessTarget.EnvEntry
+	2,   // 78: radio.v1.ProcessOutput.stream:type_name -> radio.v1.OutputStream
+	45,  // 79: radio.v1.Event.server_snapshot:type_name -> radio.v1.ServerSnapshot
+	53,  // 80: radio.v1.Event.repository_upserted:type_name -> radio.v1.Repository
+	58,  // 81: radio.v1.Event.workspace_upserted:type_name -> radio.v1.Workspace
+	66,  // 82: radio.v1.Event.rider_upserted:type_name -> radio.v1.Rider
+	81,  // 83: radio.v1.Event.item_upserted:type_name -> radio.v1.TranscriptItem
+	46,  // 84: radio.v1.Event.append_text:type_name -> radio.v1.AppendText
+	47,  // 85: radio.v1.Event.turn_started:type_name -> radio.v1.TurnStarted
+	48,  // 86: radio.v1.Event.turn_ended:type_name -> radio.v1.TurnEnded
+	49,  // 87: radio.v1.Event.status:type_name -> radio.v1.StatusLine
+	88,  // 88: radio.v1.Event.task:type_name -> radio.v1.AgentTask
+	90,  // 89: radio.v1.Event.rate_limit:type_name -> radio.v1.RateLimit
+	50,  // 90: radio.v1.Event.exited:type_name -> radio.v1.AgentExited
+	51,  // 91: radio.v1.Event.auto_turn_started:type_name -> radio.v1.AutoTurnStarted
+	77,  // 92: radio.v1.Event.models:type_name -> radio.v1.ModelList
+	52,  // 93: radio.v1.Event.replay_done:type_name -> radio.v1.ReplayDone
+	34,  // 94: radio.v1.Event.process_started:type_name -> radio.v1.ProcessStarted
+	35,  // 95: radio.v1.Event.process_output:type_name -> radio.v1.ProcessOutput
+	36,  // 96: radio.v1.Event.process_exited:type_name -> radio.v1.ProcessExited
+	53,  // 97: radio.v1.ServerSnapshot.repositories:type_name -> radio.v1.Repository
+	58,  // 98: radio.v1.ServerSnapshot.workspaces:type_name -> radio.v1.Workspace
+	66,  // 99: radio.v1.ServerSnapshot.riders:type_name -> radio.v1.Rider
+	87,  // 100: radio.v1.TurnEnded.summary:type_name -> radio.v1.TurnSummary
+	3,   // 101: radio.v1.Repository.ship_mode:type_name -> radio.v1.ShipMode
+	53,  // 102: radio.v1.RepositoryList.repositories:type_name -> radio.v1.Repository
+	4,   // 103: radio.v1.Workspace.state:type_name -> radio.v1.WorkspaceState
+	58,  // 104: radio.v1.WorkspaceList.workspaces:type_name -> radio.v1.Workspace
+	67,  // 105: radio.v1.CreateWorkspace.rider:type_name -> radio.v1.OpenRider
+	58,  // 106: radio.v1.ImportWorkspace.workspace:type_name -> radio.v1.Workspace
+	65,  // 107: radio.v1.ImportWorkspace.riders:type_name -> radio.v1.ImportRider
+	66,  // 108: radio.v1.ImportRider.rider:type_name -> radio.v1.Rider
+	81,  // 109: radio.v1.ImportRider.items:type_name -> radio.v1.TranscriptItem
+	5,   // 110: radio.v1.Rider.provider:type_name -> radio.v1.Provider
+	6,   // 111: radio.v1.Rider.permission_mode:type_name -> radio.v1.PermissionMode
+	7,   // 112: radio.v1.Rider.activity:type_name -> radio.v1.RiderActivity
+	5,   // 113: radio.v1.OpenRider.provider:type_name -> radio.v1.Provider
+	6,   // 114: radio.v1.OpenRider.permission_mode:type_name -> radio.v1.PermissionMode
+	69,  // 115: radio.v1.SendMessage.attachments:type_name -> radio.v1.Attachment
+	8,   // 116: radio.v1.RespondApproval.decision:type_name -> radio.v1.Decision
+	124, // 117: radio.v1.AnswerQuestion.answers:type_name -> radio.v1.AnswerQuestion.AnswersEntry
+	6,   // 118: radio.v1.UpdateRider.permission_mode:type_name -> radio.v1.PermissionMode
+	5,   // 119: radio.v1.ListModels.provider:type_name -> radio.v1.Provider
+	76,  // 120: radio.v1.ModelList.models:type_name -> radio.v1.ModelOption
+	80,  // 121: radio.v1.TranscriptPage.entries:type_name -> radio.v1.TranscriptEntry
+	81,  // 122: radio.v1.TranscriptEntry.item:type_name -> radio.v1.TranscriptItem
+	82,  // 123: radio.v1.TranscriptItem.tool:type_name -> radio.v1.ToolCall
+	84,  // 124: radio.v1.TranscriptItem.approval:type_name -> radio.v1.ApprovalRequest
+	87,  // 125: radio.v1.TranscriptItem.turn_summary:type_name -> radio.v1.TurnSummary
+	9,   // 126: radio.v1.ToolCall.status:type_name -> radio.v1.ToolStatus
+	83,  // 127: radio.v1.ToolCall.file_changes:type_name -> radio.v1.FileChange
+	10,  // 128: radio.v1.ApprovalRequest.resolution:type_name -> radio.v1.ApprovalResolution
+	85,  // 129: radio.v1.ApprovalRequest.questions:type_name -> radio.v1.AgentQuestion
+	125, // 130: radio.v1.ApprovalRequest.answers:type_name -> radio.v1.ApprovalRequest.AnswersEntry
+	86,  // 131: radio.v1.AgentQuestion.options:type_name -> radio.v1.QuestionOption
+	11,  // 132: radio.v1.AgentTask.status:type_name -> radio.v1.AgentTaskStatus
+	89,  // 133: radio.v1.AgentTask.steps:type_name -> radio.v1.AgentTaskStep
+	91,  // 134: radio.v1.RateLimit.windows:type_name -> radio.v1.RateLimitWindow
+	94,  // 135: radio.v1.Diff.files:type_name -> radio.v1.FileDiff
+	12,  // 136: radio.v1.FileDiff.status:type_name -> radio.v1.FileDiffStatus
+	13,  // 137: radio.v1.CreateToken.scope:type_name -> radio.v1.TokenScope
+	103, // 138: radio.v1.CreatedToken.info:type_name -> radio.v1.TokenInfo
+	103, // 139: radio.v1.TokenList.tokens:type_name -> radio.v1.TokenInfo
+	13,  // 140: radio.v1.TokenInfo.scope:type_name -> radio.v1.TokenScope
+	14,  // 141: radio.v1.SandboxProvider.kind:type_name -> radio.v1.SandboxKind
+	106, // 142: radio.v1.SandboxProvider.defaults:type_name -> radio.v1.SandboxDefaults
+	15,  // 143: radio.v1.SandboxProvider.credential_source:type_name -> radio.v1.SandboxCredentialSource
+	107, // 144: radio.v1.SandboxProvider.account:type_name -> radio.v1.SandboxAccount
+	108, // 145: radio.v1.SandboxAccount.machine_types:type_name -> radio.v1.SandboxMachineType
+	105, // 146: radio.v1.SandboxProviderList.providers:type_name -> radio.v1.SandboxProvider
+	105, // 147: radio.v1.SaveSandboxProvider.provider:type_name -> radio.v1.SandboxProvider
+	16,  // 148: radio.v1.Sandbox.phase:type_name -> radio.v1.SandboxPhase
+	113, // 149: radio.v1.SandboxList.sandboxes:type_name -> radio.v1.Sandbox
+	126, // 150: radio.v1.CreateSandbox.labels:type_name -> radio.v1.CreateSandbox.LabelsEntry
+	17,  // 151: radio.v1.ChangeSandbox.action:type_name -> radio.v1.SandboxAction
+	120, // 152: radio.v1.OpenSandboxAccess.desktop:type_name -> radio.v1.DesktopAccess
+	121, // 153: radio.v1.OpenSandboxAccess.port:type_name -> radio.v1.PortAccess
+	154, // [154:154] is the sub-list for method output_type
+	154, // [154:154] is the sub-list for method input_type
+	154, // [154:154] is the sub-list for extension type_name
+	154, // [154:154] is the sub-list for extension extendee
+	0,   // [0:154] is the sub-list for field type_name
 }
 
 func init() { file_radio_v1_radio_proto_init() }
@@ -8570,6 +10597,14 @@ func file_radio_v1_radio_proto_init() {
 		(*Request_GetDiff)(nil),
 		(*Request_ListFiles)(nil),
 		(*Request_ReadFile)(nil),
+		(*Request_ListSandboxProviders)(nil),
+		(*Request_SaveSandboxProvider)(nil),
+		(*Request_RemoveSandboxProvider)(nil),
+		(*Request_ListSandboxes)(nil),
+		(*Request_GetSandbox)(nil),
+		(*Request_CreateSandbox)(nil),
+		(*Request_ChangeSandbox)(nil),
+		(*Request_OpenSandboxAccess)(nil),
 		(*Request_ProcessInput)(nil),
 		(*Request_ResizeProcess)(nil),
 		(*Request_SignalProcess)(nil),
@@ -8594,6 +10629,11 @@ func file_radio_v1_radio_proto_init() {
 		(*Response_File)(nil),
 		(*Response_CreatedToken)(nil),
 		(*Response_Tokens)(nil),
+		(*Response_SandboxProviders)(nil),
+		(*Response_SandboxProvider)(nil),
+		(*Response_Sandboxes)(nil),
+		(*Response_Sandbox)(nil),
+		(*Response_SandboxAccess)(nil),
 	}
 	file_radio_v1_radio_proto_msgTypes[14].OneofWrappers = []any{
 		(*Subscribe_Server)(nil),
@@ -8636,13 +10676,24 @@ func file_radio_v1_radio_proto_init() {
 		(*TranscriptItem_Trigger)(nil),
 	}
 	file_radio_v1_radio_proto_msgTypes[69].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[88].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[93].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[95].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[99].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[100].OneofWrappers = []any{}
+	file_radio_v1_radio_proto_msgTypes[101].OneofWrappers = []any{
+		(*OpenSandboxAccess_SshPublicKey)(nil),
+		(*OpenSandboxAccess_Desktop)(nil),
+		(*OpenSandboxAccess_Port)(nil),
+	}
+	file_radio_v1_radio_proto_msgTypes[102].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_radio_v1_radio_proto_rawDesc), len(file_radio_v1_radio_proto_rawDesc)),
-			NumEnums:      14,
-			NumMessages:   90,
+			NumEnums:      18,
+			NumMessages:   109,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

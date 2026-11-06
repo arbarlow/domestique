@@ -214,14 +214,28 @@ public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
 
 /// A sandbox provider in Settings → Sandbox Providers: one account on a sandbox service (boat.dev
 /// today) with its own defaults. Several can exist (accounts, teams, or presets like "boat · large").
+///
+/// Each provider belongs to a Team Car (`home`), which keeps its API key and makes every call to the
+/// service. The app's copy is a cache of what the car reported plus this Mac's own preferences
+/// (sharing the GitHub login, forwarding ports). Providers from before Team Car have no `home` and
+/// use the Keychain key on this Mac until This Mac's car takes them over.
 public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
     public var id: UUID
     public var kind: CloudProviderID
     public var name: String
-    /// Keychain account for this provider's API key. The first provider keeps the original
-    /// `api-key`; without a saved key it uses `BOAT_API_KEY` or the `boat login` session.
+    /// Keychain account for this provider's API key (and the key `WorkspaceHost.accountID` uses to
+    /// find the provider). The first provider keeps the original `api-key`.
     public var credentialAccount: String
     public var boat: BoatSettings
+    /// The Team Car that owns this provider. nil = this Mac's Keychain (not yet moved to a car).
+    public var home: SandboxProviderHome?
+    /// What the owning car last reported about it.
+    public var carStatus: SandboxProviderCarStatus?
+
+    /// Whether a Team Car owns it.
+    public var isOnTeamCar: Bool { home != nil }
+    /// The remote car that owns it (nil for This Mac's car and for app-only providers).
+    public var remoteCarID: UUID? { if case .teamCar(let id) = home { id } else { nil } }
 
     public init(id: UUID = UUID(), kind: CloudProviderID = .boat, name: String, credentialAccount: String? = nil,
                 boat: BoatSettings = BoatSettings()) {
@@ -237,6 +251,28 @@ public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
         guard let host, host.provider == kind else { return false }
         return (host.accountID ?? "api-key") == credentialAccount
     }
+}
+
+/// Which Team Car owns a sandbox provider.
+public enum SandboxProviderHome: Codable, Sendable, Hashable {
+    case thisMac
+    case teamCar(UUID)
+}
+
+/// A provider's state as its Team Car reports it (never the key itself).
+public struct SandboxProviderCarStatus: Codable, Sendable, Hashable {
+    /// "stored", "config" (teamcar.toml's api_key_env / api_key_file), "environment" (BOAT_API_KEY),
+    /// "cli" (`boat login`) or "none".
+    public var credentialSource: String
+    /// Declared in the car's teamcar.toml, so it can't be edited from here.
+    public var fromConfig: Bool
+
+    public init(credentialSource: String, fromConfig: Bool) {
+        self.credentialSource = credentialSource
+        self.fromConfig = fromConfig
+    }
+
+    public var hasKey: Bool { credentialSource != "none" }
 }
 
 /// A Team Car server in Settings → Team Cars. Its token lives in the Keychain, keyed by `id`.

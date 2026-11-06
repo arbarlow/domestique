@@ -29,6 +29,8 @@ final class TeamCarLink {
         case starting
         case connected(name: String)
         case unavailable(String)
+
+        var isConnected: Bool { if case .connected = self { true } else { false } }
     }
 
     enum Car: Equatable {
@@ -37,7 +39,12 @@ final class TeamCarLink {
     }
 
     let car: Car
-    private(set) var status: Status
+    private(set) var status: Status {
+        didSet {
+            guard status != oldValue else { return }
+            app.teamCarStatusChanged(self, wasConnected: oldValue.isConnected)
+        }
+    }
     /// The server's handshake answer and info (name, version, platform, agents), once connected.
     private(set) var welcome: Radio_Welcome?
     private(set) var info: Radio_ServerInfo?

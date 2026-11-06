@@ -13,11 +13,25 @@ import (
 //	TRIGGER  + create, import and archive workspaces, open riders, prompt, approve, add repositories
 //	OPERATE  + remove repositories, delete workspaces, run processes (Subscribe{process} and its
 //	         input, resize and signal requests)
-//	ADMIN    + tokens
+//	ADMIN    + tokens, sandbox providers
+//
+// Sandboxes: list/get are READ; create, resume, stop, rename and auto-stop are TRIGGER; delete,
+// recover and access (SSH keys, desktop, port URLs) are OPERATE.
 func required(req *radiov1.Request) radiov1.TokenScope {
 	switch cmd := req.Command.(type) {
-	case *radiov1.Request_CreateToken, *radiov1.Request_ListTokens, *radiov1.Request_RevokeToken:
+	case *radiov1.Request_CreateToken, *radiov1.Request_ListTokens, *radiov1.Request_RevokeToken,
+		*radiov1.Request_SaveSandboxProvider, *radiov1.Request_RemoveSandboxProvider:
 		return radiov1.TokenScope_TOKEN_SCOPE_ADMIN
+	case *radiov1.Request_OpenSandboxAccess:
+		return radiov1.TokenScope_TOKEN_SCOPE_OPERATE
+	case *radiov1.Request_CreateSandbox:
+		return radiov1.TokenScope_TOKEN_SCOPE_TRIGGER
+	case *radiov1.Request_ChangeSandbox:
+		switch cmd.ChangeSandbox.Action {
+		case radiov1.SandboxAction_SANDBOX_ACTION_DELETE, radiov1.SandboxAction_SANDBOX_ACTION_RECOVER:
+			return radiov1.TokenScope_TOKEN_SCOPE_OPERATE
+		}
+		return radiov1.TokenScope_TOKEN_SCOPE_TRIGGER
 	case *radiov1.Request_RemoveRepository, *radiov1.Request_DeleteWorkspace,
 		*radiov1.Request_ProcessInput, *radiov1.Request_ResizeProcess, *radiov1.Request_SignalProcess:
 		return radiov1.TokenScope_TOKEN_SCOPE_OPERATE
@@ -76,7 +90,15 @@ func (c *conn) execute(ctx context.Context, req *radiov1.Request) *radiov1.Respo
 	car := c.s.car
 	switch cmd := req.Command.(type) {
 	case *radiov1.Request_GetServerInfo:
-		return &radiov1.Response{Result: &radiov1.Response_ServerInfo{ServerInfo: car.Info()}}
+		info := car.Info()
+		if m := c.s.sandboxes; m != nil {
+			if ps, err := m.Providers(ctx, false); err == nil {
+				info.SandboxProviders = ps
+			} else {
+				c.s.log.Warn("sandbox providers", "err", err)
+			}
+		}
+		return &radiov1.Response{Result: &radiov1.Response_ServerInfo{ServerInfo: info}}
 	case *radiov1.Request_Unsubscribe:
 		if !c.endSub(cmd.Unsubscribe.SubscriptionId) {
 			return errResponse(radiov1.ErrorCode_ERROR_CODE_NOT_FOUND, "no subscription %d", cmd.Unsubscribe.SubscriptionId)
@@ -253,5 +275,74 @@ func (c *conn) execute(ctx context.Context, req *radiov1.Request) *radiov1.Respo
 		}
 		return empty()
 	}
+	if resp, ok := c.executeSandbox(ctx, req); ok {
+		return resp
+	}
 	return errResponse(radiov1.ErrorCode_ERROR_CODE_UNIMPLEMENTED, "command not implemented")
+}
+
+// executeSandbox handles the sandbox commands (80-87). ok is false for any other command.
+func (c *conn) executeSandbox(ctx context.Context, req *radiov1.Request) (resp *radiov1.Response, ok bool) {
+	switch req.Command.(type) {
+	case *radiov1.Request_ListSandboxProviders, *radiov1.Request_SaveSandboxProvider, *radiov1.Request_RemoveSandboxProvider,
+		*radiov1.Request_ListSandboxes, *radiov1.Request_GetSandbox, *radiov1.Request_CreateSandbox,
+		*radiov1.Request_ChangeSandbox, *radiov1.Request_OpenSandboxAccess:
+	default:
+		return nil, false
+	}
+	m := c.s.sandboxes
+	if m == nil {
+		return errResponse(radiov1.ErrorCode_ERROR_CODE_UNIMPLEMENTED, "this Team Car has no sandbox providers"), true
+	}
+	switch cmd := req.Command.(type) {
+	case *radiov1.Request_ListSandboxProviders:
+		ps, err := m.Providers(ctx, cmd.ListSandboxProviders.CheckAccount)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_SandboxProviders{SandboxProviders: &radiov1.SandboxProviderList{Providers: ps}}}, true
+	case *radiov1.Request_SaveSandboxProvider:
+		p, err := m.Save(cmd.SaveSandboxProvider.Provider, cmd.SaveSandboxProvider.ApiKey)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_SandboxProvider{SandboxProvider: p}}, true
+	case *radiov1.Request_RemoveSandboxProvider:
+		if err := m.Remove(cmd.RemoveSandboxProvider.ProviderId); err != nil {
+			return fromError(err), true
+		}
+		return empty(), true
+	case *radiov1.Request_ListSandboxes:
+		ss, err := m.List(ctx, cmd.ListSandboxes.ProviderId)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_Sandboxes{Sandboxes: &radiov1.SandboxList{Sandboxes: ss}}}, true
+	case *radiov1.Request_GetSandbox:
+		s, err := m.Get(ctx, cmd.GetSandbox.ProviderId, cmd.GetSandbox.SandboxId)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_Sandbox{Sandbox: s}}, true
+	case *radiov1.Request_CreateSandbox:
+		// The request's idempotency key also goes to the service, so a retry after a lost answer
+		// (or a reconnect) never makes a second machine.
+		s, err := m.Create(ctx, cmd.CreateSandbox, req.IdempotencyKey)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_Sandbox{Sandbox: s}}, true
+	case *radiov1.Request_ChangeSandbox:
+		if err := m.Change(ctx, cmd.ChangeSandbox); err != nil {
+			return fromError(err), true
+		}
+		return empty(), true
+	case *radiov1.Request_OpenSandboxAccess:
+		a, err := m.Access(ctx, cmd.OpenSandboxAccess)
+		if err != nil {
+			return fromError(err), true
+		}
+		return &radiov1.Response{Result: &radiov1.Response_SandboxAccess{SandboxAccess: a}}, true
+	}
+	return nil, false
 }
