@@ -20,6 +20,9 @@ final class SessionChat {
     private(set) var tasks: [String: AgentTask] = [:]
     private(set) var loadError: String?
     var draft = ""
+    /// A prompt sent before the worktree was ready, held here until it is.
+    private(set) var queuedPrompt: String?
+    private var queueTask: Task<Void, Never>?
 
     private var lastSeq: UInt64 = 0
     /// Items collected during the first replay, shown in one go at ReplayDone.
@@ -33,6 +36,15 @@ final class SessionChat {
 
     var session: Proto_Session? { server.sessions[sessionID] }
     var provider: ProviderKind { session?.providerKind ?? .claude }
+    var workspace: Proto_Workspace? { session.flatMap { server.workspaces[$0.workspaceID] } }
+
+    var currentModel: ModelOption? {
+        let models = server.models[provider] ?? []
+        return models.first { $0.id == session?.model } ?? models.first(where: \.isDefault)
+    }
+
+    /// The worktree doesn't exist yet, so the agent can't start.
+    private var isProvisioning: Bool { workspace?.state == .creating || workspace?.state == .settingUp }
 
     /// Pending approvals and questions, oldest first.
     var pendingApprovals: [(id: String, request: ApprovalRequest)] {
@@ -163,8 +175,34 @@ final class SessionChat {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         draft = ""
+        submit(text)
+    }
+
+    /// Sends `text` as the next user message, leaving the composer alone.
+    func submit(_ text: String) {
         isRunning = true
         turnStartedAt = turnStartedAt ?? .now
+        guard isProvisioning else { return deliver(text) }
+        queuedPrompt = text
+        queueTask = Task { [weak self] in
+            while self?.isProvisioning == true {
+                try? await Task.sleep(for: .milliseconds(250))
+                if Task.isCancelled { return }
+            }
+            guard let self else { return }
+            self.queuedPrompt = nil
+            if self.workspace?.state == .failed {
+                // The server has already put the failure in the transcript.
+                self.draft = text
+                self.isRunning = false
+                self.turnStartedAt = nil
+            } else {
+                self.deliver(text)
+            }
+        }
+    }
+
+    private func deliver(_ text: String) {
         perform { try await $0.sendMessage(sessionID: $1, text: text) } onError: { [weak self] in
             self?.draft = text
             self?.isRunning = false
@@ -172,6 +210,14 @@ final class SessionChat {
     }
 
     func interrupt() {
+        if let prompt = queuedPrompt {
+            queueTask?.cancel()
+            queuedPrompt = nil
+            draft = prompt
+            isRunning = false
+            turnStartedAt = nil
+            return
+        }
         perform { try await $0.interrupt(sessionID: $1) }
     }
 

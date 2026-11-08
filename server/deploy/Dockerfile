@@ -29,7 +29,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # exited are re-parented to PID 1, and server doesn't reap strangers).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git gnupg less openssh-client procps tini \
+      bash ca-certificates curl git gnupg less netcat-openbsd openssh-client procps tini \
  && install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \

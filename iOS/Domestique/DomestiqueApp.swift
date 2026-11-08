@@ -11,8 +11,7 @@ struct DomestiqueApp: App {
         WindowGroup {
             RootView()
                 .environment(serverList)
-                .tint(Palette.accent)
-        }
+                .tint(Palette.text)        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { serverList.wake() }
         }

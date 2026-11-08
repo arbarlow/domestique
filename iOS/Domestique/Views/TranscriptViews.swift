@@ -10,15 +10,7 @@ struct TranscriptRow: View {
     var body: some View {
         switch item.kind {
         case .user(let text):
-            HStack {
-                Spacer(minLength: 48)
-                Text(text)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 18))
-                    .textSelection(.enabled)
-            }
+            UserBubble(text: text)
         case .assistant(let text):
             MarkdownView(text: text)
         case .reasoning(let text):
@@ -42,6 +34,22 @@ struct TranscriptRow: View {
             Label(text, systemImage: "bolt.fill")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct UserBubble: View {
+    let text: String
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 48)
+            Text(text)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Palette.userBubble, in: RoundedRectangle(cornerRadius: 18))
+                .textSelection(.enabled)
         }
     }
 }
@@ -154,7 +162,6 @@ private struct TurnSummaryRow: View {
     var body: some View {
         let parts = [
             summary.durationMs.map { Duration.milliseconds($0).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .narrow)) },
-            summary.costUSD.flatMap { $0 > 0 ? $0.formatted(.currency(code: "USD").precision(.fractionLength(2))) : nil },
         ].compactMap { $0 }
         HStack(spacing: 6) {
             Rectangle().fill(.quaternary).frame(height: 0.5)
@@ -268,7 +275,7 @@ private struct QuestionForm: View {
                                 Image(systemName: isPicked(q, opt.label)
                                       ? (q.multiSelect ? "checkmark.square.fill" : "largecircle.fill.circle")
                                       : (q.multiSelect ? "square" : "circle"))
-                                    .foregroundStyle(isPicked(q, opt.label) ? Palette.accent : .secondary)
+                                    .foregroundStyle(isPicked(q, opt.label) ? Palette.text : .secondary)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(opt.label).foregroundStyle(.primary)
                                     if let d = opt.description { Text(d).font(.caption).foregroundStyle(.secondary) }

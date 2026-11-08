@@ -8,6 +8,8 @@ struct WorkspaceView: View {
     let workspaceID: String
     @State private var selected: String?
     @State private var showDiff = false
+    @State private var showShip = false
+    @State private var showRun = false
     @State private var error: String?
     @State private var confirmArchive = false
     @Environment(\.dismiss) private var dismiss
@@ -21,8 +23,10 @@ struct WorkspaceView: View {
     var body: some View {
         Group {
             if let session = current {
-                ChatView(chat: server.chat(for: session.id), canWrite: server.canTrigger)
-                    .id(session.id)
+                ChatView(chat: server.chat(for: session.id), canWrite: server.canTrigger) { provider, model in
+                    switchProvider(of: session, to: provider, model: model)
+                }
+                .id(session.id)
             } else if let ws = workspace, ws.state == .creating || ws.state == .settingUp {
                 ContentUnavailableView {
                     ProgressView()
@@ -36,9 +40,7 @@ struct WorkspaceView: View {
                     Text(workspace?.stateLabel ?? "Start a chat with an agent in this workspace.")
                 } actions: {
                     if server.canTrigger {
-                        ForEach(server.providers) { p in
-                            Button("New \(p.displayName) chat") { newChat(p) }
-                        }
+                        Button("New chat") { newChat() }
                     }
                 }
             }
@@ -50,11 +52,13 @@ struct WorkspaceView: View {
                 Menu("More", systemImage: "ellipsis") {
                     Button("Changes", systemImage: "plusminus") { showDiff = true }
                     if server.canTrigger {
-                        Menu("New chat", systemImage: "plus.bubble") {
-                            ForEach(server.providers) { p in
-                                Button(p.displayName) { newChat(p) }
-                            }
-                        }
+                        Button("Ship", systemImage: "paperplane") { showShip = true }
+                    }
+                    if server.canOperate {
+                        Button("Run & preview", systemImage: "play") { showRun = true }
+                    }
+                    if server.canTrigger {
+                        Button("New chat", systemImage: "plus.bubble") { newChat() }
                         if let session = current {
                             Button("Close this chat", systemImage: "xmark.bubble", role: .destructive) {
                                 close(session.id)
@@ -71,6 +75,16 @@ struct WorkspaceView: View {
         }
         .sheet(isPresented: $showDiff) {
             NavigationStack { DiffView(server: server, workspaceID: workspaceID) }
+        }
+        .sheet(isPresented: $showShip) {
+            NavigationStack {
+                ShipView(server: server, workspaceID: workspaceID, chat: current.map { server.chat(for: $0.id) }) {
+                    confirmArchive = true
+                }
+            }
+        }
+        .sheet(isPresented: $showRun) {
+            NavigationStack { RunView(server: server, workspaceID: workspaceID) }
         }
         .confirmationDialog("Archive \(workspace?.name ?? "workspace")?", isPresented: $confirmArchive, titleVisibility: .visible) {
             Button("Archive", role: .destructive) {
@@ -121,12 +135,9 @@ struct WorkspaceView: View {
                     }
                 }
                 if let session = current {
-                    HStack(spacing: 3) {
-                        ProviderBadge(provider: session.providerKind, size: 9)
-                        Text(session.displayTitle)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    Text(session.displayTitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
             .foregroundStyle(.primary)
@@ -135,11 +146,29 @@ struct WorkspaceView: View {
         .accessibilityLabel("Chats")
     }
 
-    private func newChat(_ p: ProviderKind) {
+    /// A new chat with the agent in use; the composer's model menu can change it before the first message.
+    private func newChat() {
+        let provider = current?.providerKind ?? server.providers.first ?? .claude
         Task {
             do {
-                let r = try await server.openSession(workspaceID: workspaceID, provider: p)
+                let r = try await server.openSession(workspaceID: workspaceID, provider: provider)
                 selected = r.id
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    /// A session's agent is fixed, so changing it means replacing the (still empty) chat.
+    private func switchProvider(of session: Proto_Session, to provider: ProviderKind, model: String) {
+        let draft = server.chat(for: session.id).draft
+        Task {
+            do {
+                let r = try await server.openSession(
+                    workspaceID: workspaceID, provider: provider, model: model, permission: session.permissionMode)
+                server.chat(for: r.id).draft = draft
+                selected = r.id
+                try await server.closeSession(session.id)
             } catch {
                 self.error = error.localizedDescription
             }

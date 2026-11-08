@@ -3,14 +3,19 @@ import ServerKit
 import SwiftUI
 import UIKit
 
-/// Colours shared with the Mac app's Theme (same values), plus iOS system surfaces.
+/// Colours shared with the Mac app's Theme (same values).
 enum Palette {
-    static let accent = Color(red: 0.85, green: 0.47, blue: 0.34)  // Claude orange, the app's tint
+    static let canvas = dyn(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let raised = dyn(light: 0xFFFFFF, dark: 0x2A2A2D)
+    static let border = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.11, darkAlpha: 0.13)
+    static let text = dyn(light: 0x1D1D1F, dark: 0xECECEE)
+    static let text2 = dyn(light: 0x6E6E73, dark: 0xA1A1A6)
+    static let text3 = dyn(light: 0xA1A1A6, dark: 0x6E6E73)
     static let userBubble = dyn(light: 0x111111, dark: 0x3A3A3D)
     static let added = dyn(light: 0x1A7F37, dark: 0x3FB950)
     static let removed = dyn(light: 0xCF222E, dark: 0xF85149)
-    static let addedBG = dyn(light: 0x1A7F37, dark: 0x3FB950, alpha: 0.12)
-    static let removedBG = dyn(light: 0xCF222E, dark: 0xF85149, alpha: 0.12)
+    static let addedBG = dyn(light: 0x1A7F37, dark: 0x3FB950, lightAlpha: 0.09, darkAlpha: 0.14)
+    static let removedBG = dyn(light: 0xCF222E, dark: 0xF85149, lightAlpha: 0.08, darkAlpha: 0.14)
     static let warning = dyn(light: 0xD9480F, dark: 0xFF8A4C)
     static let running = dyn(light: 0x2F80ED, dark: 0x58A6FF)
     static let toolRead = dyn(light: 0x0E7C86, dark: 0x39C5CF)
@@ -19,14 +24,20 @@ enum Palette {
     static let toolThought = dyn(light: 0x8C6D1F, dark: 0xD4A72C)
     static let codex = dyn(light: 0x111111, dark: 0xECECEE)
 
-    static func provider(_ p: ProviderKind) -> Color { p == .claude ? accent : codex }
+    /// Only for the agent's mark on the model picker; the app's own tint is `text`.
+    static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)
 
-    private static func dyn(light: UInt32, dark: UInt32, alpha: CGFloat = 1) -> Color {
+    static func provider(_ p: ProviderKind) -> Color { p == .claude ? claude : codex }
+
+    private static func dyn(
+        light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1
+    ) -> Color {
         Color(UIColor { t in
-            let hex = t.userInterfaceStyle == .dark ? dark : light
+            let isDark = t.userInterfaceStyle == .dark
+            let hex = isDark ? dark : light
             return UIColor(
                 red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
-                blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+                blue: CGFloat(hex & 0xFF) / 255, alpha: isDark ? darkAlpha : lightAlpha)
         })
     }
 }

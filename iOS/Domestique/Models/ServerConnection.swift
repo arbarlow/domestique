@@ -199,6 +199,8 @@ final class ServerConnection: Identifiable {
 
     /// One chat model per session, kept while the app runs so going back and forth doesn't replay.
     @ObservationIgnored private var chats: [String: SessionChat] = [:]
+    /// Open port tunnels by the port they reach on the server.
+    @ObservationIgnored var tunnels: [UInt16: PortTunnel] = [:]
 
     func chat(for sessionID: String) -> SessionChat {
         if let c = chats[sessionID] { return c }
@@ -224,28 +226,29 @@ final class ServerConnection: Identifiable {
         return found.isEmpty ? ProviderKind.allCases : ProviderKind.allCases.filter(found.contains)
     }
 
-    func createWorkspace(repositoryID: String, prompt: String, provider: ProviderKind, model: String?,
-                         permission: AgentPermissionMode) async throws -> Proto_Workspace
-    {
+    /// Creates a workspace with one empty chat, ready for its first prompt.
+    func createWorkspace(repositoryID: String, provider: ProviderKind) async throws -> Proto_Workspace {
         let c = try await ready()
         var session = Proto_OpenSession()
         session.provider = provider.proto
-        session.model = model ?? ""
-        session.permissionMode = permission.proto
+        session.permissionMode = AgentPermissionMode.bypass.proto
         var req = Proto_CreateWorkspace()
         req.repositoryID = repositoryID
-        req.prompt = prompt
         req.session = session
         let ws = try await c.createWorkspace(req, idempotencyKey: UUID().uuidString)
         workspaces[ws.id] = ws
         return ws
     }
 
-    func openSession(workspaceID: String, provider: ProviderKind) async throws -> Proto_Session {
+    func openSession(workspaceID: String, provider: ProviderKind, model: String? = nil,
+                     permission: Proto_PermissionMode? = nil) async throws -> Proto_Session
+    {
         let c = try await ready()
         var req = Proto_OpenSession()
         req.workspaceID = workspaceID
         req.provider = provider.proto
+        if let model { req.model = model }
+        if let permission { req.permissionMode = permission }
         let r = try await c.openSession(req)
         sessions[r.id] = r
         return r
@@ -290,5 +293,5 @@ extension Proto_Workspace {
 
 extension Proto_Session {
     var providerKind: ProviderKind { ProviderKind(proto: provider) }
-    var displayTitle: String { title.isEmpty ? providerKind.displayName : title }
+    var displayTitle: String { title.isEmpty ? "New chat" : title }
 }
