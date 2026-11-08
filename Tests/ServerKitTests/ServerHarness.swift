@@ -39,6 +39,11 @@ enum ServerBuild {
         }
     }()
 
+    /// Polls, because `waitUntilExit()` can fail to return for a process that has already exited.
+    static func waitForExit(_ p: Process) {
+        while p.isRunning { usleep(10_000) }
+    }
+
     static func makeTempDir(_ prefix: String) throws -> URL {
         // Short /tmp paths: Unix socket paths are limited to 103 bytes.
         var template = Array("/tmp/\(prefix)-XXXXXX".utf8CString)
@@ -64,7 +69,7 @@ enum ServerBuild {
         try p.run()
         let o = out.fileHandleForReading.readDataToEndOfFile()
         let e = err.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
+        ServerBuild.waitForExit(p)
         let so = String(decoding: o, as: UTF8.self)
         return RunResult(status: p.terminationStatus, output: so + String(decoding: e, as: UTF8.self), stdout: so)
     }
@@ -139,14 +144,14 @@ final class ServerServer: @unchecked Sendable {
     func kill() {
         guard let p = process else { return }
         Darwin.kill(p.processIdentifier, SIGKILL)
-        p.waitUntilExit()
+        ServerBuild.waitForExit(p)
         process = nil
     }
 
     func stop() {
         guard let p = process else { return }
         p.terminate()
-        p.waitUntilExit()
+        ServerBuild.waitForExit(p)
         process = nil
     }
 

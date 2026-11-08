@@ -274,11 +274,16 @@ public actor ServerClient {
             if let token { hello.token = token }
             var frame = Proto_ClientFrame()
             frame.hello = hello
-            try await t.send(frame.serializedData())
+            // The read has to be queued before Hello goes out: a server rejecting us closes straight after its
+            // Goodbye, and a connection that closes with nothing reading loses the Goodbye.
+            let helloData = try frame.serializedData()
             let welcome = try await withThrowingTaskGroup(of: Proto_Welcome.self) { group in
                 group.addTask {
+                    var outgoing: Data? = helloData
                     while true {
-                        guard case .binary(let data) = try await t.receive() else { continue }
+                        let message = try await t.receive(thenSending: outgoing)
+                        outgoing = nil
+                        guard case .binary(let data) = message else { continue }
                         let f = try Self.decode(data)
                         switch f.frame {
                         case .welcome(let w): return w

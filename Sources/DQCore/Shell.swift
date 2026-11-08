@@ -56,9 +56,10 @@ public enum Shell {
         try await runRaw(executablePath, args, cwd: cwd, env: env, stdinData: stdin.map { Data($0.utf8) })
     }
 
-    /// Like `runRaw`, with binary stdin.
+    /// Like `runRaw`, with binary stdin. `killAfter` SIGKILLs a process still running after that long.
     public static func runRaw(
-        _ executablePath: String, _ args: [String], cwd: String?, env: [String: String], stdinData: Data?
+        _ executablePath: String, _ args: [String], cwd: String?, env: [String: String], stdinData: Data?,
+        killAfter: Duration? = nil
     ) async throws -> ShellResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
@@ -97,6 +98,13 @@ public enum Shell {
                 group.leave()
                 group.notify(queue: .global()) { cont.resume(throwing: error) }
                 return
+            }
+            if let killAfter {
+                let pid = process.processIdentifier
+                let seconds = Double(killAfter.components.seconds)
+                DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                    if process.isRunning { kill(pid, SIGKILL) }
+                }
             }
             if let inPipe, let stdinData {
                 DispatchQueue.global().async {
@@ -161,10 +169,11 @@ public actor LoginEnvironment {
         // -l login, -i interactive so .zshrc (nvm etc.) is sourced.
         let script = "printf '\(marker)'; /usr/bin/env -0; printf '\(marker)'"
         let baseEnv = fallback
+        // Killed rather than abandoned: job control can stop an interactive shell that has a controlling
+        // terminal, and its open pipes would then block forever.
         guard
-            let result = try? await withTimeout(seconds: 10, {
-                try await Shell.runRaw(shell, ["-l", "-i", "-c", script], cwd: home, env: baseEnv)
-            })
+            let result = try? await Shell.runRaw(
+                shell, ["-l", "-i", "-c", script], cwd: home, env: baseEnv, stdinData: nil, killAfter: .seconds(10))
         else { return fallback }
         let parts = result.stdout.components(separatedBy: marker)
         guard parts.count >= 3 else { return fallback }

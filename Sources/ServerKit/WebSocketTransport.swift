@@ -116,7 +116,8 @@ final class WebSocketTransport: Sendable {
     }
 
     /// Receives the next message. Throws when the connection closes. Call from one task at a time.
-    func receive() async throws -> Message {
+    /// `first` is sent once the read is queued; if that fails, the read reports the broken connection.
+    func receive(thenSending first: Data? = nil) async throws -> Message {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Message, any Error>) in
             connection.receiveMessage { content, context, isComplete, error in
                 if let error {
@@ -147,6 +148,7 @@ final class WebSocketTransport: Sendable {
                     cont.resume(returning: .other)
                 }
             }
+            if let first { send(first) { _ in } }
         }
     }
 
