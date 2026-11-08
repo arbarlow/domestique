@@ -134,12 +134,21 @@ struct PanelHeader: View {
                 .foregroundStyle(Theme.text2)
         case .archive:
             if let ws = model.workspace {
+                let archiving = model.app.archiving.contains(ws.id)
                 Button {
                     Task { await model.app.archive(ws) }
                 } label: {
-                    Label("Archive", systemImage: "archivebox")
+                    if archiving {
+                        HStack(spacing: 6) {
+                            Spinner(size: 11)
+                            Text("Archiving…")
+                        }
+                    } else {
+                        Label("Archive", systemImage: "archivebox")
+                    }
                 }
                 .buttonStyle(.soft)
+                .disabled(archiving)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
                 .help("Archive this workspace (⇧⌘P)")
             }

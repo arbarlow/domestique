@@ -484,6 +484,23 @@ public actor ServerClient {
         return try await newSubscription(sub, kind: .session(fromSeq: fromSeq))
     }
 
+    /// Starts a process: `ProcessStarted`, `ProcessOutput`…, `ProcessExited`. Needs the OPERATE scope. Cancelling or
+    /// losing the connection hangs it up, and `events` ends without a `ProcessExited`; it is never restarted.
+    public func subscribeProcess(_ target: Proto_ProcessTarget) async throws -> ServerSubscription {
+        var sub = Proto_Subscribe()
+        sub.process = target
+        return try await newSubscription(sub, kind: .process)
+    }
+
+    /// Writes to a running process's stdin; returns once written, so awaiting it applies backpressure.
+    public func processInput(processID: String, data: Data, eof: Bool = false) async throws {
+        var req = Proto_ProcessInput()
+        req.processID = processID
+        req.data = data
+        req.eof = eof
+        _ = try await send(.processInput(req))
+    }
+
     private func newSubscription(_ target: Proto_Subscribe, kind: ServerSubscription.Kind) async throws -> ServerSubscription {
         if let terminalError { throw terminalError }
         let sub = ServerSubscription(client: self, target: target, kind: kind)
@@ -523,6 +540,11 @@ public actor ServerClient {
 
     private func resubscribe(_ sub: ServerSubscription) async {
         let key = ObjectIdentifier(sub)
+        if sub.isProcess {
+            subscriptions.removeValue(forKey: key)
+            sub.finish()
+            return
+        }
         guard !subscribing.contains(key) else { return }
         subscribing.insert(key)
         defer { subscribing.remove(key) }

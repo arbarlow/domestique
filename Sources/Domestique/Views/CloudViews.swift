@@ -196,7 +196,9 @@ struct MachineBanner: View {
                 }
             } else if phase == .gone {
                 bar(icon: "trash", tint: Theme.removed, text: "This sandbox was deleted on boat.dev. Archive the workspace.") {
-                    Button("Archive") { Task { await app.archive(workspace) } }.buttonStyle(.softCompact)
+                    Button("Archive") { Task { await app.archive(workspace) } }
+                        .buttonStyle(.softCompact)
+                        .disabled(app.archiving.contains(workspace.id))
                 }
             } else if let left = cloud.minutesLeft(for: workspace, now: ctx.date), left < 10, cloud.busy[id] == nil {
                 bar(icon: "timer", tint: Theme.warning, text: "Auto-stop in \(max(left, 1)) min. Running agents, tasks and terminals will stop with it.") {

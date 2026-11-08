@@ -428,6 +428,7 @@ private struct ProviderEditor: View {
                 .modifier(FieldStyle())
                 .disabled(readOnly)
             }
+            SandboxEnvironmentEditor(provider: provider)
             SettingsRow(title: "Share my GitHub login", subtitle: "If boat.dev's GitHub app can't clone a repo, give the sandbox your gh token") {
                 Toggle("", isOn: binding(\.boat.shareGitHubToken)).labelsHidden().toggleStyle(.switch).controlSize(.small)
             }

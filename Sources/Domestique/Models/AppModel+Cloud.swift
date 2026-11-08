@@ -3,6 +3,25 @@ import Foundation
 import GitKit
 import HostKit
 
+/// The stages of creating a boat.dev workspace, in order.
+enum BoatCreationStage: String {
+    case request, boot, authorize, connect, environment, clone, branch, pullRequest, setup
+
+    func title(repo: Repository, provider: SandboxProviderConfig, variables: Int, branch: String, pullRequest: Int?) -> String {
+        switch self {
+        case .request: "Requesting a sandbox on \(provider.name)"
+        case .boot: "Booting the sandbox"
+        case .authorize: "Waiting for SSH access"
+        case .connect: "Connecting over SSH"
+        case .environment: "Adding \(variables) environment variable\(variables == 1 ? "" : "s")"
+        case .clone: "Cloning \(repo.githubSlug ?? repo.name)"
+        case .branch: "Branching \(branch) from origin/\(repo.defaultBranch)"
+        case .pullRequest: "Checking out #\(pullRequest ?? 0)"
+        case .setup: "Running setup"
+        }
+    }
+}
+
 /// Creating, archiving and deleting workspaces that live on a cloud machine.
 extension AppModel {
     /// Where new workspaces in `repo` run by default.
@@ -17,7 +36,7 @@ extension AppModel {
 
     /// New boat.dev workspace: one sandbox per workspace, the repo cloned into /home/user/<repo>,
     /// on a new branch from a fresh origin/<default>. Mirrors the local worktree flow.
-    func provisionBoatWorkspace(_ wsID: UUID, repo: Repository, provider: SandboxProviderConfig) async throws {
+    func provisionBoatWorkspace(_ wsID: UUID, repo: Repository, provider: SandboxProviderConfig, pullRequest: Int?) async throws {
         guard let ws = workspace(wsID) else { return }
         let boat = provider.boat
         let client = BoatClient.client(account: provider.credentialAccount)
@@ -28,7 +47,18 @@ extension AppModel {
             throw HostError("Sign \(provider.name) in first: add an API key in Settings → Servers, or run `boat login`.")
         }
 
-        setCreationStep(wsID, "Starting a sandbox on \(provider.name)")
+        let variables = SandboxEnvironmentStore.variables(provider: provider.id, repo: repo.id)
+        var plan: [BoatCreationStage] = [.request, .boot, .authorize, .connect]
+        if !variables.isEmpty { plan.append(.environment) }
+        plan += [.clone, .branch]
+        if pullRequest != nil { plan.append(.pullRequest) }
+        plan.append(.setup)
+        creationTimelines[wsID] = CreationTimeline(
+            stages: plan.map {
+                (id: $0.rawValue, title: $0.title(repo: repo, provider: provider, variables: variables.count, branch: ws.branch, pullRequest: pullRequest))
+            })
+
+        beginStage(wsID, .request)
         let request = BoatCreateRequest(
             name: "\(repo.name) · \(ws.name)", type: boat.machineType,
             ttlSeconds: boat.autoStopMinutes.map { $0 * 60 }, disableAutoStop: boat.autoStopMinutes == nil,
@@ -44,15 +74,18 @@ extension AppModel {
         let host = Hosts.boatHost(machineID, account: provider.credentialAccount)
         cloud.observe(host)
 
-        setCreationStep(wsID, "Waiting for \(machineID) to boot")
-        try await host.prepare()
+        try await host.prepare { [weak self] stage in await self?.applyPrepareStage(stage, to: wsID) }
+
+        // Before the clone, so everything that runs on the sandbox from here on has them.
+        if !variables.isEmpty { beginStage(wsID, .environment) }
+        try await host.installProjectEnvironment(variables)
 
         let path = "\(BoatHost.home)/\(repo.name)"
         updateWorkspace(wsID) { $0.path = path }
-        setCreationStep(wsID, "Cloning \(repo.githubSlug ?? repo.name)")
+        beginStage(wsID, .clone)
         try await cloneRepo(repo, into: path, host: host, shareToken: boat.shareGitHubToken)
 
-        setCreationStep(wsID, "Branching \(ws.branch) from origin/\(repo.defaultBranch)")
+        beginStage(wsID, .branch)
         let identity = await localGitIdentity(repo)
         let q = ShellQuote.quote
         var script = [
@@ -150,6 +183,20 @@ extension AppModel {
     func setCreationStep(_ wsID: UUID?, _ step: String?) {
         guard let wsID else { return }
         creationSteps[wsID] = step
+    }
+
+    func beginStage(_ wsID: UUID, _ stage: BoatCreationStage, detail: String? = nil) {
+        creationTimelines[wsID]?.begin(stage.rawValue, detail: detail)
+    }
+
+    private func applyPrepareStage(_ stage: BoatHost.PrepareStage, to wsID: UUID) {
+        switch stage {
+        case .booting(let state):
+            beginStage(wsID, .boot, detail: state)
+            creationTimelines[wsID]?.setDetail(BoatCreationStage.boot.rawValue, state)
+        case .authorizing: beginStage(wsID, .authorize)
+        case .connecting: beginStage(wsID, .connect)
+        }
     }
 
     /// Archive: stop the sandbox (resumable for 14 days), or delete it if the user asked for that.

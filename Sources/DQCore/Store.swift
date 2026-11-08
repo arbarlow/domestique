@@ -53,7 +53,14 @@ public struct AppSettings: Codable, Sendable, Hashable {
     public var defaultCodexEffort: String?
     /// Prefix for new branches, e.g. "alex" -> alex/galibier.
     public var branchPrefix: String = NSUserName()
+    /// Superseded by `customCommand`; still read so a changed value carries over, and required to decode saved settings.
     public var editorCommand: String = "cursor"
+    /// nil until set in Settings; see `customCommand`.
+    public var customEditorCommand: String?
+    /// Bundle IDs hidden from the Open menu. Editors are listed unless turned off.
+    public var disabledEditorIDs: [String]?
+    /// `EditorChoice.id` used by Open in editor; nil = pick automatically.
+    public var defaultEditorID: String?
     /// Where "Clone from GitHub" puts repos (nil = Paths.defaultCloneRoot). `~` is expanded.
     public var cloneDirectory: String?
     /// Custom ship instructions keyed by `ShipPromptKind.rawValue`; missing = built-in default.

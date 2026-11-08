@@ -241,9 +241,11 @@ struct WorkspaceRow: View {
     let workspace: Workspace
     @State private var hovering = false
 
+    private var isArchiving: Bool { app.archiving.contains(workspace.id) }
+
     /// Hovering an active, settled workspace swaps its trailing badge for an archive button.
     private var showsArchive: Bool {
-        hovering && !workspace.isArchived && workspace.state != .creating && workspace.state != .settingUp
+        hovering && !isArchiving && !workspace.isArchived && workspace.state != .creating && workspace.state != .settingUp
     }
 
     var body: some View {
@@ -251,8 +253,14 @@ struct WorkspaceRow: View {
         let selected = app.selectedWorkspaceID == workspace.id
         HoverRow(selected: selected, height: 32, action: { app.selectedWorkspaceID = workspace.id }) {
             HStack(spacing: 8) {
-                WorkspaceGlyph(workspace: workspace, model: model)
-                    .frame(width: 16)
+                Group {
+                    if isArchiving {
+                        Spinner(size: 11)
+                    } else {
+                        WorkspaceGlyph(workspace: workspace, model: model)
+                    }
+                }
+                .frame(width: 16)
                 Text(title(model))
                     .font(workspace.hasUnread ? Theme.uiMedium : Theme.ui)
                     .foregroundStyle(Theme.text)
@@ -288,6 +296,7 @@ struct WorkspaceRow: View {
     }
 
     private func title(_ model: WorkspaceModel?) -> String {
+        if isArchiving { return "Archiving \(workspace.name)…" }
         switch workspace.state {
         case .creating:
             if let server = workspace.host, server.provider == .server {
@@ -763,6 +772,7 @@ struct WorkspaceContextMenu: View {
             Button("Delete permanently", role: .destructive) { Task { await app.deleteArchived(workspace) } }
         } else {
             Button("Archive") { Task { await app.archive(workspace) } }
+                .disabled(app.archiving.contains(workspace.id))
         }
     }
 }

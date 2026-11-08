@@ -94,6 +94,7 @@ private struct PRSection: View {
                         .foregroundStyle(Theme.merged)
                     Button("Archive workspace") { Task { await model.app.archive(ws) } }
                         .buttonStyle(.soft)
+                        .disabled(model.app.archiving.contains(ws.id))
                 }
             }
         }
@@ -318,6 +319,7 @@ private struct TrunkSection: View {
                 if !model.hasWorkSinceTrunkPush {
                     Button("Archive workspace") { Task { await model.app.archive(ws) } }
                         .buttonStyle(.softProminent)
+                        .disabled(model.app.archiving.contains(ws.id))
                 }
             }
         }

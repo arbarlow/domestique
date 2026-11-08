@@ -150,6 +150,16 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
         self.hasUnread = hasUnread
     }
 
+    /// Called on the copy just read from the shared database: restores what belongs to this instance.
+    /// The selected tab is per-window, and `opening` tabs may not have reached the database yet.
+    public mutating func keepLocalTabState(from local: Workspace, opening: Set<UUID>) {
+        let known = Set(tabs.map(\.id))
+        tabs += local.tabs.filter { opening.contains($0.id) && !known.contains($0.id) }
+        if let selected = local.selectedTabID, tabs.contains(where: { $0.id == selected }) {
+            selectedTabID = selected
+        }
+    }
+
     public var isArchived: Bool { if case .archived = state { true } else { false } }
     public var isPushedToTrunk: Bool { trunkPushedAt != nil }
     public var isRemote: Bool { host != nil }

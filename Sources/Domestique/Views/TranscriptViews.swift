@@ -105,9 +105,12 @@ struct TranscriptView: View {
                     EmptyChatHint(chat: chat)
                 }
                 ForEach(Array(turns.enumerated()), id: \.element.id) { idx, turn in
+                    // A finished turn is never live: after a send, isRunning flips before the server echoes
+                    // the new message, and treating the old turn as live would briefly expand its whole work
+                    // log. That height spike leaves the bottom-anchored lazy stack showing blank space.
                     TurnView(
                         turn: turn, chat: chat,
-                        isLive: chat.isRunning && idx == turns.count - 1)
+                        isLive: chat.isRunning && idx == turns.count - 1 && !turn.finished)
                 }
             }
             .padding(.horizontal, 28)
@@ -595,59 +598,23 @@ private struct EditedFilesCard: View {
     var body: some View {
         let add = files.reduce(0) { $0 + $1.additions }
         let del = files.reduce(0) { $0 + $1.deletions }
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "plus.forwardslash.minus")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.text2)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Edited \(files.count) file\(files.count == 1 ? "" : "s")").font(Theme.uiMedium)
-                    DiffCount(additions: add, deletions: del)
-                }
-                Spacer()
-                Button("View changes") { model.showChanges() }
-                    .buttonStyle(.soft)
+        HStack(spacing: 12) {
+            Image(systemName: "plus.forwardslash.minus")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.text2)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Edited \(files.count) file\(files.count == 1 ? "" : "s")").font(Theme.uiMedium)
+                DiffCount(additions: add, deletions: del)
             }
-            .padding(12)
-            Hairline()
-            ForEach(files) { file in
-                FileChangeRow(file: file) { model.showChanges(path: file.path) }
-                if file != files.last { Hairline().padding(.leading, 12) }
-            }
+            Spacer()
+            Button("View changes") { model.showChanges() }
+                .buttonStyle(.soft)
         }
+        .padding(12)
         .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border, lineWidth: 0.5))
-    }
-}
-
-private struct FileChangeRow: View {
-    let file: EditedFile
-    let open: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: open) {
-            HStack(spacing: 0) {
-                let dir = (file.path as NSString).deletingLastPathComponent
-                if !dir.isEmpty {
-                    Text(dir + "/").foregroundStyle(Theme.text2)
-                }
-                Text((file.path as NSString).lastPathComponent).foregroundStyle(Theme.text)
-                Spacer(minLength: 8)
-                DiffCount(additions: file.additions, deletions: file.deletions)
-            }
-            .font(Theme.ui)
-            .lineLimit(1)
-            .truncationMode(.head)
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(hovering ? Theme.hover : .clear)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }
 

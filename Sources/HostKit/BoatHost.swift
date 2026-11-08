@@ -20,6 +20,8 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
     /// Sourced by every remote command: per-sandbox settings Domestique writes (e.g. GH_TOKEN).
     public static let remoteEnvFile = "$HOME/.config/domestique/env.sh"
     public static let home = "/home/user"
+    /// Also sourced by every remote command: the project's variables from Settings → Servers.
+    public static let projectEnvPath = "\(home)/.config/domestique/project-env.sh"
 
     init(machineID: String, account: String?) {
         self.machineID = machineID
@@ -49,24 +51,42 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
 
     // MARK: prepare
 
-    public func prepare() async throws {
+    /// What `prepare()` is waiting on.
+    public enum PrepareStage: Sendable, Equatable {
+        /// Waiting for the sandbox to run; carries boat's own state ("provisioning", …).
+        case booting(String)
+        case authorizing
+        case connecting
+    }
+
+    public func prepare() async throws { try await prepare(onStage: nil) }
+
+    /// `onStage` hears each stage as it starts. Joining a prepare() already in flight reports nothing.
+    public func prepare(onStage: (@Sendable (PrepareStage) async -> Void)?) async throws {
         // Fast path: recently confirmed and the master is alive.
         if let ready = await state.lastReady, Date().timeIntervalSince(ready) < 20, await ssh.isConnected { return }
         if let t = await state.preparing { return try await t.value }
-        let task = Task { try await self.doPrepare() }
+        let task = Task { try await self.doPrepare(onStage: onStage) }
         await state.setPreparing(task)
         defer { Task { await self.state.setPreparing(nil) } }
         try await task.value
     }
 
-    private func doPrepare() async throws {
+    private func doPrepare(onStage: (@Sendable (PrepareStage) async -> Void)?) async throws {
         let client = self.client
         var sandbox = try await client.sandbox(machineID)
         await state.observer?(sandbox)
+        if sandbox.phase != .running, sandbox.phase != .gone { await onStage?(.booting(sandbox.state)) }
+        let progress: @Sendable (BoatSandbox) -> Void = { s in
+            Task {
+                await self.state.observer?(s)
+                await onStage?(.booting(s.state))
+            }
+        }
         switch sandbox.phase {
         case .stopped, .error:
             try await client.resume(machineID)
-            sandbox = try await client.waitUntilRunning(machineID) { s in Task { await self.state.observer?(s) } }
+            sandbox = try await client.waitUntilRunning(machineID, progress: progress)
         case .stopping:
             // Wait for the stop to land, then resume.
             for _ in 0..<120 {
@@ -77,9 +97,9 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
             if sandbox.phase == .stopped || sandbox.phase == .error {
                 try await client.resume(machineID)
             }
-            sandbox = try await client.waitUntilRunning(machineID) { s in Task { await self.state.observer?(s) } }
+            sandbox = try await client.waitUntilRunning(machineID, progress: progress)
         case .starting:
-            sandbox = try await client.waitUntilRunning(machineID) { s in Task { await self.state.observer?(s) } }
+            sandbox = try await client.waitUntilRunning(machineID, progress: progress)
         case .gone:
             throw HostError("The boat.dev sandbox \(machineID) was deleted.")
         case .running:
@@ -91,10 +111,12 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
         let knownKey = await state.machineKey
         let connected = await ssh.isConnected
         if knownKey != machineKey || !connected {
+            await onStage?(.authorizing)
             let pub = try await DomestiqueSSHKey.publicKey()
             let access = try await retrying { try await client.sshAccess(self.machineID, publicKey: pub) }
             let endpoint = try Self.endpoint(access, sandbox: sandbox)
             try await ssh.setEndpoint(endpoint)
+            await onStage?(.connecting)
             try await ssh.connect()
             await state.setMachineKey(machineKey)
         }
@@ -137,13 +159,16 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
 
     /// The remote string handed to the login shell: source Domestique's env, cd, export, run.
     static func remoteScript(_ body: String, cwd: String, env: [String: String]) -> String {
-        let prelude = "\(restoreBoatClaudeLogin); [ -r \"\(remoteEnvFile)\" ] && . \"\(remoteEnvFile)\""
+        // The project's variables come before Domestique's own, and `exports` below wins over both.
+        let prelude = [restoreBoatClaudeLogin, sourceIfReadable(projectEnvPath), sourceIfReadable(remoteEnvFile)].joined(separator: "; ")
         let cd = "cd \(ShellQuote.quote(cwd)) 2>/dev/null || cd \"$HOME\""
         let exports = ShellQuote.exports(env)
         let inner = [prelude, cd, exports, body].filter { !$0.isEmpty }.joined(separator: "; ")
         // A login shell, so ~/.profile (nvm, cargo, …) sets PATH like an interactive `boat ssh`.
         return "exec bash -lc " + ShellQuote.quote(inner)
     }
+
+    private static func sourceIfReadable(_ path: String) -> String { "[ -r \"\(path)\" ] && . \"\(path)\"" }
 
     public func command(_ executable: String, _ arguments: [String], cwd: String, env: [String: String], tty: Bool)
         async throws -> HostCommand
@@ -195,13 +220,27 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
     /// Claude's MCP config for this sandbox. boat rewrites Claude's own config files, not this one.
     public static let mcpConfigPath = "\(home)/.config/domestique/mcp.json"
 
-    /// The file holds secrets, so they arrive over stdin (never argv or logs) and it's only readable by the sandbox user.
     public func installMCPConfig(_ json: Data) async throws {
-        let q = ShellQuote.quote(Self.mcpConfigPath)
-        let tmp = ShellQuote.quote(Self.mcpConfigPath + ".tmp")
+        try await writeSecretFile(Self.mcpConfigPath, data: json, label: "write MCP config")
+    }
+
+    /// The file holds secrets, so they arrive over stdin (never argv or logs) and it's only readable by the sandbox user.
+    private func writeSecretFile(_ path: String, data: Data, label: String) async throws {
+        let q = ShellQuote.quote(path)
+        let tmp = ShellQuote.quote(path + ".tmp")
         try await runScript(
             "umask 077 && mkdir -p \"$(dirname \(q))\" && cat > \(tmp) && mv \(tmp) \(q)",
-            cwd: Self.home, stdin: json, label: "write MCP config")
+            cwd: Self.home, stdin: data, label: label)
+    }
+
+    /// Replaces the project's variables on the sandbox. With none, removes the file, because a sandbox
+    /// started from a snapshot can carry another project's.
+    public func installProjectEnvironment(_ variables: [EnvVariable]) async throws {
+        if variables.isEmpty {
+            try await runScript("rm -f \(ShellQuote.quote(Self.projectEnvPath))", cwd: Self.home, label: "remove project environment")
+        } else {
+            try await writeSecretFile(Self.projectEnvPath, data: Data(DotEnv.shellScript(variables).utf8), label: "write project environment")
+        }
     }
 
     public func removeMCPConfig() async throws {

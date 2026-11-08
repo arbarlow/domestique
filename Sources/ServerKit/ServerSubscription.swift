@@ -15,6 +15,7 @@ public final class ServerSubscription: Sendable {
     enum Kind: Sendable {
         case server
         case session(fromSeq: UInt64)
+        case process
     }
 
     private struct State {
@@ -29,14 +30,17 @@ public final class ServerSubscription: Sendable {
     private let state: Mutex<State>
     private let target: Proto_Subscribe
     private let isSession: Bool
+    /// A process dies with its subscription, so resubscribing would run it a second time.
+    let isProcess: Bool
     private weak let client: ServerClient?
 
     init(client: ServerClient, target: Proto_Subscribe, kind: Kind) {
         (events, continuation) = AsyncStream<Proto_Event>.makeStream(bufferingPolicy: .unbounded)
         self.client = client
         self.target = target
+        if case .process = kind { isProcess = true } else { isProcess = false }
         switch kind {
-        case .server:
+        case .server, .process:
             isSession = false
             state = Mutex(State(lastSeq: 0))
         case .session(let fromSeq):

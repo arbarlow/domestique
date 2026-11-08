@@ -43,6 +43,10 @@ final class AppModel {
     @ObservationIgnored var providerSaveTasks: [UUID: Task<Void, Never>] = [:]
     /// Progress line for workspaces being created ("Cloning …").
     var creationSteps: [UUID: String] = [:]
+    /// Stage-by-stage progress of boat.dev workspaces, kept after they finish until dismissed.
+    var creationTimelines: [UUID: CreationTimeline] = [:]
+    /// Workspaces with an archive in flight (script, teardown and worktree removal can take a while).
+    private(set) var archiving: Set<UUID> = []
     /// Brief confirmation shown at the bottom of the window.
     var toast: String? {
         didSet {
@@ -423,8 +427,14 @@ final class AppModel {
         if hasPendingSave { await saveNow() }  // don't lose local edits
         let fresh = Store.shared.loadStateSync()
         let selected = state.selectedWorkspaceID
+        let local = Dictionary(state.workspaces.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         state.repositories = fresh.repositories
-        state.workspaces = fresh.workspaces
+        state.workspaces = fresh.workspaces.map { theirs in
+            guard let mine = local[theirs.id] else { return theirs }
+            var merged = theirs
+            merged.keepLocalTabState(from: mine, opening: link(for: mine)?.openingTabs ?? [])
+            return merged
+        }
         state.settings = fresh.settings
         state.selectedWorkspaceID = selected  // selection stays per-window
         await Store.shared.markLoaded(state)
@@ -519,6 +529,7 @@ final class AppModel {
             return
         }
         state.repositories.removeAll { $0.id == repo.id }
+        for provider in settings.sandboxProviders { SandboxEnvironmentStore.save([], provider: provider.id, repo: repo.id) }
         if selectedRepoID == repo.id { selectedRepoID = nil }
         scheduleSave()
         if server.isEnabled {
@@ -629,16 +640,16 @@ final class AppModel {
                 guard let provider = settings.provider(for: location) else {
                     throw HostError("That sandbox provider isn't in Settings → Servers any more.")
                 }
-                try await provisionBoatWorkspace(ws.id, repo: repo, provider: provider)
+                try await provisionBoatWorkspace(ws.id, repo: repo, provider: provider, pullRequest: pr?.number)
                 if let pr { try await checkOutPullRequest(pr, in: ws.id) }
-                setCreationStep(ws.id, "Running setup")
+                beginStage(ws.id, .setup)
                 let model = model(for: ws.id)
                 await model.loadConfigAsync()
                 await model.runSetup()
-                creationSteps[ws.id] = nil
+                creationTimelines[ws.id]?.finish()
                 updateWorkspace(ws.id) { $0.state = .ready }
             } catch {
-                creationSteps[ws.id] = nil
+                creationTimelines[ws.id]?.fail()
                 updateWorkspace(ws.id) { $0.state = .failed(error.localizedDescription) }
             }
             return
@@ -700,11 +711,13 @@ final class AppModel {
             throw GitError("The workspace has no worktree to check #\(pr.number) out into.")
         }
         setCreationStep(wsID, "Checking out #\(pr.number)")
+        beginStage(wsID, .pullRequest)
         try await Git.checkOutPullRequest(path: ws.path, number: pr.number, host: model(for: wsID).host)
     }
 
     func archive(_ ws: Workspace) async {
-        guard let repo = repo(ws.repoID) else { return }
+        guard let repo = repo(ws.repoID), archiving.insert(ws.id).inserted else { return }
+        defer { archiving.remove(ws.id) }
         if let m = existingModel(for: ws.id) {
             await m.prepareForArchive()
         }
@@ -713,6 +726,8 @@ final class AppModel {
         } else if let link = link(for: ws) {
             do {
                 try await link.archiveWorkspace(ws)
+            } catch let e as ServerError where e.code == .notFound {
+                // Creation failed before the server heard of it, so there's nothing to tear down.
             } catch {
                 alert = AppAlert(title: "Couldn't archive workspace", message: error.localizedDescription)
                 return
@@ -740,6 +755,8 @@ final class AppModel {
         } else if let link = link(for: ws) {
             do {
                 try await link.deleteWorkspace(ws)
+            } catch let e as ServerError where e.code == .notFound {
+                // Already gone from the server (or it never got there).
             } catch {
                 alert = AppAlert(title: "Couldn't delete workspace", message: error.localizedDescription)
                 return

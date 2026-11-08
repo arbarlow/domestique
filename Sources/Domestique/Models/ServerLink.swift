@@ -715,6 +715,9 @@ final class ServerLink {
         } catch let e as ServerError where e.code == .notFound {}
     }
 
+    /// Tabs created here that the server hasn't confirmed yet.
+    var openingTabs: Set<UUID> { pendingTabs }
+
     func openSession(_ tab: ChatTab, workspace: UUID) {
         pendingTabs.insert(tab.id)
         let req = Self.openRequest(tab, workspace: workspace)

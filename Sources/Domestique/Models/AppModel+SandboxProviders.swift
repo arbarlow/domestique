@@ -377,6 +377,7 @@ extension AppModel {
                 return
             }
         }
+        for repo in repositories { SandboxEnvironmentStore.save([], provider: p.id, repo: repo.id) }
         forgetSandboxProvider(p)
     }
 

@@ -3,6 +3,22 @@ import DQCore
 import Observation
 import SwiftTerm
 
+/// Follows light and dark mode. SwiftTerm flattens its default colors to RGB when they're
+/// assigned, so they have to be assigned again each time the appearance changes.
+final class AppearanceTerminalView: LocalProcessTerminalView {
+    func applyAppearanceColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            nativeBackgroundColor = NSColor.textBackgroundColor.usingColorSpace(.sRGB) ?? .textBackgroundColor
+            nativeForegroundColor = NSColor.textColor.usingColorSpace(.sRGB) ?? .textColor
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        applyAppearanceColors()
+        super.viewDidChangeEffectiveAppearance()
+    }
+}
+
 /// A terminal tab. Owns its SwiftTerm view so the shell survives inspector tab switches.
 @MainActor
 @Observable
@@ -10,7 +26,7 @@ final class TerminalSession: Identifiable {
     let id = UUID()
     var title: String
     private(set) var exited = false
-    @ObservationIgnored let view: LocalProcessTerminalView
+    @ObservationIgnored let view: AppearanceTerminalView
     @ObservationIgnored private var delegateProxy: Proxy?
     @ObservationIgnored private var started = false
     var isStarted: Bool { started }
@@ -25,10 +41,9 @@ final class TerminalSession: Identifiable {
         self.cwd = cwd
         self.extraEnv = extraEnv
         self.host = host
-        view = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        view = AppearanceTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        view.nativeBackgroundColor = NSColor.textBackgroundColor
-        view.nativeForegroundColor = NSColor.textColor
+        view.applyAppearanceColors()
         let proxy = Proxy(owner: self)
         delegateProxy = proxy
         view.processDelegate = proxy

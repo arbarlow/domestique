@@ -103,6 +103,11 @@ final class WorkspaceModel {
     /// Where this workspace's code and processes live.
     var host: any ExecutionHost { Hosts.host(for: workspace?.host) }
     var isRemote: Bool { workspace?.host != nil }
+
+    /// What the Open menu offers; kept current by `refreshOpenTargets()`.
+    var installedApps: [String: InstalledApp] = [:]
+    var xcodeProjects: [XcodeProject] = []
+    private var isScanningXcodeProjects = false
     /// A boat.dev sandbox: machine status, auto-stop and SSH port forwarding apply.
     var isSandbox: Bool { workspace?.isSandbox ?? false }
     /// Where ports opened in this workspace are reached from this Mac: "localhost" (local, and
@@ -204,7 +209,11 @@ final class WorkspaceModel {
     }
 
     func closeTab(_ tabID: UUID) {
-        guard let ws = workspace, ws.tabs.count > 1 else { return }
+        guard let ws = workspace, let closing = ws.tabs.first(where: { $0.id == tabID }) else { return }
+        // A workspace always has a chat: closing the last one leaves a fresh, empty tab in its place.
+        let isLast = ws.tabs.count == 1
+        let isBlank = closing.providerSessionID == nil && chats[tabID]?.hasMessages != true
+        if isLast { newTab(provider: closing.provider) }
         chats[tabID]?.shutdown()
         chats[tabID] = nil
         let link = app.link(for: ws)
@@ -212,8 +221,9 @@ final class WorkspaceModel {
         app.updateWorkspace(id) { w in
             let idx = w.tabs.firstIndex { $0.id == tabID } ?? 0
             // Local chats keep their transcript so the tab can be reopened. Server deletes a closed
-            // session's history on the server, so there's nothing to bring back there.
-            if link == nil, let tab = w.tabs.first(where: { $0.id == tabID }) {
+            // session's history on the server, so there's nothing to bring back there. Replacing a
+            // blank last tab leaves nothing worth reopening either.
+            if link == nil, !(isLast && isBlank), let tab = w.tabs.first(where: { $0.id == tabID }) {
                 var closed = w.closedTabs ?? []
                 closed.removeAll { $0.id == tabID }
                 closed.insert(ClosedChatTab(tab: tab), at: 0)
@@ -666,25 +676,54 @@ final class WorkspaceModel {
             app.toast = "This workspace lives on boat.dev. Opened a terminal on the sandbox."
             return
         }
-        let target = path ?? ws.path
-        let editor = app.settings.editorCommand
-        Task {
-            do {
-                try await Shell.run(editor, [target], cwd: ws.path)
-            } catch {
-                NSWorkspace.shared.open(URL(fileURLWithPath: target))
+        openInDefaultEditor(path ?? ws.path, cwd: ws.path)
+    }
+
+    /// Open a file on this Mac with the default editor.
+    func openLocally(path: String) {
+        openInDefaultEditor(path, cwd: (path as NSString).deletingLastPathComponent)
+    }
+
+    private func openInDefaultEditor(_ target: String, cwd: String) {
+        let installed = Set(EditorApps.installed().keys)
+        guard let choice = app.settings.defaultEditor(installed: installed) else {
+            NSWorkspace.shared.open(URL(fileURLWithPath: target))
+            return
+        }
+        open(target, with: choice, cwd: cwd)
+    }
+
+    /// Open the worktree with something from the Open menu.
+    func openWorktree(with choice: EditorChoice) {
+        guard let ws = workspace, !isRemote else { return }
+        open(ws.path, with: choice, cwd: ws.path)
+    }
+
+    private func open(_ target: String, with choice: EditorChoice, cwd: String) {
+        switch choice {
+        case .app(let editor):
+            guard let appURL = EditorApps.installed()[editor.bundleID]?.url else { return }
+            openFile(target, withApplicationAt: appURL)
+        case .custom(let command):
+            Task {
+                do {
+                    // Through a shell so the command can carry its own arguments.
+                    try await Shell.run("sh", ["-c", "\(command) \(ShellQuote.quote(target))"], cwd: cwd)
+                } catch {
+                    app.toast = "Couldn't run \(choice.name). Check the command in Settings."
+                }
             }
         }
     }
 
-    /// Open a file on this Mac with the editor command.
-    func openLocally(path: String) {
-        let editor = app.settings.editorCommand
+    private func openFile(_ path: String, withApplicationAt appURL: URL) {
+        let name = appURL.deletingPathExtension().lastPathComponent
         Task {
             do {
-                try await Shell.run(editor, [path], cwd: (path as NSString).deletingLastPathComponent)
+                try await NSWorkspace.shared.open(
+                    [URL(fileURLWithPath: path)], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration())
             } catch {
-                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                app.toast = "Couldn't open it in \(name)."
             }
         }
     }
@@ -692,6 +731,29 @@ final class WorkspaceModel {
     func revealInFinder() {
         guard let ws = workspace, !isRemote else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: ws.path)])
+    }
+
+    func openInFinder() {
+        guard let ws = workspace, !isRemote else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: ws.path, isDirectory: true))
+    }
+
+    /// Re-reads installed editors and scans the worktree for Xcode projects, for the Open menu.
+    func refreshOpenTargets() {
+        installedApps = EditorApps.installed()
+        guard let ws = workspace, !isRemote, !isScanningXcodeProjects else { return }
+        isScanningXcodeProjects = true
+        let path = ws.path
+        Task {
+            let found = await Task.detached { XcodeProjects.find(in: path) }.value
+            self.isScanningXcodeProjects = false
+            if found != self.xcodeProjects { self.xcodeProjects = found }
+        }
+    }
+
+    func openXcodeProject(_ project: XcodeProject) {
+        guard let xcode = installedApps[EditorApps.xcodeBundleID]?.url else { return }
+        openFile(project.path, withApplicationAt: xcode)
     }
 
     // MARK: ship — pull requests

@@ -235,9 +235,6 @@ private struct GeneralSettings: View {
                 SettingsRow(title: "Branch prefix", subtitle: "New branches are named prefix/workspace") {
                     TextField("alex", text: $app.settings.branchPrefix).modifier(FieldStyle())
                 }
-                SettingsRow(title: "Editor command", subtitle: "Used by Open in editor") {
-                    TextField("cursor", text: $app.settings.editorCommand).modifier(FieldStyle())
-                }
                 SettingsRow(title: "Worktrees") { PathValue(path: Paths.workspacesRoot.path) }
                 SettingsRow(title: "Clone location", subtitle: "Where Clone from GitHub puts repositories") {
                     TextField(
@@ -252,7 +249,50 @@ private struct GeneralSettings: View {
                     PathValue(path: Paths.database.path)
                 }
             }
+            EditorSettings()
         }
+    }
+}
+
+/// Which editors the workspace Open menu lists, and which one Open in editor uses.
+private struct EditorSettings: View {
+    @Environment(AppModel.self) private var app
+    @State private var installed: [String: InstalledApp] = [:]
+
+    var body: some View {
+        @Bindable var app = app
+        SettingsSection(
+            title: "Editors",
+            footer: "Listed in the Open menu at the top of a chat. Xcode projects found in the worktree are added automatically."
+        ) {
+            ForEach(KnownEditor.allCases.filter { installed[$0.bundleID] != nil }) { editor in
+                SettingsRow(title: editor.displayName) {
+                    Toggle("", isOn: Binding(
+                        get: { app.settings.isEditorEnabled(editor) },
+                        set: { app.settings.setEditor(editor, enabled: $0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+            }
+            SettingsRow(title: "Custom command", subtitle: "Run with the path appended, e.g. nvim-qt --maximized") {
+                TextField("None", text: $app.settings.customCommand).modifier(FieldStyle())
+            }
+            let choices = app.settings.editorChoices(installed: Set(installed.keys))
+            if let current = app.settings.defaultEditor(installed: Set(installed.keys)) {
+                SettingsRow(title: "Default editor", subtitle: "Used by Open in editor (⇧⌘E) and for opening files") {
+                    Picker("", selection: Binding(
+                        get: { current.id },
+                        set: { app.settings.defaultEditorID = $0 }
+                    )) {
+                        ForEach(choices) { Text($0.name).tag($0.id) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+            }
+        }
+        .onAppear { installed = EditorApps.installed() }
     }
 }
 

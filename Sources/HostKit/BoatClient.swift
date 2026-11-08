@@ -498,14 +498,15 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func write(service: String, account: String, value: String) {
+    @discardableResult
+    static func write(service: String, account: String, value: String) -> Bool {
         delete(service: service, account: account)
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
             kSecAttrAccount as String: account, kSecValueData as String: Data(value.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
-        SecItemAdd(q as CFDictionary, nil)
+        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
     }
 
     static func delete(service: String, account: String) {
