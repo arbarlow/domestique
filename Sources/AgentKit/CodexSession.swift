@@ -1,6 +1,8 @@
 import DQCore
 import Foundation
 
+// macOS only: spawns the agent CLI. iOS reaches agents through a server.
+#if os(macOS)
 /// One Codex thread on the shared app-server.
 public actor CodexSession: AgentSession, CodexThreadHandler {
     public nonisolated let provider: ProviderKind = .codex
@@ -333,3 +335,4 @@ extension ApprovalDecision {
         }
     }
 }
+#endif

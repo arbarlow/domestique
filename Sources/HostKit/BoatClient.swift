@@ -214,11 +214,11 @@ public actor BoatClient {
     /// Which Keychain item this client's API key lives in.
     public let account: String
 
-    /// Set by the app: providers that live on a Team Car route their calls there instead of using a
+    /// Set by the app: providers that live on a server route their calls there instead of using a
     /// key on this Mac.
     nonisolated(unsafe) public static var routing: SandboxRouting?
 
-    /// The Team Car backend for this client's provider, if it has one.
+    /// The server backend for this client's provider, if it has one.
     private var backend: (any SandboxBackend)? { Self.routing?.backend(account) }
 
     public static let dashboardURL = URL(string: "https://boat.dev/dashboard")!
@@ -290,7 +290,7 @@ public actor BoatClient {
     }
 
     public nonisolated static var isConfigured: Bool { isConfigured(account: nil) }
-    /// Whether this provider can make calls: its Team Car is connected and has a key, or (for a
+    /// Whether this provider can make calls: its server is connected and has a key, or (for a
     /// provider on this Mac) there's a Keychain key, `BOAT_API_KEY` or a `boat login` session.
     public nonisolated static func isConfigured(account: String?) -> Bool {
         let account = account ?? defaultAccount
@@ -443,7 +443,7 @@ public actor BoatClient {
         guard let (token, _) = Self.credential(account: account) else {
             throw BoatAPIError(
                 status: 401, code: "unauthorized",
-                message: "Not signed in to boat.dev. Add an API key in Settings → Team Cars, or run `boat login`.")
+                message: "Not signed in to boat.dev. Add an API key in Settings → Servers, or run `boat login`.")
         }
         var req = URLRequest(url: URL(string: baseURL.absoluteString + path)!)
         req.httpMethod = method
@@ -481,7 +481,7 @@ public actor BoatClient {
         if message.isEmpty { message = "HTTP \(status)" }
         let details = inner?["details"] as? [String: Any]
         let url = details?["setupUrl"] as? String ?? details?["billingUrl"] as? String ?? obj["url"] as? String
-        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Team Cars." }
+        if status == 401 { message = "boat.dev rejected the API key (\(message)). Update it in Settings → Servers." }
         return BoatAPIError(status: status, code: code, message: message, url: url)
     }
 }

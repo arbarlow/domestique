@@ -190,6 +190,24 @@ public final class BoatHost: ExecutionHost, @unchecked Sendable {
         return r?.succeeded == true
     }
 
+    // MARK: MCP servers
+
+    /// Claude's MCP config for this sandbox. boat rewrites Claude's own config files, not this one.
+    public static let mcpConfigPath = "\(home)/.config/domestique/mcp.json"
+
+    /// The file holds secrets, so they arrive over stdin (never argv or logs) and it's only readable by the sandbox user.
+    public func installMCPConfig(_ json: Data) async throws {
+        let q = ShellQuote.quote(Self.mcpConfigPath)
+        let tmp = ShellQuote.quote(Self.mcpConfigPath + ".tmp")
+        try await runScript(
+            "umask 077 && mkdir -p \"$(dirname \(q))\" && cat > \(tmp) && mv \(tmp) \(q)",
+            cwd: Self.home, stdin: json, label: "write MCP config")
+    }
+
+    public func removeMCPConfig() async throws {
+        try await runScript("rm -f \(ShellQuote.quote(Self.mcpConfigPath))", cwd: Self.home, label: "remove MCP config")
+    }
+
     /// Drop SSH state (archive / delete).
     public func disconnect() async {
         await ssh.cancelAllForwards()
@@ -204,14 +222,14 @@ public enum Hosts {
     nonisolated(unsafe) private static var boat: [String: BoatHost] = [:]
     private static let lock = NSLock()
 
-    /// Builds hosts for remote Team Cars (set by the app, which knows their URLs and tokens).
-    nonisolated(unsafe) public static var teamCarResolver: (@Sendable (WorkspaceHost) -> (any ExecutionHost)?)?
+    /// Builds hosts for remote servers (set by the app, which knows their URLs and tokens).
+    nonisolated(unsafe) public static var serverResolver: (@Sendable (WorkspaceHost) -> (any ExecutionHost)?)?
 
     public static func host(for h: WorkspaceHost?) -> any ExecutionHost {
         guard let h else { return LocalHost.shared }
         switch h.provider {
         case .boat: return boatHost(h.machineID, account: h.accountID)
-        case .teamcar: return teamCarResolver?(h) ?? UnavailableHost(name: h.machineName ?? "Team Car")
+        case .server: return serverResolver?(h) ?? UnavailableHost(name: h.machineName ?? "Server")
         }
     }
 
@@ -229,13 +247,13 @@ public enum Hosts {
     public static var allBoatHosts: [BoatHost] { lock.withLock { Array(boat.values) } }
 }
 
-/// Stands in for a remote Team Car that's no longer in Settings: every command fails with a clear message.
+/// Stands in for a remote server that's no longer in Settings: every command fails with a clear message.
 final class UnavailableHost: ExecutionHost {
     let id = "unavailable"
     let isLocal = false
     let displayName: String
     init(name: String) { displayName = name }
-    private var error: HostError { HostError("\(displayName) isn't in Settings → Team Cars any more.") }
+    private var error: HostError { HostError("\(displayName) isn't in Settings → Servers any more.") }
     func prepare() async throws { throw error }
     func command(_ executable: String, _ arguments: [String], cwd: String, env: [String: String], tty: Bool) async throws -> HostCommand { throw error }
     func shell(_ script: String, cwd: String, env: [String: String], tty: Bool) async throws -> HostCommand { throw error }

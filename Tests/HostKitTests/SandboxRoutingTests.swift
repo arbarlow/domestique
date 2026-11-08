@@ -4,14 +4,14 @@ import Testing
 
 @testable import HostKit
 
-/// Records calls; answers like a Team Car would.
+/// Records calls; answers like a server would.
 private final class FakeBackend: SandboxBackend {
     let calls = Mutex<[String]>([])
     private func note(_ s: String) { calls.withLock { $0.append(s) } }
 
     func sandbox(_ id: String) async throws -> BoatSandbox {
         note("get \(id)")
-        if id == "bx_gone" { throw BoatAPIError(status: 404, code: "teamcar_notFound", message: "gone") }
+        if id == "bx_gone" { throw BoatAPIError(status: 404, code: "domestique_notFound", message: "gone") }
         return BoatSandbox(id: id, state: "idle")
     }
     func list() async throws -> [BoatSandbox] { note("list"); return [] }
@@ -33,7 +33,7 @@ private final class FakeBackend: SandboxBackend {
     func hostedURL(_ id: String, port: Int, public isPublic: Bool, title: String?) async throws -> URL {
         URL(string: "https://\(port).example")!
     }
-    func me() async throws -> BoatUser { BoatUser(login: "rider", email: nil, displayName: nil) }
+    func me() async throws -> BoatUser { BoatUser(login: "session", email: nil, displayName: nil) }
     func limits() async throws -> BoatLimits { BoatLimits(canStart: true, trialLine: nil, startBlockedReason: nil, machineTypes: nil) }
 }
 
@@ -48,7 +48,7 @@ private final class FakeBackend: SandboxBackend {
             isConfigured: { $0 == account && usable.withLock { $0 } })
         defer { BoatClient.routing = nil }
 
-        // Configured follows the car (connected + has a key), not this Mac's Keychain.
+        // Configured follows the server (connected + has a key), not this Mac's Keychain.
         #expect(!BoatClient.isConfigured(account: account))
         usable.withLock { $0 = true }
         #expect(BoatClient.isConfigured(account: account))
@@ -63,12 +63,12 @@ private final class FakeBackend: SandboxBackend {
         try await c.stop("bx_1")
         try await c.delete("bx_1")
         #expect(try await c.sshAccess("bx_1", publicKey: "ssh-ed25519 me").hostKey.hasPrefix("ssh-ed25519"))
-        #expect(try await c.me().login == "rider")
+        #expect(try await c.me().login == "session")
         #expect(fake.calls.withLock { $0 } == [
             "get bx_1", "create stride · galibier stride ws-1", "resume bx_1 keep", "stop bx_1", "delete bx_1", "ssh bx_1",
         ])
 
-        // A car's NOT_FOUND arrives as a 404, so "deleted on boat.dev" handling still works.
+        // A server's NOT_FOUND arrives as a 404, so "deleted on boat.dev" handling still works.
         let e = await #expect(throws: BoatAPIError.self) { try await c.sandbox("bx_gone") }
         #expect(e?.status == 404)
     }

@@ -47,13 +47,13 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
-          go-version-file: teamcar/go.mod
-          cache-dependency-path: teamcar/go.sum
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
 
       - name: Package
         run: |
           APP=build/DerivedData/Build/Products/Release/Domestique.app
-          scripts/build-teamcar.sh "$APP"
+          scripts/build-server.sh "$APP"
           codesign --force --deep --sign - "$APP"
           ditto -c -k --sequesterRsrc --keepParent "$APP" Domestique.zip
           shasum -a 256 Domestique.zip | tee Domestique.zip.sha256

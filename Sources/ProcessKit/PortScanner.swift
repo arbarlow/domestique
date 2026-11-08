@@ -130,10 +130,10 @@ public enum PortScanner {
 /// Picks a block of ports for a new workspace.
 ///
 /// Each kind of workspace has its own range so blocks never collide, even though the ones on this Mac
-/// are handed out by Team Car and the cloud ones by the app.
+/// are handed out by the server and the cloud ones by the app.
 public enum PortAllocator {
     public static let blockSize = 10
-    /// Local worktrees (allocated by Team Car; keep in step with teamcar's DefaultPortStart/End).
+    /// Local worktrees (allocated by the server; keep in step with domestique's DefaultPortStart/End).
     public static let localRange = 41000...50999
     /// boat.dev sandboxes (their ports are forwarded to this Mac).
     public static let cloudRange = 51000...60999

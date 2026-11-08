@@ -9,6 +9,6 @@ xcodebuild -project Domestique.xcodeproj -scheme Domestique -configuration "$CON
   -skipPackagePluginValidation -skipMacroValidation -quiet build
 rm -rf build/Domestique.app
 cp -R "build/DerivedData/Build/Products/$CONFIG/Domestique.app" build/Domestique.app
-scripts/build-teamcar.sh build/Domestique.app
+scripts/build-server.sh build/Domestique.app
 codesign --force --deep --sign - build/Domestique.app
 echo "Built build/Domestique.app ($CONFIG)"

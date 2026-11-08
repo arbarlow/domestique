@@ -259,8 +259,8 @@ struct WorkspaceRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if workspace.isSandbox, !workspace.isArchived { MachineGlyph(workspace: workspace) }
-                if let car = workspace.host, car.provider == .teamcar, !workspace.isArchived {
-                    TeamCarGlyph(name: car.machineName ?? "Team Car")
+                if let server = workspace.host, server.provider == .server, !workspace.isArchived {
+                    ServerGlyph(name: server.machineName ?? "Server")
                 }
                 Spacer(minLength: 6)
                 if showsArchive {
@@ -290,8 +290,8 @@ struct WorkspaceRow: View {
     private func title(_ model: WorkspaceModel?) -> String {
         switch workspace.state {
         case .creating:
-            if let car = workspace.host, car.provider == .teamcar {
-                return "Creating \(workspace.name) on \(car.machineName ?? "Team Car")…"
+            if let server = workspace.host, server.provider == .server {
+                return "Creating \(workspace.name) on \(server.machineName ?? "Server")…"
             }
             return workspace.isSandbox || workspace.path.hasPrefix("/home/user") ? "Starting \(workspace.name) on boat.dev…" : "Creating \(workspace.name)…"
         case .settingUp: return "Setting up \(workspace.name)…"
@@ -369,7 +369,7 @@ private struct SidebarFooter: View {
             .fixedSize()
             .help("Add repository")
             UpdateButton(updater: app.updater)
-            TeamCarStatusDot(link: app.teamCar)
+            ServerStatusDots()
             Spacer(minLength: 4)
             ForEach([ProviderKind.claude, .codex], id: \.self) { p in
                 if let u = app.usage[p] { UsageRing(provider: p, usage: u) }
@@ -383,28 +383,49 @@ private struct SidebarFooter: View {
     }
 }
 
-/// A dot for the local Team Car: nothing while it's connected, otherwise a warning with the reason.
-private struct TeamCarStatusDot: View {
-    let link: TeamCarLink
+/// One dot per server: green when connected, amber while connecting, red when it can't be reached.
+/// Clicking opens Settings → Servers.
+private struct ServerStatusDots: View {
+    @Environment(AppModel.self) private var app
+
+    private var links: [ServerLink] { app.serverLinks.filter(\.isEnabled) }
 
     var body: some View {
+        if !links.isEmpty {
+            Button { app.settingsRoute = .servers } label: {
+                HStack(spacing: 5) {
+                    ForEach(links, id: \.displayName) { link in
+                        Circle().fill(color(link.status)).frame(width: 7, height: 7).help(summary(link))
+                    }
+                }
+                .padding(.horizontal, 6)
+                .frame(height: 26)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(links.map(summary).joined(separator: ", "))
+        }
+    }
+
+    private func color(_ status: ServerLink.Status) -> Color {
+        switch status {
+        case .connected: Theme.added
+        case .starting, .disabled: Theme.warning
+        case .unavailable: Theme.removed
+        }
+    }
+
+    private func summary(_ link: ServerLink) -> String {
         switch link.status {
-        case .disabled, .connected:
-            EmptyView()
-        case .starting:
-            ProgressView().controlSize(.mini).frame(width: 26, height: 26).help("Starting Team Car…")
-        case .unavailable(let why):
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.warning)
-                .frame(width: 26, height: 26)
-                .help("Team Car isn't connected: \(why)")
+        case .connected: "\(link.displayName): connected"
+        case .starting, .disabled: "\(link.displayName): connecting…"
+        case .unavailable(let why): "\(link.displayName): not connected (\(why))"
         }
     }
 }
 
-/// Marks a workspace that runs on a remote Team Car.
-struct TeamCarGlyph: View {
+/// Marks a workspace that runs on a remote server.
+struct ServerGlyph: View {
     let name: String
     var body: some View {
         Image(systemName: "server.rack")
@@ -710,8 +731,8 @@ struct WorkspaceContextMenu: View {
     var body: some View {
         let model = app.model(for: workspace.id)
         Button("New chat tab") { model.newTab() }
-        if workspace.teamCarID != nil {
-            // Code lives on the car: nothing to open on this Mac.
+        if workspace.serverID != nil {
+            // Code lives on the server: nothing to open on this Mac.
         } else if workspace.isSandbox {
             if !workspace.isArchived {
                 Button("Open desktop") { app.cloud.openDesktop(workspace) }

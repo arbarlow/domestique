@@ -10,15 +10,15 @@ script = "swift build --product DomestiqueDev"
 
 [tasks.app]
 name = "Domestique (this branch)"
-# Builds this branch's Team Car first; the app starts it (or reuses one already running).
-command = "go -C teamcar build -o teamcar ./cmd/teamcar && swift run DomestiqueDev"
+# Builds this branch's server first; the app starts it (or reuses one already running).
+command = "go -C server build -o domestique ./cmd/domestique && swift run DomestiqueDev"
 ready_pattern = "Build of product 'DomestiqueDev' complete|Build complete!"
 
 [tasks.app-sandboxed]
 name = "Run (sandboxed data)"
-# Fresh database, settings, SSH key, worktrees and its own Team Car under .dq-dev/ in this workspace.
-command = "mkdir -p .dq-dev/home .dq-dev/workspaces && go -C teamcar build -o teamcar ./cmd/teamcar && swift run DomestiqueDev"
-env = { DOMESTIQUE_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/home", DOMESTIQUE_WORKSPACES = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/workspaces", TEAMCAR_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/app-teamcar", TEAMCAR_WORKSPACES_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/workspaces", TEAMCAR_REPOS_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/repos" }
+# Fresh database, settings, SSH key, worktrees and its own server under .dq-dev/ in this workspace.
+command = "mkdir -p .dq-dev/home .dq-dev/workspaces && go -C server build -o domestique ./cmd/domestique && swift run DomestiqueDev"
+env = { DOMESTIQUE_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/home", DOMESTIQUE_WORKSPACES = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/workspaces", DOMESTIQUE_SERVER_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/app-server", DOMESTIQUE_SERVER_WORKSPACES_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/workspaces", DOMESTIQUE_SERVER_REPOS_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/repos" }
 ready_pattern = "Build of product 'DomestiqueDev' complete|Build complete!"
 
 [tasks.bundle]
@@ -27,37 +27,44 @@ name = "Build & open .app"
 command = "scripts/build-app.sh Debug && open build/Domestique.app"
 kind = "oneshot"
 
+[tasks.ios]
+name = "iPhone app (Simulator)"
+# Builds the iPhone app, installs it on a booted iPhone simulator and launches it. Point it at this
+# workspace's server (the "server" task) with ws://127.0.0.1:$DOMESTIQUE_PORT and a token.
+command = "xcodebuild -project Domestique.xcodeproj -scheme DomestiqueiOS -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData-iOS -skipPackagePluginValidation -skipMacroValidation -quiet build && xcrun simctl install booted build/DerivedData-iOS/Build/Products/Debug-iphonesimulator/DomestiqueiOS.app && xcrun simctl launch --terminate-running-process booted cc.alexb.domestique.ios"
+kind = "oneshot"
+
 [tasks.test]
 name = "Tests"
 command = "swift build && swift test"
 kind = "oneshot"
 
-[tasks.teamcar]
-name = "Team Car server"
-# This branch's Team Car with throwaway state (database, worktrees, clones) under .dq-dev/teamcar: Unix socket there, plus TCP on
-# this workspace's port (token required; create one with the "Team Car token" task).
-command = "cd teamcar && go run ./cmd/teamcar serve --name \"teamcar-$DOMESTIQUE_WORKSPACE\" --listen \"unix://$TEAMCAR_HOME/teamcar.sock\" --listen tcp://127.0.0.1:$DOMESTIQUE_PORT"
-env = { TEAMCAR_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/teamcar", TEAMCAR_WORKSPACES_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/teamcar/workspaces", TEAMCAR_REPOS_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/teamcar/repos" }
-ready_pattern = "team car ready"
+[tasks.server]
+name = "server"
+# This branch's server with throwaway state (database, worktrees, clones) under .dq-dev/server: Unix socket there, plus TCP on
+# this workspace's port (token required; create one with the "Server token" task).
+command = "cd server && go run ./cmd/domestique serve --name \"domestique-$DOMESTIQUE_WORKSPACE\" --listen \"unix://$DOMESTIQUE_SERVER_HOME/server.sock\" --listen tcp://127.0.0.1:$DOMESTIQUE_PORT"
+env = { DOMESTIQUE_SERVER_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/server", DOMESTIQUE_SERVER_WORKSPACES_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/server/workspaces", DOMESTIQUE_SERVER_REPOS_ROOT = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/server/repos" }
+ready_pattern = "server ready"
 
-[tasks.teamcar-token]
-name = "Team Car token"
-command = "cd teamcar && go run ./cmd/teamcar token create --name dev --scope admin"
-env = { TEAMCAR_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/teamcar" }
+[tasks.server-token]
+name = "Server token"
+command = "cd server && go run ./cmd/domestique token create --name dev --scope admin"
+env = { DOMESTIQUE_SERVER_HOME = "$DOMESTIQUE_WORKSPACE_PATH/.dq-dev/server" }
 kind = "oneshot"
 
-[tasks.teamcar-test]
-name = "Team Car tests"
-command = "cd proto && buf lint && cd ../teamcar && go vet ./... && go test -race ./..."
+[tasks.server-test]
+name = "Server tests"
+command = "cd proto && buf lint && cd ../server && go vet ./... && go test -race ./..."
 kind = "oneshot"
 
 [stacks.dev]
 name = "Run this branch"
 tasks = ["app"]
 
-[stacks.teamcar]
-name = "Team Car"
-tasks = ["teamcar"]
+[stacks.server]
+name = "Server"
+tasks = ["server"]
 
 [trunk]
-gate = ["test", "teamcar-test"]
+gate = ["test", "server-test"]

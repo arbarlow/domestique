@@ -17,28 +17,28 @@ import Testing
         #expect(s.provider(for: WorkspaceHost(provider: .boat, machineID: "bx_1"))?.id == p.id)
     }
 
-    @Test func providersFromBeforeTeamCarHaveNoHome() throws {
-        // Saved by the previous version: no home, no car status, no snapshot.
+    @Test func providersFromBeforeServerHaveNoHome() throws {
+        // Saved by the previous version: no home, no server status, no snapshot.
         let json = #"{"id":"B0A7DE70-0000-4000-8000-000000000001","kind":"boat","name":"boat.dev","credentialAccount":"api-key","boat":{"machineType":"large","autoStopMinutes":60}}"#
         let p = try JSONDecoder().decode(SandboxProviderConfig.self, from: Data(json.utf8))
-        #expect(p.home == nil && !p.isOnTeamCar && p.carStatus == nil)
+        #expect(p.home == nil && !p.isOnServer && p.serverStatus == nil)
         #expect(p.boat.fromSnapshot == nil && p.boat.machineType == "large")
     }
 
-    @Test func teamCarHomeRoundTrips() throws {
-        let car = UUID()
+    @Test func serverHomeRoundTrips() throws {
+        let server = UUID()
         var p = SandboxProviderConfig(name: "boat · large")
-        p.home = .teamCar(car)
-        p.carStatus = SandboxProviderCarStatus(credentialSource: "config", fromConfig: true)
+        p.home = .server(server)
+        p.serverStatus = SandboxProviderServerStatus(credentialSource: "config", fromConfig: true)
         p.boat.fromSnapshot = "stride"
         let back = try JSONDecoder().decode(SandboxProviderConfig.self, from: JSONEncoder().encode(p))
         #expect(back == p)
-        #expect(back.remoteCarID == car)
-        #expect(back.carStatus?.hasKey == true)
+        #expect(back.remoteServerID == server)
+        #expect(back.serverStatus?.hasKey == true)
         var mac = p
         mac.home = .thisMac
-        #expect(mac.isOnTeamCar && mac.remoteCarID == nil)
-        #expect(SandboxProviderCarStatus(credentialSource: "none", fromConfig: false).hasKey == false)
+        #expect(mac.isOnServer && mac.remoteServerID == nil)
+        #expect(SandboxProviderServerStatus(credentialSource: "none", fromConfig: false).hasKey == false)
     }
 
     @Test func workspacesBelongToTheirProvider() {
@@ -51,8 +51,8 @@ import Testing
         #expect(s.provider(for: host)?.id == b.id)
         #expect(s.provider(for: WorkspaceLocation.sandbox(b.id))?.name == "team")
         #expect(b.credentialAccount != a.credentialAccount)
-        // A Team Car host is never a sandbox provider's.
-        #expect(s.provider(for: WorkspaceHost(provider: .teamcar, machineID: UUID().uuidString)) == nil)
+        // A server host is never a sandbox provider's.
+        #expect(s.provider(for: WorkspaceHost(provider: .server, machineID: UUID().uuidString)) == nil)
         // Round-trips through the settings database.
         let back = try! JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(s))
         #expect(back.sandboxProviders.map(\.id) == [a.id, b.id])

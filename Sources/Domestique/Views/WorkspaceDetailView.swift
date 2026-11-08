@@ -13,9 +13,9 @@ struct WorkspaceDetailView: View {
                 Hairline()
                 if ws.isSandbox, ws.state == .ready { MachineBanner(workspace: ws) }
                 switch ws.state {
-                case .creating where ws.teamCarID != nil:
+                case .creating where ws.serverID != nil:
                     ProgressPlaceholder(
-                        title: "Creating on \(ws.host?.machineName ?? "Team Car")",
+                        title: "Creating on \(ws.host?.machineName ?? "Server")",
                         detail: app.creationSteps[ws.id] ?? "Cloning \(model.repo?.name ?? "the repo") and branching \(ws.branch)")
                 case .creating where ws.isSandbox || ws.path.hasPrefix("/home/user"):
                     ProgressPlaceholder(
@@ -82,13 +82,13 @@ private struct WorkspaceHeader: View {
                 .truncationMode(.middle)
             WorkspaceMenu(model: model, workspace: workspace)
             if workspace.isSandbox { MachineBadge(model: model, workspace: workspace) }
-            if let car = workspace.host, car.provider == .teamcar {
+            if let server = workspace.host, server.provider == .server {
                 HStack(spacing: 4) {
                     Image(systemName: "server.rack").font(.system(size: 10))
-                    Text(car.machineName ?? "Team Car").font(Theme.small)
+                    Text(server.machineName ?? "Server").font(Theme.small)
                 }
                 .foregroundStyle(Theme.text2)
-                .help("This workspace runs on \(car.machineName ?? "a Team Car")")
+                .help("This workspace runs on \(server.machineName ?? "a server")")
             }
             Spacer(minLength: 12)
 
@@ -117,7 +117,7 @@ private struct WorkspaceHeader: View {
                         app.cloud.openDesktop(workspace)
                     }
                 }
-                IconButton(symbol: "terminal", help: "New terminal on \(workspace.isSandbox ? "the sandbox" : workspace.host?.machineName ?? "the Team Car") (⌃`)", size: 12) {
+                IconButton(symbol: "terminal", help: "New terminal on \(workspace.isSandbox ? "the sandbox" : workspace.host?.machineName ?? "the server") (⌃`)", size: 12) {
                     model.newTerminal()
                 }
             } else {
@@ -147,7 +147,7 @@ private struct WorkspaceMenu: View {
             if workspace.isSandbox {
                 Button("Open desktop") { app.cloud.openDesktop(workspace) }
                 Button("Copy SSH command") { app.cloud.copySSHCommand(workspace) }
-            } else if workspace.teamCarID != nil {
+            } else if workspace.serverID != nil {
             } else {
                 Button("Open in editor") { model.openInEditor() }
                 Button("Reveal in Finder") { model.revealInFinder() }
@@ -156,7 +156,7 @@ private struct WorkspaceMenu: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.branch, forType: .string)
             }
-            Button(workspace.isSandbox ? "Copy path on sandbox" : workspace.teamCarID != nil ? "Copy path on \(workspace.host?.machineName ?? "Team Car")" : "Copy worktree path") {
+            Button(workspace.isSandbox ? "Copy path on sandbox" : workspace.serverID != nil ? "Copy path on \(workspace.host?.machineName ?? "Server")" : "Copy worktree path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(workspace.path, forType: .string)
             }

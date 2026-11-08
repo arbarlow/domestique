@@ -5,7 +5,7 @@ lint:
   use:
     - DEFAULT
   except:
-    # Race Radio frames are not gRPC services; request/response naming rules don't apply.
+    # the Domestique protocol frames are not gRPC services; request/response naming rules don't apply.
     - RPC_REQUEST_RESPONSE_UNIQUE
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME

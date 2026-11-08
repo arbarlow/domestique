@@ -30,7 +30,9 @@ public struct ShellError: Error, LocalizedError, Sendable {
     }
 }
 
+#if os(macOS)
 /// Runs short-lived commands (git, gh, lsof...). Long-running processes live in ProcessKit / AgentKit.
+/// macOS only: iOS has no child processes (the iPhone app does everything through a server).
 public enum Shell {
     /// Run an executable found on the user's login PATH.
     @discardableResult
@@ -178,6 +180,8 @@ public actor LoginEnvironment {
         return env
     }
 }
+
+#endif
 
 public struct TimeoutError: Error {}
 

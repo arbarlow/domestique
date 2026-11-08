@@ -18,7 +18,7 @@ enum DevSnapshots {
             guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else { exit(1) }
             window.setContentSize(NSSize(width: 1240, height: 860))
             var routes: [(String, SettingsRoute)] = [
-                ("general", .general), ("agents", .agents), ("teamcars", .teamCars),
+                ("general", .general), ("agents", .agents), ("servers", .servers),
             ]
             if let repo = app.repositories.first { routes.append(("repo", .repo(repo.id))) }
             for (appearanceName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {

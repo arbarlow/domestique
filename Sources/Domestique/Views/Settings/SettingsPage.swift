@@ -31,7 +31,7 @@ struct SettingsPage: View {
                         switch route {
                         case .general: GeneralSettings()
                         case .agents: AgentSettings()
-                        case .teamCars: TeamCarSettings()
+                        case .servers: ServerSettings()
                         case .repo(let id):
                             if let repo = app.repo(id) {
                                 RepoSettings(repo: repo)
@@ -60,7 +60,7 @@ private struct SettingsNav: View {
             VStack(alignment: .leading, spacing: 1) {
                 navRow(.general, "General", "gearshape.fill", .gray)
                 navRow(.agents, "Agents", "sparkles", .purple)
-                navRow(.teamCars, "Team Cars", "server.rack", .blue)
+                navRow(.servers, "Servers", "server.rack", .blue)
                 Text("Repositories")
                     .font(Theme.small)
                     .foregroundStyle(Theme.text3)
@@ -281,6 +281,7 @@ private struct AgentSettings: View {
             }
             ProviderDefaults(provider: .claude, model: $app.settings.defaultClaudeModel, effort: $app.settings.defaultClaudeEffort)
             ProviderDefaults(provider: .codex, model: $app.settings.defaultCodexModel, effort: $app.settings.defaultCodexEffort)
+            MCPServerSettings()
             SettingsSection(
                 title: "Ship prompts",
                 footer: "What the agent is told when you ship from the panel. {base} and {branch} are filled in for you; edit freely, or reset to the built-in prompt."
@@ -416,7 +417,7 @@ private struct RepoSettings: View {
                     }
                     .labelsHidden().fixedSize()
                 }
-                SettingsRow(title: "Run new workspaces on", subtitle: "A worktree or a sandbox on one of your Team Cars. The default is set in Settings → Team Cars") {
+                SettingsRow(title: "Run new workspaces on", subtitle: "A worktree or a sandbox on one of your servers. The default is set in Settings → Servers") {
                     RepoLocationPicker(repo: repo).labelsHidden().fixedSize()
                 }
                 SettingsRow(title: "Default branch", subtitle: "New workspaces branch from a fresh origin/\(repo.defaultBranch)") {

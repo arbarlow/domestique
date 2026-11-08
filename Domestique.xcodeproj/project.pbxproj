@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		A1B2C3D4000000005D0E5101 /* DomestiqueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4000000005D0E5102 /* DomestiqueKit */; };
 		A1B2C3D4000000005D0E5103 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4000000005D0E5104 /* SwiftTerm */; };
+		A1B2C3D4000000005D0E5201 /* ServerKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4000000005D0E5202 /* ServerKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A1B2C3D4000000005D0E5105 /* Domestique.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Domestique.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4000000005D0E5205 /* DomestiqueiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DomestiqueiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -20,6 +22,12 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = Domestique;
 			path = Sources/Domestique;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4000000005D0E5206 /* iOS/Domestique */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = DomestiqueiOS;
+			path = iOS/Domestique;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +42,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B2C3D4000000005D0E5207 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4000000005D0E5201 /* ServerKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -41,6 +57,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4000000005D0E5106 /* Sources/Domestique */,
+				A1B2C3D4000000005D0E5206 /* iOS/Domestique */,
 				A1B2C3D4000000005D0E5109 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -49,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4000000005D0E5105 /* Domestique.app */,
+				A1B2C3D4000000005D0E5205 /* DomestiqueiOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -80,6 +98,29 @@
 			productReference = A1B2C3D4000000005D0E5105 /* Domestique.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1B2C3D4000000005D0E520A /* DomestiqueiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4000000005D0E520B /* Build configuration list for PBXNativeTarget "DomestiqueiOS" */;
+			buildPhases = (
+				A1B2C3D4000000005D0E520C /* Sources */,
+				A1B2C3D4000000005D0E5207 /* Frameworks */,
+				A1B2C3D4000000005D0E520D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D4000000005D0E5206 /* iOS/Domestique */,
+			);
+			name = DomestiqueiOS;
+			packageProductDependencies = (
+				A1B2C3D4000000005D0E5202 /* ServerKit */,
+			);
+			productName = DomestiqueiOS;
+			productReference = A1B2C3D4000000005D0E5205 /* DomestiqueiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -91,6 +132,9 @@
 				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					A1B2C3D4000000005D0E510A = {
+						CreatedOnToolsVersion = 27.2;
+					};
+					A1B2C3D4000000005D0E520A = {
 						CreatedOnToolsVersion = 27.2;
 					};
 				};
@@ -114,6 +158,7 @@
 			projectRoot = "";
 			targets = (
 				A1B2C3D4000000005D0E510A /* Domestique */,
+				A1B2C3D4000000005D0E520A /* DomestiqueiOS */,
 			);
 		};
 /* End PBXProject section */
@@ -126,10 +171,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B2C3D4000000005D0E520D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A1B2C3D4000000005D0E510C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4000000005D0E520C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -231,6 +290,77 @@
 			};
 			name = Release;
 		};
+		A1B2C3D4000000005D0E5214 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Domestique;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Domestique connects to servers on your network.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cc.alexb.domestique.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A1B2C3D4000000005D0E5215 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Domestique;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Domestique connects to servers on your network.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cc.alexb.domestique.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -248,6 +378,15 @@
 			buildConfigurations = (
 				A1B2C3D4000000005D0E5114 /* Debug */,
 				A1B2C3D4000000005D0E5115 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4000000005D0E520B /* Build configuration list for PBXNativeTarget "DomestiqueiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4000000005D0E5214 /* Debug */,
+				A1B2C3D4000000005D0E5215 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -281,6 +420,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1B2C3D4000000005D0E5111 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		A1B2C3D4000000005D0E5202 /* ServerKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ServerKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

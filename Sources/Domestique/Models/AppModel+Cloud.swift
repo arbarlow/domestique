@@ -23,9 +23,9 @@ extension AppModel {
         let client = BoatClient.client(account: provider.credentialAccount)
         guard BoatClient.isConfigured(account: provider.credentialAccount) else {
             if let home = provider.home, link(for: home)?.isConnected != true {
-                throw HostError("\(carName(for: home)) isn't connected, so it can't start a sandbox on \(provider.name).")
+                throw HostError("\(serverName(for: home)) isn't connected, so it can't start a sandbox on \(provider.name).")
             }
-            throw HostError("Sign \(provider.name) in first: add an API key in Settings → Team Cars, or run `boat login`.")
+            throw HostError("Sign \(provider.name) in first: add an API key in Settings → Servers, or run `boat login`.")
         }
 
         setCreationStep(wsID, "Starting a sandbox on \(provider.name)")
@@ -114,6 +114,22 @@ extension AppModel {
             git config --add credential.https://github.com.helper "$H"
             """
         try await host.runScript(script, cwd: BoatHost.home, label: "git clone \(url)")
+    }
+
+    /// Puts the server's MCP servers on a sandbox and returns the `--mcp-config` path (nil = none).
+    /// If the server can't be reached, the copy from last time is better than losing the servers.
+    func syncMCPConfig(to host: BoatHost, server: SandboxProviderHome) async -> String? {
+        do {
+            let config = try await serverClient(for: server).resolveMcpConfig()
+            guard config.serverCount > 0 else {
+                try await host.removeMCPConfig()
+                return nil
+            }
+            try await host.installMCPConfig(Data(config.json.utf8))
+            return BoatHost.mcpConfigPath
+        } catch {
+            return await host.fileExists(BoatHost.mcpConfigPath) ? BoatHost.mcpConfigPath : nil
+        }
     }
 
     /// GitHub remotes become https (the sandbox has no SSH key for GitHub); others are used as-is.

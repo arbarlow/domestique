@@ -1,6 +1,8 @@
 import DQCore
 import Foundation
 
+// macOS only: spawns the agent CLI. iOS reaches agents through a server.
+#if os(macOS)
 /// Drives the user's installed, unmodified `claude` binary over its stream-json control protocol
 /// (the same stdio protocol the official Agent SDKs use). Auth is whatever `claude` is logged in with.
 public actor ClaudeSession: AgentSession {
@@ -79,6 +81,7 @@ public actor ClaudeSession: AgentSession {
         for root in config.extraWritableRoots { args += ["--add-dir", root] }
 
         try await config.host.prepare()
+        if let path = await config.mcpConfig?() { args += ["--mcp-config", path] }
         let cmd = try await config.host.command("claude", args, cwd: config.cwd, env: env, tty: false)
         let proc = LineProcess(executable: cmd.executable, arguments: cmd.arguments, cwd: cmd.cwd, environment: cmd.environment)
         try proc.start { [weak self] status, stderr in
@@ -670,3 +673,4 @@ enum ANSIStrip {
         s.replacingOccurrences(of: "\u{1B}\\[[0-9;?]*[ -/]*[@-~]", with: "", options: .regularExpression)
     }
 }
+#endif

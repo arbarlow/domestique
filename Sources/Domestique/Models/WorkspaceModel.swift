@@ -106,10 +106,10 @@ final class WorkspaceModel {
     /// A boat.dev sandbox: machine status, auto-stop and SSH port forwarding apply.
     var isSandbox: Bool { workspace?.isSandbox ?? false }
     /// Where ports opened in this workspace are reached from this Mac: "localhost" (local, and
-    /// sandboxes via forwards), else the remote Team Car's host name (your network reaches it).
+    /// sandboxes via forwards), else the remote server's host name (your network reaches it).
     var portHost: String {
-        guard let id = workspace?.teamCarID else { return "localhost" }
-        return app.settings.teamCars.first { $0.id == id }?.hostName ?? "localhost"
+        guard let id = workspace?.serverID else { return "localhost" }
+        return app.settings.servers.first { $0.id == id }?.hostName ?? "localhost"
     }
     var repo: Repository? { workspace.flatMap { app.repo($0.repoID) } }
     var shipMode: ShipMode { workspace?.shipModeOverride ?? repo?.shipMode ?? .pullRequest }
@@ -135,13 +135,13 @@ final class WorkspaceModel {
 
     var isAgentRunning: Bool {
         if chats.values.contains(where: { $0.isRunning || !$0.runningTasks.isEmpty }) { return true }
-        // Riders running in Team Car without an open chat here (e.g. started from another client).
+        // Sessions running in the server without an open chat here (e.g. started from another client).
         guard let link = app.link(for: workspace) else { return false }
-        return workspace?.tabs.contains { chats[$0.id] == nil && link.isRiderRunning($0.id) } ?? false
+        return workspace?.tabs.contains { chats[$0.id] == nil && link.isSessionRunning($0.id) } ?? false
     }
     var needsAttention: Bool {
         if let link = app.link(for: workspace),
-            workspace?.tabs.contains(where: { chats[$0.id] == nil && link.isRiderAwaiting($0.id) }) == true
+            workspace?.tabs.contains(where: { chats[$0.id] == nil && link.isSessionAwaiting($0.id) }) == true
         {
             return true
         }
@@ -160,7 +160,7 @@ final class WorkspaceModel {
 
     func hasChat(_ tabID: UUID) -> Bool { chats[tabID] != nil }
 
-    /// The tab's rider was closed elsewhere.
+    /// The tab's session was closed elsewhere.
     func dropTab(_ tabID: UUID) {
         chats[tabID]?.shutdown()
         chats[tabID] = nil
@@ -172,7 +172,7 @@ final class WorkspaceModel {
     }
 
     func isRunning(tabID: UUID) -> Bool {
-        guard let c = chats[tabID] else { return app.link(for: workspace)?.isRiderRunning(tabID) ?? false }
+        guard let c = chats[tabID] else { return app.link(for: workspace)?.isSessionRunning(tabID) ?? false }
         return c.isRunning || !c.runningTasks.isEmpty
     }
 
@@ -186,7 +186,7 @@ final class WorkspaceModel {
             $0.tabs.append(tab)
             $0.selectedTabID = tab.id
         }
-        app.link(for: workspace)?.openRider(tab, workspace: id)
+        app.link(for: workspace)?.openSession(tab, workspace: id)
         app.composerFocusRequest += 1
     }
 
@@ -211,8 +211,8 @@ final class WorkspaceModel {
         var forgotten: [UUID] = []
         app.updateWorkspace(id) { w in
             let idx = w.tabs.firstIndex { $0.id == tabID } ?? 0
-            // Local chats keep their transcript so the tab can be reopened. Team Car deletes a closed
-            // rider's history on the server, so there's nothing to bring back there.
+            // Local chats keep their transcript so the tab can be reopened. Server deletes a closed
+            // session's history on the server, so there's nothing to bring back there.
             if link == nil, let tab = w.tabs.first(where: { $0.id == tabID }) {
                 var closed = w.closedTabs ?? []
                 closed.removeAll { $0.id == tabID }
@@ -224,7 +224,7 @@ final class WorkspaceModel {
             if w.selectedTabID == tabID { w.selectedTabID = w.tabs[max(0, min(idx, w.tabs.count - 1))].id }
         }
         if let link {
-            Task { await link.closeRider(tabID) }
+            Task { await link.closeSession(tabID) }
         } else {
             Task { for id in forgotten { await Store.shared.deleteTranscript(tabID: id) } }
         }
@@ -481,8 +481,8 @@ final class WorkspaceModel {
     func localPort(for remotePort: Int) -> Int? { isSandbox ? forwards[remotePort] : remotePort }
 
     private func localURL(_ url: URL, remotePort: Int) -> URL? {
-        if workspace?.teamCarID != nil {
-            // A remote Team Car: same port, on the car's host.
+        if workspace?.serverID != nil {
+            // A remote server: same port, on the server's host.
             guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
             if c.host == nil || ["localhost", "127.0.0.1", "0.0.0.0"].contains(c.host!) { c.host = portHost }
             return c.url
@@ -630,7 +630,7 @@ final class WorkspaceModel {
     var remoteReady: Bool {
         guard let ws = workspace, let h = ws.host else { return true }
         guard case .ready = ws.state else { return false }
-        if h.provider == .teamcar { return app.link(for: ws)?.isConnected ?? false }
+        if h.provider == .server { return app.link(for: ws)?.isConnected ?? false }
         return app.cloud.status[h.machineID]?.phase == .running
     }
 
@@ -886,7 +886,7 @@ final class WorkspaceModel {
         guard let ws = workspace else { return }
         let n = terminals.count + 1
         let term = TerminalSession(
-            title: isRemote ? "\(ws.host.map { $0.provider == .teamcar ? ($0.machineName ?? "Team Car") : $0.machineID } ?? "sandbox") \(n)" : "Terminal \(n)", cwd: ws.path, extraEnv: environment,
+            title: isRemote ? "\(ws.host.map { $0.provider == .server ? ($0.machineName ?? "Server") : $0.machineID } ?? "sandbox") \(n)" : "Terminal \(n)", cwd: ws.path, extraEnv: environment,
             host: host)
         terminals.append(term)
         selectedTerminalID = term.id

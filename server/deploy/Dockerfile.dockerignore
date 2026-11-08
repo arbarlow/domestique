@@ -1,0 +1,5 @@
+# Build context is the domestique directory.
+/domestique
+/deploy
+**/*.test
+.git

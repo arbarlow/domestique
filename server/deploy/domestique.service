@@ -1,0 +1,37 @@
+# Server as a systemd service. Example setup (Debian/Ubuntu):
+#
+#   sudo useradd --system --create-home --home-dir /var/lib/domestique --shell /bin/bash domestique
+#   sudo install -m 0755 domestique /usr/local/bin/domestique
+#   sudo cp domestique.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now domestique
+#   journalctl -u domestique -f
+#
+# Log the domestique user in to claude, codex and gh once (see README, "Run on a server").
+
+[Unit]
+Description=server (Domestique server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=domestique
+Group=domestique
+# Database, socket and server.toml. Repositories and worktrees default to ~/Domestique/.
+Environment=DOMESTIQUE_SERVER_HOME=/var/lib/server/domestique
+# Where the agent CLIs usually land (claude's installer uses ~/.local/bin).
+Environment=PATH=/var/lib/domestique/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=~
+# Bind to a private address (Tailscale, WireGuard) or 127.0.0.1 behind a TLS proxy rather than
+# 0.0.0.0 unless something in front encrypts the traffic. See README.
+ExecStart=/usr/local/bin/domestique serve --listen unix:///var/lib/server/domestique/server.sock --listen tcp://0.0.0.0:7420
+Restart=on-failure
+RestartSec=2
+# SIGTERM to the server first so it stops its agents cleanly; the rest of the cgroup (processes
+# clients started) is killed after the timeout.
+KillMode=mixed
+TimeoutStopSec=20
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

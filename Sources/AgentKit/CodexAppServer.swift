@@ -1,6 +1,8 @@
 import DQCore
 import Foundation
 
+// macOS only: spawns the agent CLI. iOS reaches agents through a server.
+#if os(macOS)
 /// Receives notifications / server requests for one Codex thread.
 protocol CodexThreadHandler: AnyObject, Sendable {
     func handleNotification(method: String, params: JSONValue) async
@@ -200,3 +202,4 @@ public actor CodexAppServer {
         }
     }
 }
+#endif

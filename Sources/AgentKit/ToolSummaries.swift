@@ -63,7 +63,7 @@ enum ToolSummaries {
     }
 
     static func shortPath(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = URL.homeDirectory.path(percentEncoded: false)
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
     }
 

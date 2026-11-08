@@ -9,6 +9,6 @@ xcuserdata/
 *.xcuserstate
 .dq-dev/
 
-# Team Car binary built in place
-/teamcar/teamcar
+# Server binary built in place
+/server/domestique
 /dist/

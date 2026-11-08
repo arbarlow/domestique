@@ -1,8 +1,8 @@
-# Swift types for RaceRadioKit: cd proto && buf generate --template buf.gen.swift.yaml
+# Swift types for ServerKit: cd proto && buf generate --template buf.gen.swift.yaml
 version: v2
 plugins:
   - local: protoc-gen-swift
-    out: ../Sources/RaceRadioKit/Generated
+    out: ../Sources/ServerKit/Generated
     opt:
       - Visibility=Public
       - FileNaming=DropPath

@@ -28,7 +28,7 @@ Run Claude Code and Codex side by side, each in its own git worktree, with your 
 
 ---
 
-> In a cycling team, the *domestique* is the rider who does the hard, unglamorous work so the leader can win: fetching bottles, setting the pace, closing gaps. This app does the same for you. Agents grind through tasks in parallel while you stay in charge of what ships.
+> In a cycling team, the *domestique* is the session who does the hard, unglamorous work so the leader can win: fetching bottles, setting the pace, closing gaps. This app does the same for you. Agents grind through tasks in parallel while you stay in charge of what ships.
 
 ## 🚧 Project status
 
@@ -87,6 +87,18 @@ Setup: sign in once with `boat login` (Domestique reuses the CLI's login), or pa
 
 - **Pull requests:** create the PR, watch checks, merge or enable auto-merge, and **Fix CI**, which pulls the failing job logs into the chat for the agent.
 - **Trunk-based:** **Push to main** rebases onto `origin`, runs your gate tasks, and fast-forward pushes, with retries and conflict detection.
+
+### 📱 iPhone app
+
+A native SwiftUI iPhone app (iOS 26) for your [servers](server/README.md). Add a server with its URL and a token
+(`domestique token create --name iphone --scope operate`), then:
+
+- See every workspace on every server, with the ones waiting on you first
+- Start a workspace with a first prompt, open more Claude or Codex chats, archive when done
+- Follow chats live, steer or queue follow-ups, stop a turn, approve or deny, answer questions
+- Switch model, effort and permission mode, and read the workspace's diff
+
+The phone connects to each server directly over the Domestique protocol; there's no relay. Tokens live in the Keychain.
 
 ### ⚡ Native and lightweight
 
@@ -201,7 +213,7 @@ Worktrees live in `~/Domestique/workspaces/<repo>/<name>`. Override the location
 
 ## 🏗 Architecture
 
-Domestique is a Swift package plus a thin Xcode app target. Everything below the UI is a plain library you can test headlessly.
+Domestique is a Swift package plus thin Xcode app targets (Mac and iPhone). Everything below the UI is a plain library you can test headlessly.
 
 ```
 Sources/
@@ -212,7 +224,8 @@ Sources/
 ├── ProcessKit/   PTY processes, ANSI logs, port detection (local and remote)
 ├── HostKit/      cloud machines: boat.dev API, multiplexed SSH, port forwarding
 ├── DQCore/       models, SQLite store, TOML config, shell helpers
-└── dq/           CLI harness for the agent layer
+├── ServerKit/ server client (the Domestique protocol over WebSocket); also builds for iOS
+iOS/Domestique/   the iPhone app (Xcode target DomestiqueiOS), a thin client on ServerKit
 ```
 
 | Piece | How it works |
@@ -227,16 +240,14 @@ Sources/
 ## 🧑‍💻 Development
 
 ```sh
-swift build && swift test        # libraries, tests and the dq harness
+swift build && swift test        # libraries and tests
 swift run DomestiqueDev          # the same UI without an app bundle (quick dev loop)
+xcodebuild -project Domestique.xcodeproj -scheme DomestiqueiOS \
+  -destination 'generic/platform=iOS Simulator' build   # the iPhone app
 ```
 
-**`dq`** drives the agent layer with no UI and prints the normalised event stream. It's great for debugging protocol changes:
-
-```sh
-.build/debug/dq chat claude --mode bypass "list the files in this repo"
-.build/debug/dq chat codex --mode ask --approve --cwd ~/code/my-app "run the tests" "now fix the failures"
-```
+DQCore, AgentKit and ServerKit also compile for iOS. Anything that spawns processes (`Shell`, `LocalHost`,
+the Claude and Codex sessions, `LocalServer`, `ServerHost`) is wrapped in `#if os(macOS)`.
 
 Tests use real processes, real ports, and a real bare `origin` with real worktrees, not mocks. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 

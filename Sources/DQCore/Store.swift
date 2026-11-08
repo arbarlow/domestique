@@ -20,13 +20,13 @@ public enum Paths {
         if let override = ProcessInfo.processInfo.environment["DOMESTIQUE_WORKSPACES"] {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
-        return FileManager.default.homeDirectoryForCurrentUser
+        return URL.homeDirectory
             .appendingPathComponent("Domestique/workspaces", isDirectory: true)
     }
 
     /// Default home for repos cloned from GitHub: ~/Domestique/repos/<owner>/<name>.
     public static var defaultCloneRoot: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Domestique/repos", isDirectory: true)
+        URL.homeDirectory.appendingPathComponent("Domestique/repos", isDirectory: true)
     }
 
     public static func ensure(_ url: URL) {
@@ -74,7 +74,7 @@ public struct AppSettings: Codable, Sendable, Hashable {
         set { boatSettings = newValue }
     }
 
-    /// Sandbox providers (Settings → Team Cars, under their car). nil until migrated: the old single boat.dev
+    /// Sandbox providers (Settings → Servers, under their server). nil until migrated: the old single boat.dev
     /// setup (`boatSettings` and the `api-key` Keychain item) becomes the first one.
     public var sandboxProviderList: [SandboxProviderConfig]?
 
@@ -97,35 +97,44 @@ public struct AppSettings: Codable, Sendable, Hashable {
         }
     }
 
-    /// Remote Team Cars (This Mac's is implicit). Optional so older settings still decode.
-    public var teamCarList: [TeamCarConfig]?
+    /// Remote servers (This Mac's is implicit). The stored names `teamCarList`, `defaultCar`,
+    /// `carPreferenceMap` and `keepTeamCarRunningAfterQuit` are the keys in saved settings: don't rename them.
+    public var teamCarList: [ServerConfig]?
 
-    public var teamCars: [TeamCarConfig] {
+    public var servers: [ServerConfig] {
         get { teamCarList ?? [] }
         set { teamCarList = newValue }
     }
 
-    /// Leave This Mac's Team Car (and its agents) running after Domestique quits. nil = no: quitting stops it.
+    /// Leave This Mac's server (and its agents) running after Domestique quits. nil = no: quitting stops it.
     public var keepTeamCarRunningAfterQuit: Bool?
 
-    public var keepTeamCarRunning: Bool {
+    /// The address (a Tailscale or LAN IP of this Mac) This Mac's server also listens on, for phones. nil = socket only.
+    public var phoneAccessAddress: String?
+
+    public var keepServerRunning: Bool {
         get { keepTeamCarRunningAfterQuit ?? false }
         set { keepTeamCarRunningAfterQuit = newValue ? true : nil }
     }
 
-    /// The car new workspaces go to unless a repository says otherwise. nil = This Mac.
+    /// The server new workspaces go to unless a repository says otherwise. nil = This Mac.
     public var defaultCar: SandboxProviderHome?
 
-    /// Per-car choices keyed by `SandboxProviderHome.key`. Optional so older settings still decode.
-    public var carPreferenceMap: [String: CarPreferences]?
-
-    public func preferences(for car: SandboxProviderHome) -> CarPreferences {
-        carPreferenceMap?[car.key] ?? CarPreferences()
+    public var defaultServer: SandboxProviderHome? {
+        get { defaultCar }
+        set { defaultCar = newValue }
     }
 
-    public mutating func setPreferences(_ p: CarPreferences, for car: SandboxProviderHome) {
+    /// Per-server choices keyed by `SandboxProviderHome.key`. Optional so older settings still decode.
+    public var carPreferenceMap: [String: ServerPreferences]?
+
+    public func preferences(for server: SandboxProviderHome) -> ServerPreferences {
+        carPreferenceMap?[server.key] ?? ServerPreferences()
+    }
+
+    public mutating func setPreferences(_ p: ServerPreferences, for server: SandboxProviderHome) {
         var map = carPreferenceMap ?? [:]
-        map[car.key] = p == CarPreferences() ? nil : p
+        map[server.key] = p == ServerPreferences() ? nil : p
         carPreferenceMap = map.isEmpty ? nil : map
     }
 

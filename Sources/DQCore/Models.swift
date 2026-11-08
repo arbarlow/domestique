@@ -64,7 +64,7 @@ public struct Repository: Codable, Sendable, Identifiable, Hashable {
     /// Shown instead of `name` when set. `name` stays the folder-safe id used for worktree paths.
     public var displayName: String?
     public var icon: RepoIcon?
-    /// Where new workspaces run (nil = the default Team Car's default, from Settings → Team Cars).
+    /// Where new workspaces run (nil = the default server's default, from Settings → Servers).
     public var defaultLocation: WorkspaceLocation?
 
     public var title: String { (displayName?.isEmpty == false ? displayName : nil) ?? name }
@@ -155,13 +155,13 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var isRemote: Bool { host != nil }
     public var location: WorkspaceLocation {
         guard let host else { return .local }
-        if host.provider == .teamcar, let id = UUID(uuidString: host.machineID) { return .teamCar(id) }
+        if host.provider == .server, let id = UUID(uuidString: host.machineID) { return .server(id) }
         return host.provider.location  // sandbox workspaces: resolve with AppSettings.provider(for:)
     }
     /// On a boat.dev sandbox (machine status, auto-stop, SSH port forwarding apply).
     public var isSandbox: Bool { host?.provider == .boat }
-    /// On a remote Team Car.
-    public var teamCarID: UUID? { host?.provider == .teamcar ? host.flatMap { UUID(uuidString: $0.machineID) } : nil }
+    /// On a remote server.
+    public var serverID: UUID? { host?.provider == .server ? host.flatMap { UUID(uuidString: $0.machineID) } : nil }
 }
 
 // MARK: - Where workspaces run
@@ -169,14 +169,14 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
 /// Cloud machine providers. Only boat.dev today; the rest of the app talks to `CloudProviderID`.
 public enum CloudProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
     case boat
-    /// A Team Car server the user runs (`WorkspaceHost.machineID` is the car's id).
-    case teamcar
+    /// A server the user runs (`WorkspaceHost.machineID` is the server's id).
+    case server = "teamcar"
 
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
         case .boat: "boat.dev"
-        case .teamcar: "Team Car"
+        case .server: "Server"
         }
     }
     public var location: WorkspaceLocation { .cloud(self) }
@@ -186,41 +186,44 @@ public enum CloudProviderID: String, Codable, Sendable, CaseIterable, Identifiab
 
 /// A choice in "run new workspaces on…".
 public enum WorkspaceLocation: Codable, Sendable, Hashable, Identifiable {
+    /// `server` is saved as "teamCar" in existing settings.
+    private enum CodingKeys: String, CodingKey { case local, cloud, sandbox, server = "teamCar" }
+
     case local
     case cloud(CloudProviderID)
-    /// A worktree on a remote Team Car from Settings → Team Cars.
-    case teamCar(UUID)
-    /// A sandbox from one of a Team Car's sandbox providers (e.g. one boat.dev account).
+    /// A worktree on a remote server from Settings → Servers.
+    case server(UUID)
+    /// A sandbox from one of a server's sandbox providers (e.g. one boat.dev account).
     case sandbox(UUID)
 
     public var id: String {
         switch self {
         case .local: "local"
         case .cloud(let p): p.rawValue
-        case .teamCar(let id): "teamcar:" + id.uuidString
+        case .server(let id): "teamcar:" + id.uuidString
         case .sandbox(let id): "sandbox:" + id.uuidString
         }
     }
-    /// Generic label; the app shows a Team Car's own name instead.
+    /// Generic label; the app shows a server's own name instead.
     public var displayName: String {
         switch self {
         case .local: "This Mac"
         case .cloud(let p): p.displayName
-        case .teamCar: "Team Car"
+        case .server: "Server"
         case .sandbox: "Sandbox"
         }
     }
-    /// The fixed locations (sandbox providers and Team Cars come from settings).
+    /// The fixed locations (sandbox providers and servers come from settings).
     public static var all: [WorkspaceLocation] { [.local] }
 }
 
-/// A sandbox provider in Settings → Team Cars: one account on a sandbox service (boat.dev
+/// A sandbox provider in Settings → Servers: one account on a sandbox service (boat.dev
 /// today) with its own defaults. Several can exist (accounts, teams, or presets like "boat · large").
 ///
-/// Each provider belongs to a Team Car (`home`), which keeps its API key and makes every call to the
-/// service. The app's copy is a cache of what the car reported plus this Mac's own preferences
-/// (sharing the GitHub login, forwarding ports). Providers from before Team Car have no `home` and
-/// use the Keychain key on this Mac until This Mac's car takes them over.
+/// Each provider belongs to a server (`home`), which keeps its API key and makes every call to the
+/// service. The app's copy is a cache of what the server reported plus this Mac's own preferences
+/// (sharing the GitHub login, forwarding ports). Providers from before servers have no `home` and
+/// use the Keychain key on this Mac until This Mac's server takes them over.
 public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
     public var id: UUID
     public var kind: CloudProviderID
@@ -229,15 +232,20 @@ public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
     /// find the provider). The first provider keeps the original `api-key`.
     public var credentialAccount: String
     public var boat: BoatSettings
-    /// The Team Car that owns this provider. nil = this Mac's Keychain (not yet moved to a car).
+    /// The server that owns this provider. nil = this Mac's Keychain (not yet moved to a server).
     public var home: SandboxProviderHome?
-    /// What the owning car last reported about it.
-    public var carStatus: SandboxProviderCarStatus?
+    /// What the owning server last reported about it.
+    public var serverStatus: SandboxProviderServerStatus?
 
-    /// Whether a Team Car owns it.
-    public var isOnTeamCar: Bool { home != nil }
-    /// The remote car that owns it (nil for This Mac's car and for app-only providers).
-    public var remoteCarID: UUID? { if case .teamCar(let id) = home { id } else { nil } }
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, name, credentialAccount, boat, home
+        case serverStatus = "carStatus"  // the key in existing settings
+    }
+
+    /// Whether a server owns it.
+    public var isOnServer: Bool { home != nil }
+    /// The remote server that owns it (nil for This Mac's server and for app-only providers).
+    public var remoteServerID: UUID? { if case .server(let id) = home { id } else { nil } }
 
     public init(id: UUID = UUID(), kind: CloudProviderID = .boat, name: String, credentialAccount: String? = nil,
                 boat: BoatSettings = BoatSettings()) {
@@ -255,27 +263,30 @@ public struct SandboxProviderConfig: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// A Team Car: This Mac's or a remote one from Settings → Team Cars. Also says which car owns a
+/// A server: This Mac's or a remote one from Settings → Servers. Also says which server owns a
 /// sandbox provider.
 public enum SandboxProviderHome: Codable, Sendable, Hashable {
-    case thisMac
-    case teamCar(UUID)
+    /// `server` is saved as "teamCar" in existing settings.
+    private enum CodingKeys: String, CodingKey { case thisMac, server = "teamCar" }
 
-    /// Stable key for per-car settings.
+    case thisMac
+    case server(UUID)
+
+    /// Stable key for per-server settings.
     public var key: String {
         switch self {
         case .thisMac: "this-mac"
-        case .teamCar(let id): id.uuidString.lowercased()
+        case .server(let id): id.uuidString.lowercased()
         }
     }
 }
 
-/// This Mac's choices for new workspaces on one Team Car.
-public struct CarPreferences: Codable, Sendable, Hashable {
-    /// Offer git worktrees on the car itself. Off for a car that should only start sandboxes (or a
+/// This Mac's choices for new workspaces on one server.
+public struct ServerPreferences: Codable, Sendable, Hashable {
+    /// Offer git worktrees on the server itself. Off for a server that should only start sandboxes (or a
     /// laptop you don't want workspaces on).
     public var worktrees: Bool
-    /// What "New workspace on <car>" makes: nil = a worktree, else one of the car's sandbox providers.
+    /// What "New workspace on <server>" makes: nil = a worktree, else one of the server's sandbox providers.
     public var defaultSandbox: UUID?
 
     public init(worktrees: Bool = true, defaultSandbox: UUID? = nil) {
@@ -290,12 +301,12 @@ public struct CarPreferences: Codable, Sendable, Hashable {
     }
 }
 
-/// A provider's state as its Team Car reports it (never the key itself).
-public struct SandboxProviderCarStatus: Codable, Sendable, Hashable {
-    /// "stored", "config" (teamcar.toml's api_key_env / api_key_file), "environment" (BOAT_API_KEY),
+/// A provider's state as its server reports it (never the key itself).
+public struct SandboxProviderServerStatus: Codable, Sendable, Hashable {
+    /// "stored", "config" (server.toml's api_key_env / api_key_file), "environment" (BOAT_API_KEY),
     /// "cli" (`boat login`) or "none".
     public var credentialSource: String
-    /// Declared in the car's teamcar.toml, so it can't be edited from here.
+    /// Declared in the server's server.toml, so it can't be edited from here.
     public var fromConfig: Bool
 
     public init(credentialSource: String, fromConfig: Bool) {
@@ -306,12 +317,12 @@ public struct SandboxProviderCarStatus: Codable, Sendable, Hashable {
     public var hasKey: Bool { credentialSource != "none" }
 }
 
-/// A Team Car server in Settings → Team Cars. Its token lives in the Keychain, keyed by `id`.
-/// App-wide: every repository can create workspaces on every car.
-public struct TeamCarConfig: Codable, Sendable, Hashable, Identifiable {
+/// A server in Settings → Servers. Its token lives in the Keychain, keyed by `id`.
+/// App-wide: every repository can create workspaces on every server.
+public struct ServerConfig: Codable, Sendable, Hashable, Identifiable {
     public var id: UUID
     public var name: String
-    /// ws:// or wss:// (path /radio/v1 is added when missing).
+    /// ws:// or wss:// (path /domestique/v1 is added when missing).
     public var url: String
 
     public init(id: UUID = UUID(), name: String, url: String) {

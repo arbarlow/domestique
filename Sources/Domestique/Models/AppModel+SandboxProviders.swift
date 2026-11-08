@@ -1,54 +1,54 @@
 import DQCore
 import Foundation
 import HostKit
-import RaceRadioKit
+import ServerKit
 
-/// Sandbox providers belong to Team Cars. Each car keeps its providers' API keys and makes every
+/// Sandbox providers belong to servers. Each server keeps its providers' API keys and makes every
 /// boat.dev call; the app mirrors the providers into `settings.sandboxProviders` (for the picker,
-/// the sidebar and cloud workspaces) and routes `BoatClient` through the owning car.
+/// the sidebar and cloud workspaces) and routes `BoatClient` through the owning server.
 ///
-/// - This Mac's car takes over the providers set up before Team Car (`home == nil`) the first time it
+/// - This Mac's server takes over the providers set up before server (`home == nil`) the first time it
 ///   connects: same ids, Keychain key copied over. Until then, or with `DOMESTIQUE_LEGACY_ENGINE=1`,
 ///   those keep using the Keychain directly.
-/// - A remote car's providers appear when it connects and disappear when it drops them.
-/// - Editing a provider saves it to its car (ADMIN token for remote cars).
+/// - A remote server's providers appear when it connects and disappear when it drops them.
+/// - Editing a provider saves it to its server (ADMIN token for remote servers).
 extension AppModel {
     // MARK: routing
 
-    /// Points `BoatClient` at the cars. Called once at launch.
+    /// Points `BoatClient` at the servers. Called once at launch.
     func installSandboxRouting() {
         let table = SandboxRouteTable.shared
         BoatClient.routing = SandboxRouting(
             backend: { [weak self] account in
                 guard let route = table.route(account) else { return nil }
-                return TeamCarSandboxBackend(providerID: route.providerID) { [weak self] in
-                    guard let self else { throw TeamCarError(code: .unavailable, message: "Domestique is quitting") }
-                    return try await self.carClient(for: route.home)
+                return ServerSandboxBackend(providerID: route.providerID) { [weak self] in
+                    guard let self else { throw ServerError(code: .unavailable, message: "Domestique is quitting") }
+                    return try await self.serverClient(for: route.home)
                 }
             },
             isConfigured: { table.route($0)?.usable ?? false })
         refreshSandboxRoutes()
     }
 
-    /// The link of the car that owns providers at `home` (nil if that car isn't in Settings).
-    func link(for home: SandboxProviderHome) -> TeamCarLink? {
+    /// The link of the server that owns providers at `home` (nil if that server isn't in Settings).
+    func link(for home: SandboxProviderHome) -> ServerLink? {
         switch home {
-        case .thisMac: teamCar
-        case .teamCar(let id): remoteCars[id]
+        case .thisMac: server
+        case .server(let id): remoteServers[id]
         }
     }
 
-    func carClient(for home: SandboxProviderHome) async throws -> TeamCarClient {
+    func serverClient(for home: SandboxProviderHome) async throws -> ServerClient {
         guard let link = link(for: home) else {
-            throw TeamCarError(code: .unavailable, message: "That Team Car isn't in Settings → Team Cars any more.")
+            throw ServerError(code: .unavailable, message: "That server isn't in Settings → Servers any more.")
         }
         return try await link.ready()
     }
 
-    func carName(for home: SandboxProviderHome) -> String {
+    func serverName(for home: SandboxProviderHome) -> String {
         switch home {
         case .thisMac: "This Mac"
-        case .teamCar(let id): settings.teamCars.first { $0.id == id }?.name ?? "Missing Team Car"
+        case .server(let id): settings.servers.first { $0.id == id }?.name ?? "Missing server"
         }
     }
 
@@ -57,17 +57,17 @@ extension AppModel {
         var routes: [String: SandboxRouteTable.Route] = [:]
         for p in settings.sandboxProviders {
             guard let home = p.home else { continue }
-            // With the in-app engine, This Mac's car isn't running: keep using the Keychain.
-            if home == .thisMac, teamCar?.isEnabled != true { continue }
-            let usable = link(for: home)?.isConnected == true && (p.carStatus?.hasKey ?? false)
+            // With the in-app engine, This Mac's server isn't running: keep using the Keychain.
+            if home == .thisMac, server?.isEnabled != true { continue }
+            let usable = link(for: home)?.isConnected == true && (p.serverStatus?.hasKey ?? false)
             routes[p.credentialAccount] = .init(providerID: p.id.uuidString.lowercased(), home: home, usable: usable)
         }
         SandboxRouteTable.shared.set(routes)
         cloud?.refreshCredentialState()
     }
 
-    /// TeamCarLink calls this on every status change.
-    func teamCarStatusChanged(_ link: TeamCarLink, wasConnected: Bool) {
+    /// ServerLink calls this on every status change.
+    func serverStatusChanged(_ link: ServerLink, wasConnected: Bool) {
         refreshSandboxRoutes()
         if link.isConnected, !wasConnected {
             Task { await syncSandboxProviders(link) }
@@ -76,35 +76,35 @@ extension AppModel {
 
     // MARK: sync
 
-    private func home(of link: TeamCarLink) -> SandboxProviderHome? {
+    private func home(of link: ServerLink) -> SandboxProviderHome? {
         if link.isLocal { return .thisMac }
-        return link.carID.map { .teamCar($0) }
+        return link.serverID.map { .server($0) }
     }
 
-    /// Mirrors a car's providers into settings (and, for This Mac's car, hands it the pre–Team Car ones).
-    func syncSandboxProviders(_ link: TeamCarLink) async {
+    /// Mirrors a server's providers into settings (and, for This Mac's server, hands it the pre–server ones).
+    func syncSandboxProviders(_ link: ServerLink) async {
         guard let home = home(of: link), let c = try? await link.ready() else { return }
-        var list: [Radio_SandboxProvider]
+        var list: [Proto_SandboxProvider]
         do {
             list = try await c.sandboxProviders()
-        } catch let e as TeamCarError where e.code == .unimplemented {
-            return  // an older Team Car: providers stay where they are
+        } catch let e as ServerError where e.code == .unimplemented {
+            return  // an older server: providers stay where they are
         } catch {
             return
         }
-        if link.isLocal, await adoptLegacyProviders(c, onCar: list) {
+        if link.isLocal, await adoptLegacyProviders(c, onServer: list) {
             list = (try? await c.sandboxProviders()) ?? list
         }
         mergeSandboxProviders(list, home: home)
     }
 
-    /// Saves providers that predate Team Car to This Mac's car, with their Keychain key. True if any moved.
-    private func adoptLegacyProviders(_ c: TeamCarClient, onCar: [Radio_SandboxProvider]) async -> Bool {
-        let onCarIDs = Set(onCar.compactMap { UUID(uuidString: $0.id) })
+    /// Saves providers that predate server to This Mac's server, with their Keychain key. True if any moved.
+    private func adoptLegacyProviders(_ c: ServerClient, onServer: [Proto_SandboxProvider]) async -> Bool {
+        let onServerIDs = Set(onServer.compactMap { UUID(uuidString: $0.id) })
         var moved = false
         for p in settings.sandboxProviders where p.home == nil {
-            if !onCarIDs.contains(p.id) {
-                // Only a key saved in Domestique moves; BOAT_API_KEY and `boat login` also work on the car.
+            if !onServerIDs.contains(p.id) {
+                // Only a key saved in Domestique moves; BOAT_API_KEY and `boat login` also work on the server.
                 let cred = BoatClient.credential(account: p.credentialAccount)
                 let key = cred?.source == .keychain ? cred?.token : nil
                 do {
@@ -119,7 +119,7 @@ extension AppModel {
         return moved
     }
 
-    private func mergeSandboxProviders(_ list: [Radio_SandboxProvider], home: SandboxProviderHome) {
+    private func mergeSandboxProviders(_ list: [Proto_SandboxProvider], home: SandboxProviderHome) {
         var seen: Set<UUID> = []
         var providers = settings.sandboxProviders
         for r in list {
@@ -133,7 +133,7 @@ extension AppModel {
                 providers.append(p)
             }
         }
-        // Gone from the car: forget it unless workspaces still use it.
+        // Gone from the server: forget it unless workspaces still use it.
         providers.removeAll { p in
             p.home == home && !seen.contains(p.id) && activeWorkspaces(on: p).isEmpty
         }
@@ -141,12 +141,12 @@ extension AppModel {
         refreshSandboxRoutes()
     }
 
-    /// The car's view of a provider onto the app's record (keeps this Mac's own preferences).
-    private static func apply(_ r: Radio_SandboxProvider, home: SandboxProviderHome, to p: inout SandboxProviderConfig) {
+    /// The server's view of a provider onto the app's record (keeps this Mac's own preferences).
+    private static func apply(_ r: Proto_SandboxProvider, home: SandboxProviderHome, to p: inout SandboxProviderConfig) {
         p.name = r.name
         p.kind = .boat
         p.home = home
-        p.carStatus = SandboxProviderCarStatus(credentialSource: r.credentialSource.settingsName, fromConfig: r.fromConfig)
+        p.serverStatus = SandboxProviderServerStatus(credentialSource: r.credentialSource.settingsName, fromConfig: r.fromConfig)
         let d = r.defaults
         p.boat.machineType = d.machineType.isEmpty ? "default" : d.machineType
         p.boat.autoStopMinutes = d.hasAutoStopMinutes ? Int(d.autoStopMinutes) : nil
@@ -155,12 +155,12 @@ extension AppModel {
         p.boat.deleteOnArchive = d.deleteOnArchive
     }
 
-    static func radioProvider(_ p: SandboxProviderConfig) -> Radio_SandboxProvider {
-        var r = Radio_SandboxProvider()
+    static func radioProvider(_ p: SandboxProviderConfig) -> Proto_SandboxProvider {
+        var r = Proto_SandboxProvider()
         r.id = p.id.uuidString.lowercased()
         r.kind = .boat
         r.name = p.name
-        var d = Radio_SandboxDefaults()
+        var d = Proto_SandboxDefaults()
         d.machineType = p.boat.machineType
         if let m = p.boat.autoStopMinutes { d.autoStopMinutes = UInt32(max(0, m)) }
         d.environment = p.boat.environment ?? ""
@@ -177,66 +177,66 @@ extension AppModel {
 
     // MARK: places to run
 
-    /// Every Team Car, This Mac's first.
-    var cars: [SandboxProviderHome] { [.thisMac] + settings.teamCars.map { .teamCar($0.id) } }
+    /// Every server, This Mac's first.
+    var servers: [SandboxProviderHome] { [.thisMac] + settings.servers.map { .server($0.id) } }
 
-    /// The car a location runs on. Providers from before Team Car count as This Mac's.
-    func car(of loc: WorkspaceLocation) -> SandboxProviderHome {
+    /// The server a location runs on. Providers from before server count as This Mac's.
+    func server(of loc: WorkspaceLocation) -> SandboxProviderHome {
         switch loc {
         case .local: return .thisMac
-        case .teamCar(let id): return .teamCar(id)
+        case .server(let id): return .server(id)
         case .sandbox, .cloud: return settings.provider(for: loc)?.home ?? .thisMac
         }
     }
 
-    /// The worktree location on `car` (whether or not worktrees are on there).
-    func worktreeLocation(on car: SandboxProviderHome) -> WorkspaceLocation {
-        switch car {
+    /// The worktree location on `server` (whether or not worktrees are on there).
+    func worktreeLocation(on server: SandboxProviderHome) -> WorkspaceLocation {
+        switch server {
         case .thisMac: .local
-        case .teamCar(let id): .teamCar(id)
+        case .server(let id): .server(id)
         }
     }
 
     func isWorktree(_ loc: WorkspaceLocation) -> Bool {
         switch loc {
-        case .local, .teamCar: true
+        case .local, .server: true
         case .sandbox, .cloud: false
         }
     }
 
-    /// `car`'s sandbox providers (This Mac's include ones still in the Keychain).
-    func sandboxProviders(on car: SandboxProviderHome) -> [SandboxProviderConfig] {
-        settings.sandboxProviders.filter { ($0.home ?? .thisMac) == car }
+    /// `server`'s sandbox providers (This Mac's include ones still in the Keychain).
+    func sandboxProviders(on server: SandboxProviderHome) -> [SandboxProviderConfig] {
+        settings.sandboxProviders.filter { ($0.home ?? .thisMac) == server }
     }
 
-    /// What `car` offers: a worktree (unless turned off), then its sandbox providers.
-    func locations(on car: SandboxProviderHome) -> [WorkspaceLocation] {
+    /// What `server` offers: a worktree (unless turned off), then its sandbox providers.
+    func locations(on server: SandboxProviderHome) -> [WorkspaceLocation] {
         var out: [WorkspaceLocation] = []
-        if settings.preferences(for: car).worktrees { out.append(worktreeLocation(on: car)) }
-        out += sandboxProviders(on: car).map { .sandbox($0.id) }
+        if settings.preferences(for: server).worktrees { out.append(worktreeLocation(on: server)) }
+        out += sandboxProviders(on: server).map { .sandbox($0.id) }
         return out
     }
 
-    /// Where new workspaces can run, grouped by car: This Mac's, then each remote car's.
-    var workspaceLocations: [WorkspaceLocation] { cars.flatMap(locations(on:)) }
+    /// Where new workspaces can run, grouped by server: This Mac's, then each remote server's.
+    var workspaceLocations: [WorkspaceLocation] { servers.flatMap(locations(on:)) }
 
-    /// What a new workspace on `car` becomes: its chosen default, else the first thing it offers.
-    func defaultLocation(on car: SandboxProviderHome) -> WorkspaceLocation? {
-        let offered = locations(on: car)
-        if let id = settings.preferences(for: car).defaultSandbox, offered.contains(.sandbox(id)) { return .sandbox(id) }
+    /// What a new workspace on `server` becomes: its chosen default, else the first thing it offers.
+    func defaultLocation(on server: SandboxProviderHome) -> WorkspaceLocation? {
+        let offered = locations(on: server)
+        if let id = settings.preferences(for: server).defaultSandbox, offered.contains(.sandbox(id)) { return .sandbox(id) }
         return offered.first
     }
 
-    /// The app-wide default: the default car's default, else anything on offer.
+    /// The app-wide default: the default server's default, else anything on offer.
     var appDefaultLocation: WorkspaceLocation {
-        defaultLocation(on: settings.defaultCar ?? .thisMac) ?? workspaceLocations.first ?? .local
+        defaultLocation(on: settings.defaultServer ?? .thisMac) ?? workspaceLocations.first ?? .local
     }
 
-    /// Whether `loc` can take a new workspace right now: its car is connected and a provider has a key.
+    /// Whether `loc` can take a new workspace right now: its server is connected and a provider has a key.
     func isUsable(_ loc: WorkspaceLocation) -> Bool {
         switch loc {
         case .local: return true
-        case .teamCar(let id): return remoteCars[id]?.isConnected == true
+        case .server(let id): return remoteServers[id]?.isConnected == true
         case .sandbox, .cloud:
             return settings.provider(for: loc).map { BoatClient.isConfigured(account: $0.credentialAccount) } ?? false
         }
@@ -250,61 +250,61 @@ extension AppModel {
         return choices.count > 1 ? choices : nil
     }
 
-    /// One car's share of a list of locations, for menus and pickers with a section per car.
-    struct CarLocations: Identifiable {
-        var car: SandboxProviderHome
+    /// One server's share of a list of locations, for menus and pickers with a section per server.
+    struct ServerLocations: Identifiable {
+        var server: SandboxProviderHome
         var locations: [WorkspaceLocation]
-        var id: String { car.key }
+        var id: String { server.key }
     }
 
-    func groupedByCar(_ locs: [WorkspaceLocation]) -> [CarLocations] {
-        cars.compactMap { car in
-            let mine = locs.filter { self.car(of: $0) == car }
-            return mine.isEmpty ? nil : CarLocations(car: car, locations: mine)
+    func groupedByServer(_ locs: [WorkspaceLocation]) -> [ServerLocations] {
+        servers.compactMap { server in
+            let mine = locs.filter { self.server(of: $0) == server }
+            return mine.isEmpty ? nil : ServerLocations(server: server, locations: mine)
         }
     }
 
     /// The full name: "This Mac", "hetzner-box", "boat.dev", "boat.dev · hetzner-box".
     func locationName(_ loc: WorkspaceLocation) -> String {
         switch loc {
-        case .teamCar(let id): return settings.teamCars.first { $0.id == id }?.name ?? "Missing Team Car"
+        case .server(let id): return settings.servers.first { $0.id == id }?.name ?? "Missing server"
         case .sandbox, .cloud:
             guard let p = settings.provider(for: loc) else { return "Missing sandbox provider" }
-            // A remote car's provider says which car drives it.
-            if case .teamCar = p.home { return "\(p.name) · \(carName(for: p.home!))" }
+            // A remote server's provider says which server drives it.
+            if case .server = p.home { return "\(p.name) · \(serverName(for: p.home!))" }
             return p.name
         case .local: return loc.displayName
         }
     }
 
-    /// The name within its car's section: "Worktree" or the provider's name.
+    /// The name within its server's section: "Worktree" or the provider's name.
     func targetName(_ loc: WorkspaceLocation) -> String {
         isWorktree(loc) ? "Worktree" : settings.provider(for: loc)?.name ?? "Missing sandbox provider"
     }
 
     /// "Worktree on This Mac", "boat.dev on hetzner-box".
     func longLocationName(_ loc: WorkspaceLocation) -> String {
-        "\(targetName(loc)) on \(carName(for: car(of: loc)))"
+        "\(targetName(loc)) on \(serverName(for: server(of: loc)))"
     }
 
-    // MARK: per-car choices
+    // MARK: per-server choices
 
-    func updateCarPreferences(_ car: SandboxProviderHome, _ mutate: (inout CarPreferences) -> Void) {
-        var p = settings.preferences(for: car)
+    func updateServerPreferences(_ server: SandboxProviderHome, _ mutate: (inout ServerPreferences) -> Void) {
+        var p = settings.preferences(for: server)
         mutate(&p)
-        settings.setPreferences(p, for: car)
+        settings.setPreferences(p, for: server)
     }
 
-    /// Makes `loc` what new workspaces on its car become.
-    func makeCarDefault(_ loc: WorkspaceLocation) {
-        let car = car(of: loc)
-        updateCarPreferences(car) { $0.defaultSandbox = settings.provider(for: loc)?.id }
+    /// Makes `loc` what new workspaces on its server become.
+    func makeServerDefault(_ loc: WorkspaceLocation) {
+        let server = server(of: loc)
+        updateServerPreferences(server) { $0.defaultSandbox = settings.provider(for: loc)?.id }
     }
 
     // MARK: editing
 
-    /// Adds a boat.dev provider to `home`'s car (nil = this Mac's Keychain, when This Mac has no car).
-    /// `apiKey` nil = the car's `BOAT_API_KEY` / `boat login`.
+    /// Adds a boat.dev provider to `home`'s server (nil = this Mac's Keychain, when This Mac has no server).
+    /// `apiKey` nil = the server's `BOAT_API_KEY` / `boat login`.
     func addSandboxProvider(name: String, apiKey: String?, home: SandboxProviderHome?, boat: BoatSettings = BoatSettings()) async {
         var p = SandboxProviderConfig(name: name, boat: boat)
         let key = apiKey.flatMap { $0.isEmpty ? nil : $0 }
@@ -315,28 +315,28 @@ extension AppModel {
             return
         }
         do {
-            let saved = try await carClient(for: home).saveSandboxProvider(Self.radioProvider(p), apiKey: key)
+            let saved = try await serverClient(for: home).saveSandboxProvider(Self.radioProvider(p), apiKey: key)
             Self.apply(saved, home: home, to: &p)
             settings.sandboxProviders.append(p)
             refreshSandboxRoutes()
         } catch {
-            alert = AppAlert(title: "Couldn't add \(name) to \(carName(for: home))", message: Self.carErrorMessage(error))
+            alert = AppAlert(title: "Couldn't add \(name) to \(serverName(for: home))", message: Self.serverErrorMessage(error))
         }
     }
 
-    /// Saves an edited provider here and, debounced, on its car.
+    /// Saves an edited provider here and, debounced, on its server.
     func updateSandboxProvider(_ p: SandboxProviderConfig) {
         guard let i = settings.sandboxProviders.firstIndex(where: { $0.id == p.id }) else { return }
         settings.sandboxProviders[i] = p
-        guard let home = p.home, p.carStatus?.fromConfig != true else { return }
+        guard let home = p.home, p.serverStatus?.fromConfig != true else { return }
         providerSaveTasks[p.id]?.cancel()
         providerSaveTasks[p.id] = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
             guard let self, !Task.isCancelled else { return }
             do {
-                _ = try await self.carClient(for: home).saveSandboxProvider(Self.radioProvider(p))
+                _ = try await self.serverClient(for: home).saveSandboxProvider(Self.radioProvider(p))
             } catch {
-                self.alert = AppAlert(title: "Couldn't save \(p.name) on \(self.carName(for: home))", message: Self.carErrorMessage(error))
+                self.alert = AppAlert(title: "Couldn't save \(p.name) on \(self.serverName(for: home))", message: Self.serverErrorMessage(error))
             }
         }
     }
@@ -349,11 +349,11 @@ extension AppModel {
             return
         }
         do {
-            let saved = try await carClient(for: home).saveSandboxProvider(Self.radioProvider(p), apiKey: apiKey)
+            let saved = try await serverClient(for: home).saveSandboxProvider(Self.radioProvider(p), apiKey: apiKey)
             updateProviderRecord(p.id) { Self.apply(saved, home: home, to: &$0) }
             refreshSandboxRoutes()
         } catch {
-            alert = AppAlert(title: "Couldn't save the key on \(carName(for: home))", message: Self.carErrorMessage(error))
+            alert = AppAlert(title: "Couldn't save the key on \(serverName(for: home))", message: Self.serverErrorMessage(error))
         }
     }
 
@@ -369,48 +369,48 @@ extension AppModel {
         }
         if let home = p.home {
             do {
-                try await carClient(for: home).removeSandboxProvider(id: p.id.uuidString.lowercased())
-            } catch let e as TeamCarError where e.code == .notFound {
+                try await serverClient(for: home).removeSandboxProvider(id: p.id.uuidString.lowercased())
+            } catch let e as ServerError where e.code == .notFound {
                 // Already gone there.
             } catch {
-                alert = AppAlert(title: "Couldn't remove \(p.name) from \(carName(for: home))", message: Self.carErrorMessage(error))
+                alert = AppAlert(title: "Couldn't remove \(p.name) from \(serverName(for: home))", message: Self.serverErrorMessage(error))
                 return
             }
         }
         forgetSandboxProvider(p)
     }
 
-    /// Drops the app's record (and any Keychain key) without touching its car.
+    /// Drops the app's record (and any Keychain key) without touching its server.
     func forgetSandboxProvider(_ p: SandboxProviderConfig) {
         settings.sandboxProviders.removeAll { $0.id == p.id }
         BoatClient.saveAPIKey(nil, account: p.credentialAccount)
         for repo in state.repositories where repo.defaultLocation == .sandbox(p.id) {
             updateRepo(repo.id) { $0.defaultLocation = nil }
         }
-        let car = p.home ?? .thisMac
-        if settings.preferences(for: car).defaultSandbox == p.id { updateCarPreferences(car) { $0.defaultSandbox = nil } }
+        let server = p.home ?? .thisMac
+        if settings.preferences(for: server).defaultSandbox == p.id { updateServerPreferences(server) { $0.defaultSandbox = nil } }
         refreshSandboxRoutes()
     }
 
-    static func carErrorMessage(_ error: Error) -> String {
-        if let e = error as? TeamCarError, e.code == .permissionDenied {
-            return "\(e.message)\n\nChanging a Team Car's sandbox providers needs an admin token."
+    static func serverErrorMessage(_ error: Error) -> String {
+        if let e = error as? ServerError, e.code == .permissionDenied {
+            return "\(e.message)\n\nChanging a server's sandbox providers or MCP servers needs an admin token."
         }
-        if let e = error as? TeamCarError, e.code == .unimplemented {
-            return "This Team Car doesn't support sandbox providers yet. Update it to the latest teamcar."
+        if let e = error as? ServerError, e.code == .unimplemented {
+            return "This server doesn't support this yet. Update it to the latest domestique."
         }
         return error.localizedDescription
     }
 }
 
-/// Thread-safe account → car table for `BoatClient.routing`, which is read off the main actor.
+/// Thread-safe account → server table for `BoatClient.routing`, which is read off the main actor.
 final class SandboxRouteTable: @unchecked Sendable {  // guarded by `lock`
     static let shared = SandboxRouteTable()
 
     struct Route: Sendable {
         var providerID: String
         var home: SandboxProviderHome
-        /// The car is connected and has a key for it.
+        /// The server is connected and has a key for it.
         var usable: Bool
     }
 

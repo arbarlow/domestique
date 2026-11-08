@@ -122,6 +122,7 @@ public struct RateLimitInfo: Sendable, Hashable {
     }
 }
 
+#if os(macOS)
 public struct AgentSessionConfig: Sendable {
     public var cwd: String
     public var model: String?
@@ -137,6 +138,9 @@ public struct AgentSessionConfig: Sendable {
     public var appendSystemPrompt: String?
     /// Where the agent process runs (this Mac, or `ssh` into a cloud machine).
     public var host: any ExecutionHost
+    /// Runs before each Claude process starts: puts the MCP servers on the host and returns the
+    /// `--mcp-config` path (nil = none). A closure so that edits apply at the next restart or resume.
+    public var mcpConfig: (@Sendable () async -> String?)?
 
     public init(
         cwd: String, model: String? = nil, effort: String? = nil, permissionMode: AgentPermissionMode = .bypass,
@@ -155,6 +159,8 @@ public struct AgentSessionConfig: Sendable {
     }
 }
 
+#endif
+
 public struct AgentAttachment: Sendable {
     public var data: Data
     public var mediaType: String
@@ -166,6 +172,7 @@ public struct AgentAttachment: Sendable {
     }
 }
 
+#if os(macOS)
 public protocol AgentSession: AnyObject, Sendable {
     var provider: ProviderKind { get }
     var events: AsyncStream<AgentEvent> { get }
@@ -197,6 +204,8 @@ public enum AgentFactory {
         }
     }
 }
+
+#endif
 
 public struct AgentError: Error, LocalizedError, Sendable {
     public var message: String

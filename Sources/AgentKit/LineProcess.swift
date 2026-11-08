@@ -1,6 +1,7 @@
 import DQCore
 import Foundation
 
+#if os(macOS)
 /// A long-lived child process speaking newline-delimited JSON on stdin/stdout.
 /// Lines are delivered in order on `lines`; writes are serialised by the owner (an actor).
 final class LineProcess: @unchecked Sendable {
@@ -123,3 +124,4 @@ final class LineProcess: @unchecked Sendable {
         }
     }
 }
+#endif

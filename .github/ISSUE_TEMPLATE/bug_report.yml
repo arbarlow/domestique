@@ -61,4 +61,4 @@ body:
     id: logs
     attributes:
       label: Screenshots or logs
-      description: For agent issues, running the same prompt through `.build/debug/dq chat …` is very helpful.
+      description: For agent issues, running the same prompt through `domestique ctl chat …` is very helpful.

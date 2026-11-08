@@ -7,7 +7,7 @@ import GitKit
 import HostKit
 import Observation
 import ProcessKit
-import RaceRadioKit
+import ServerKit
 
 @MainActor
 @Observable
@@ -35,11 +35,11 @@ final class AppModel {
     var usage: [ProviderKind: UsageInfo] = [:]
     /// Cloud machine status + actions (boat.dev).
     @ObservationIgnored private(set) var cloud: CloudMachines!
-    /// This Mac's Team Car: runs agents and local worktrees.
-    @ObservationIgnored private(set) var teamCar: TeamCarLink!
-    /// Remote Team Cars from Settings → Team Cars, by id.
-    private(set) var remoteCars: [UUID: TeamCarLink] = [:]
-    /// Pending saves of edited sandbox providers to their Team Car (debounced per provider).
+    /// This Mac's server: runs agents and local worktrees.
+    @ObservationIgnored private(set) var server: ServerLink!
+    /// Remote servers from Settings → Servers, by id.
+    private(set) var remoteServers: [UUID: ServerLink] = [:]
+    /// Pending saves of edited sandbox providers to their server (debounced per provider).
     @ObservationIgnored var providerSaveTasks: [UUID: Task<Void, Never>] = [:]
     /// Progress line for workspaces being created ("Cloning …").
     var creationSteps: [UUID: String] = [:]
@@ -78,11 +78,11 @@ final class AppModel {
                 // A cloud workspace whose sandbox/clone didn't finish before we quit.
                 state.workspaces[i].state = .failed("Creation was interrupted. Archive this workspace and create a new one.")
             case .creating, .settingUp:
-                // Team Car workspaces: its server stream says how creation ended.
-                let teamCarOwned = (state.workspaces[i].host == nil
+                // Server workspaces: its server stream says how creation ended.
+                let serverOwned = (state.workspaces[i].host == nil
                     && ProcessInfo.processInfo.environment["DOMESTIQUE_LEGACY_ENGINE"] != "1")
-                    || state.workspaces[i].host?.provider == .teamcar
-                if !teamCarOwned { state.workspaces[i].state = .ready }
+                    || state.workspaces[i].host?.provider == .server
+                if !serverOwned { state.workspaces[i].state = .ready }
             default: break
             }
         }
@@ -90,11 +90,11 @@ final class AppModel {
         self.state = state
         lastDataVersion = Store.shared.dataVersion()
         cloud = CloudMachines(app: self)
-        teamCar = TeamCarLink(app: self)
-        teamCar.start()
-        TeamCarDirectory.shared.update(state.settings.teamCars)
-        Hosts.teamCarResolver = { h in TeamCarDirectory.shared.host(for: h) }
-        for cfg in state.settings.teamCars { startCar(cfg) }
+        server = ServerLink(app: self)
+        server.start()
+        ServerDirectory.shared.update(state.settings.servers)
+        Hosts.serverResolver = { h in ServerDirectory.shared.host(for: h) }
+        for cfg in state.settings.servers { startServer(cfg) }
         installSandboxRouting()
         // Coming back to the app (e.g. after editing domestique.toml elsewhere): re-check the config.
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) {
@@ -133,8 +133,8 @@ final class AppModel {
             let page = i + 1 < args.count ? args[i + 1] : "general"
             switch page {
             case "agents": settingsRoute = .agents
-            case "cloud", "sandboxes": settingsRoute = .teamCars
-            case "teamcars": settingsRoute = .teamCars
+            case "cloud", "sandboxes": settingsRoute = .servers
+            case "servers": settingsRoute = .servers
             case "repo": settingsRoute = state.repositories.first.map { .repo($0.id) } ?? .general
             default: settingsRoute = .general
             }
@@ -202,7 +202,7 @@ final class AppModel {
             state.selectedWorkspaceID = newValue
             if let newValue {
                 updateWorkspace(newValue) { $0.hasUnread = false }
-                teamCar.markSeen(workspace: newValue)
+                server.markSeen(workspace: newValue)
                 workspaceModels[newValue]?.supervisor?.isFocused = true
                 workspaceModels[newValue]?.reloadConfigIfChanged()
             }
@@ -247,63 +247,63 @@ final class AppModel {
 
     func existingModel(for workspaceID: UUID) -> WorkspaceModel? { workspaceModels[workspaceID] }
 
-    // MARK: Team Cars
+    // MARK: Servers
 
-    /// The Team Car running this workspace's agents, if any (nil for boat.dev and legacy workspaces).
-    func link(for ws: Workspace?) -> TeamCarLink? {
+    /// The server running this workspace's agents, if any (nil for boat.dev and legacy workspaces).
+    func link(for ws: Workspace?) -> ServerLink? {
         guard let ws else { return nil }
-        if let id = ws.teamCarID { return remoteCars[id] }
-        return teamCar.manages(ws) ? teamCar : nil
+        if let id = ws.serverID { return remoteServers[id] }
+        return server.manages(ws) ? server : nil
     }
 
-    /// This Mac's car first, then the remote ones in settings order.
-    var teamCarLinks: [TeamCarLink] {
-        [teamCar] + settings.teamCars.compactMap { remoteCars[$0.id] }
+    /// This Mac's server first, then the remote ones in settings order.
+    var serverLinks: [ServerLink] {
+        [server] + settings.servers.compactMap { remoteServers[$0.id] }
     }
 
-    private func startCar(_ cfg: TeamCarConfig) {
-        let link = TeamCarLink(app: self, car: .remote(cfg))
-        remoteCars[cfg.id] = link
+    private func startServer(_ cfg: ServerConfig) {
+        let link = ServerLink(app: self, server: .remote(cfg))
+        remoteServers[cfg.id] = link
         link.start()
     }
 
-    func addTeamCar(_ cfg: TeamCarConfig, token: String) throws {
-        try TeamCarTokens.set(token, for: cfg.id)
-        settings.teamCars.append(cfg)
-        TeamCarDirectory.shared.update(settings.teamCars)
-        startCar(cfg)
+    func addServer(_ cfg: ServerConfig, token: String) throws {
+        try ServerTokens.set(token, for: cfg.id)
+        settings.servers.append(cfg)
+        ServerDirectory.shared.update(settings.servers)
+        startServer(cfg)
     }
 
     /// Name, URL or token changed: reconnect.
-    func updateTeamCar(_ cfg: TeamCarConfig, token: String?) throws {
-        if let token, !token.isEmpty { try TeamCarTokens.set(token, for: cfg.id) }
-        guard let i = settings.teamCars.firstIndex(where: { $0.id == cfg.id }) else { return }
-        settings.teamCars[i] = cfg
-        TeamCarDirectory.shared.update(settings.teamCars)
-        remoteCars[cfg.id]?.close()
-        startCar(cfg)
-        for ws in state.workspaces where ws.teamCarID == cfg.id {
+    func updateServer(_ cfg: ServerConfig, token: String?) throws {
+        if let token, !token.isEmpty { try ServerTokens.set(token, for: cfg.id) }
+        guard let i = settings.servers.firstIndex(where: { $0.id == cfg.id }) else { return }
+        settings.servers[i] = cfg
+        ServerDirectory.shared.update(settings.servers)
+        remoteServers[cfg.id]?.close()
+        startServer(cfg)
+        for ws in state.workspaces where ws.serverID == cfg.id {
             updateWorkspaceIfChanged(ws.id) { $0.host?.machineName = cfg.name }
         }
     }
 
-    /// Forgets the car and its workspaces here. They keep existing on the server.
-    func removeTeamCar(_ id: UUID) {
-        remoteCars[id]?.close()
-        remoteCars[id] = nil
-        for ws in state.workspaces where ws.teamCarID == id { forgetWorkspace(ws.id) }
+    /// Forgets the server and its workspaces here. They keep existing on the server.
+    func removeServer(_ id: UUID) {
+        remoteServers[id]?.close()
+        remoteServers[id] = nil
+        for ws in state.workspaces where ws.serverID == id { forgetWorkspace(ws.id) }
         // Its sandbox providers go with it (their sandboxes stay on the service).
-        for p in settings.sandboxProviders where p.remoteCarID == id && activeWorkspaces(on: p).isEmpty {
+        for p in settings.sandboxProviders where p.remoteServerID == id && activeWorkspaces(on: p).isEmpty {
             forgetSandboxProvider(p)
         }
-        settings.teamCars.removeAll { $0.id == id }
-        TeamCarDirectory.shared.update(settings.teamCars)
-        TeamCarTokens.delete(id)
-        for repo in state.repositories where repo.defaultLocation.map({ car(of: $0) == .teamCar(id) }) ?? false {
+        settings.servers.removeAll { $0.id == id }
+        ServerDirectory.shared.update(settings.servers)
+        ServerTokens.delete(id)
+        for repo in state.repositories where repo.defaultLocation.map({ server(of: $0) == .server(id) }) ?? false {
             updateRepo(repo.id) { $0.defaultLocation = nil }
         }
-        if settings.defaultCar == .teamCar(id) { settings.defaultCar = nil }
-        settings.setPreferences(CarPreferences(), for: .teamCar(id))
+        if settings.defaultServer == .server(id) { settings.defaultServer = nil }
+        settings.setPreferences(ServerPreferences(), for: .server(id))
     }
 
     // MARK: mutation
@@ -339,23 +339,23 @@ final class AppModel {
         scheduleSave()
     }
 
-    // MARK: mirroring Team Car
+    // MARK: mirroring server
 
-    /// A repository another client added to Team Car.
+    /// A repository another client added to the server.
     func adoptRepository(_ repo: Repository) {
         guard self.repo(repo.id) == nil else { return }
         state.repositories.append(repo)
         scheduleSave()
     }
 
-    /// A workspace another client created on Team Car.
+    /// A workspace another client created on the server.
     func adoptWorkspace(_ ws: Workspace) {
         guard workspace(ws.id) == nil else { return }
         state.workspaces.append(ws)
         scheduleSave()
     }
 
-    /// Removed on Team Car by another client.
+    /// Removed on the server by another client.
     func forgetWorkspace(_ id: UUID) {
         guard workspace(id) != nil else { return }
         workspaceModels[id]?.shutdownNow()
@@ -372,7 +372,7 @@ final class AppModel {
         scheduleSave()
     }
 
-    /// Team Car already knew this clone under another id: adopt its id.
+    /// Server already knew this clone under another id: adopt its id.
     func renameRepositoryID(_ old: UUID, to new: UUID) {
         guard let i = state.repositories.firstIndex(where: { $0.id == old }) else { return }
         if repo(new) != nil {
@@ -447,7 +447,7 @@ final class AppModel {
     }
 
     func addRepository(path: String) async {
-        if teamCar.isEnabled {
+        if server.isEnabled {
             do {
                 if let existing = state.repositories.first(where: {
                     URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path
@@ -456,7 +456,7 @@ final class AppModel {
                     showProject(existing)
                     return
                 }
-                showProject(try await teamCar.addRepository(path: path))
+                showProject(try await server.addRepository(path: path))
             } catch {
                 alert = AppAlert(title: "Couldn't add repository", message: error.localizedDescription)
             }
@@ -521,12 +521,12 @@ final class AppModel {
         state.repositories.removeAll { $0.id == repo.id }
         if selectedRepoID == repo.id { selectedRepoID = nil }
         scheduleSave()
-        if teamCar.isEnabled {
+        if server.isEnabled {
             Task {
                 do {
-                    try await teamCar.removeRepository(repo.id)
+                    try await server.removeRepository(repo.id)
                 } catch {
-                    alert = AppAlert(title: "Couldn't remove the repository from Team Car", message: error.localizedDescription)
+                    alert = AppAlert(title: "Couldn't remove the repository from the server", message: error.localizedDescription)
                 }
             }
         }
@@ -558,11 +558,11 @@ final class AppModel {
         pullRequest pr: PullRequestSummary? = nil
     ) async {
         let location = location ?? defaultLocation(for: repo)
-        if isWorktree(location), !settings.preferences(for: car(of: location)).worktrees {
-            let name = carName(for: car(of: location))
+        if isWorktree(location), !settings.preferences(for: server(of: location)).worktrees {
+            let name = serverName(for: server(of: location))
             alert = AppAlert(
                 title: "Worktrees are off on \(name)",
-                message: "Turn them back on, or add a sandbox provider to a Team Car, in Settings → Team Cars.")
+                message: "Turn them back on, or add a sandbox provider to a server, in Settings → Servers.")
             return
         }
         let used = Set(state.workspaces.filter { $0.repoID == repo.id }.map(\.name))
@@ -573,20 +573,20 @@ final class AppModel {
             else if let pr { prefix.isEmpty ? "pr-\(pr.number)" : "\(prefix)/pr-\(pr.number)" }
             else { prefix.isEmpty ? name : "\(prefix)/\(name)" }
         let linkPR = pr.map { !$0.isCrossRepository } ?? false
-        let car: TeamCarLink? = if case .teamCar(let id) = location { remoteCars[id] } else { nil }
-        if case .teamCar = location, car == nil {
-            alert = AppAlert(title: "Team Car not found", message: "That Team Car isn't in Settings → Team Cars any more.")
+        let target: ServerLink? = if case .server(let id) = location { remoteServers[id] } else { nil }
+        if case .server = location, target == nil {
+            alert = AppAlert(title: "Server not found", message: "That server isn't in Settings → Servers any more.")
             return
         }
         let remote = location != .local
         let path =
-            car != nil
+            target != nil
             ? ""  // the server's path arrives with its first update
             : remote
             ? "\(BoatHost.home)/\(repo.name)"
             : Paths.workspacesRoot.appendingPathComponent(repo.name).appendingPathComponent(name).path
         let usedPorts = Set(state.workspaces.filter { !$0.isArchived }.map(\.portBase))
-        // Team Car assigns local workspaces' ports (and updates this); cloud ones use their own range.
+        // Server assigns local workspaces' ports (and updates this); cloud ones use their own range.
         let portBase = PortAllocator.allocate(used: usedPorts, in: remote ? PortAllocator.cloudRange : PortAllocator.localRange)
         let provider = provider ?? settings.defaultProvider
         var tab = ChatTab(
@@ -597,19 +597,19 @@ final class AppModel {
             repoID: repo.id, name: name, branch: branch, path: path, baseBranch: repo.defaultBranch,
             portBase: portBase, state: .creating, prNumber: linkPR ? pr?.number : nil,
             prURL: linkPR ? pr?.url : nil, tabs: [tab], selectedTabID: tab.id)
-        ws.host = car?.workspaceHost
+        ws.host = target?.workspaceHost
         state.workspaces.append(ws)
         selectedWorkspaceID = ws.id
         scheduleSave()
 
         Trace.log("ws created, selected")
-        if let car {
-            // The car clones (once) and creates the worktree; setup runs from here, on the car.
-            setCreationStep(ws.id, "Creating on \(car.displayName)")
-            car.settingUp.insert(ws.id)
-            defer { car.settingUp.remove(ws.id) }
+        if let target {
+            // The server clones (once) and creates the worktree; setup runs from here, on the server.
+            setCreationStep(ws.id, "Creating on \(target.displayName)")
+            target.settingUp.insert(ws.id)
+            defer { target.settingUp.remove(ws.id) }
             do {
-                try await car.createWorkspace(ws)
+                try await target.createWorkspace(ws)
                 if let pr { try await checkOutPullRequest(pr, in: ws.id) }
                 setCreationStep(ws.id, "Running setup")
                 updateWorkspace(ws.id) { $0.state = .settingUp }
@@ -627,7 +627,7 @@ final class AppModel {
         if remote {
             do {
                 guard let provider = settings.provider(for: location) else {
-                    throw HostError("That sandbox provider isn't in Settings → Team Cars any more.")
+                    throw HostError("That sandbox provider isn't in Settings → Servers any more.")
                 }
                 try await provisionBoatWorkspace(ws.id, repo: repo, provider: provider)
                 if let pr { try await checkOutPullRequest(pr, in: ws.id) }
@@ -643,12 +643,12 @@ final class AppModel {
             }
             return
         }
-        if teamCar.isEnabled {
-            // Team Car fetches and creates the worktree; the app runs setup so its output shows in the dock.
-            teamCar.settingUp.insert(ws.id)
-            defer { teamCar.settingUp.remove(ws.id) }
+        if server.isEnabled {
+            // Server fetches and creates the worktree; the app runs setup so its output shows in the dock.
+            server.settingUp.insert(ws.id)
+            defer { server.settingUp.remove(ws.id) }
             do {
-                try await teamCar.createWorkspace(ws)
+                try await server.createWorkspace(ws)
                 if let pr {
                     try await checkOutPullRequest(pr, in: ws.id)
                     creationSteps[ws.id] = nil
@@ -815,16 +815,16 @@ final class AppModel {
     }
 
     private func loadClaudeModels() async {
-        if teamCar.isEnabled {
-            if let models = await teamCar.listModels(.claude) { updateModels(models, for: .claude) }
+        if server.isEnabled {
+            if let models = await server.listModels(.claude) { updateModels(models, for: .claude) }
             return
         }
         if let models = await ClaudeSession.probeModels() { updateModels(models, for: .claude) }
     }
 
     private func loadCodexModels() async {
-        if teamCar.isEnabled {
-            if let models = await teamCar.listModels(.codex) { updateModels(models, for: .codex) }
+        if server.isEnabled {
+            if let models = await server.listModels(.codex) { updateModels(models, for: .codex) }
             return
         }
         if let models = try? await CodexAppServer.shared.listModels() { updateModels(models, for: .codex) }
@@ -833,10 +833,10 @@ final class AppModel {
     // MARK: lifecycle
 
     func shutdown() {
-        // Quitting stops This Mac's Team Car and its agents, unless Settings says to keep it running.
-        // Remote cars always keep going.
-        for link in teamCarLinks {
-            if link.isLocal, !settings.keepTeamCarRunning { link.stopServer() } else { link.close() }
+        // Quitting stops This Mac's server and its agents, unless Settings says to keep it running.
+        // Remote servers always keep going.
+        for link in serverLinks {
+            if link.isLocal, !settings.keepServerRunning { link.stopServer() } else { link.close() }
         }
         for m in workspaceModels.values { m.shutdownNow() }
         let state = self.state
@@ -856,7 +856,7 @@ final class AppModel {
 enum SettingsRoute: Hashable {
     case general
     case agents
-    case teamCars
+    case servers
     case repo(UUID)
 }
 

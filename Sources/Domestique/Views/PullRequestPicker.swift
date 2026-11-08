@@ -118,7 +118,7 @@ struct PullRequestPicker: View {
             }
             Spacer()
             if let choices = app.newWorkspaceChoices(for: repo) {
-                CarTargetPicker(
+                ServerTargetPicker(
                     selection: Binding(get: { location ?? app.defaultLocation(for: repo) }, set: { location = $0 }),
                     locations: choices)
             }

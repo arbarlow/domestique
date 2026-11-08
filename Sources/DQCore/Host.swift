@@ -56,6 +56,7 @@ public struct HostFileTooLarge: Error, LocalizedError, Sendable {
     public var errorDescription: String? { "File too large (\(size / 1024) KB)" }
 }
 
+#if os(macOS)
 extension ExecutionHost {
     /// Run a short-lived command to completion.
     @discardableResult
@@ -136,6 +137,8 @@ public final class LocalHost: ExecutionHost {
         return "/bin/zsh"
     }
 }
+
+#endif
 
 /// POSIX shell quoting.
 public enum ShellQuote {

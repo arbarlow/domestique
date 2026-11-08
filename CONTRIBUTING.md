@@ -72,15 +72,14 @@ The tests deliberately use **real things** where they can: real child processes 
 | `GitKitTests` | Worktrees, diffs, commit/push, trunk ship and conflict detection |
 | `ProcessKitTests` | PTY processes, ANSI log screen, port detection |
 
-### Debug the agent layer with `dq`
+### Debug the agent layer
 
-`dq` drives `AgentKit` with no UI and prints the normalised event stream. Use it whenever you change protocol handling:
+`domestique ctl` drives a running server with no UI. Use it whenever you change protocol handling (`domestique ctl help` lists every command):
 
 ```sh
-swift build
-.build/debug/dq chat claude|codex [--mode bypass|auto|ask] [--approve] [--model m] \
-  [--cwd dir] [--resume id] "prompt" ["follow-up" ...]
-.build/debug/dq models claude|codex
+go -C server build -o domestique ./cmd/domestique
+server/domestique ctl chat SESSION [--approve] "prompt" ["follow-up" ...]
+server/domestique ctl watch SESSION
 ```
 
 ## Project layout
@@ -96,7 +95,6 @@ Sources/
 ├── GitHubKit/    REST + GraphQL client for PRs and checks
 ├── ProcessKit/   PTY processes, ANSI rendering, port scanner, task runs
 ├── DQCore/       Models, SQLite store, TOML parser, repo config, shell helpers
-└── dq/           CLI harness
 ```
 
 **Rule of thumb:** anything that can be tested without a window belongs in a library target, not in `Sources/Domestique`.
@@ -131,7 +129,7 @@ A great bug report includes:
 - macOS version and Domestique commit (`git rev-parse --short HEAD`)
 - Which agent (`claude --version` / `codex --version`) and permission mode
 - Steps to reproduce, and what you expected compared with what happened
-- Screenshots or logs. For agent issues, running the same prompt through `dq` is incredibly helpful.
+- Screenshots or logs. For agent issues, running the same prompt through `domestique ctl chat` is incredibly helpful.
 
 **Security vulnerabilities:** please don't open a public issue. See [SECURITY.md](SECURITY.md).
 

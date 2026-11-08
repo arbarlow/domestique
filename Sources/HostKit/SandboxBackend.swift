@@ -1,7 +1,7 @@
 import Foundation
 
-/// Where a sandbox provider's API calls go when it isn't this Mac's own Keychain key: a Team Car
-/// that owns the provider (its key stays there). The app implements it on top of Race Radio.
+/// Where a sandbox provider's API calls go when it isn't this Mac's own Keychain key: a server
+/// that owns the provider (its key stays there). The app implements it on top of the Domestique protocol.
 ///
 /// Errors should be `BoatAPIError`s with HTTP-like statuses (404 = gone, 503 = try again) so callers
 /// treat both routes the same.
@@ -23,11 +23,11 @@ public protocol SandboxBackend: Sendable {
 }
 
 /// How a provider's calls are routed. Set by the app, which knows which providers live on which
-/// Team Car; nil (or a nil answer) means "use this Mac's Keychain / BOAT_API_KEY / boat login".
+/// Server; nil (or a nil answer) means "use this Mac's Keychain / BOAT_API_KEY / boat login".
 public struct SandboxRouting: Sendable {
     /// The backend for a provider's Keychain account (`SandboxProviderConfig.credentialAccount`).
     public var backend: @Sendable (_ account: String) -> (any SandboxBackend)?
-    /// Whether that backend can be used right now (its Team Car is connected and has a key).
+    /// Whether that backend can be used right now (its server is connected and has a key).
     public var isConfigured: @Sendable (_ account: String) -> Bool
 
     public init(
