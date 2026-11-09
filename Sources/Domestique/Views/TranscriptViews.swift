@@ -96,9 +96,11 @@ struct Turn: Identifiable {
 
 struct TranscriptView: View {
     let chat: ChatModel
+    @State private var selection = TranscriptSelection()
 
     var body: some View {
         let turns = Turn.build(chat.items, running: chat.isRunning).filter(\.hasContent)
+        let _ = selection.turns = turns
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 if chat.items.isEmpty {
@@ -122,6 +124,9 @@ struct TranscriptView: View {
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .scrollContentBackground(.hidden)
+        .environment(\.transcriptSelection, selection)
+        .onAppear { selection.start() }
+        .onDisappear { selection.stop() }
     }
 }
 
@@ -136,7 +141,7 @@ private struct TurnView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let user = turn.user, case .user(let text) = user.kind {
-                UserBubble(text: text, date: user.timestamp)
+                UserBubble(id: user.id, text: text, date: user.timestamp)
             } else if !turn.triggers.isEmpty {
                 TriggerPill(texts: turn.triggers)
             }
@@ -166,7 +171,7 @@ private struct TurnView: View {
             }
 
             if let answer = turn.answer, case .assistant(let text) = answer.kind, !text.isEmpty {
-                MarkdownView(text: text)
+                MarkdownView(text: text, spanID: answer.id)
             }
 
             if isLive {
@@ -188,17 +193,18 @@ private struct TurnView: View {
 // MARK: - Pieces
 
 private struct UserBubble: View {
+    let id: String
     let text: String
     let date: Date
     @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            Text(text)
-                .font(Theme.body)
-                .foregroundStyle(Theme.userBubbleText)
-                .lineSpacing(3)
-                .textSelection(.enabled)
+            SpanText(
+                id: id,
+                text: SpanStyle.attributed(
+                    AttributedString(text), font: .systemFont(ofSize: 13.5), color: NSColor(Theme.userBubbleText), lineSpacing: 3)
+            )
                 .padding(.horizontal, 15)
                 .padding(.vertical, 10)
                 .background(Theme.userBubble, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

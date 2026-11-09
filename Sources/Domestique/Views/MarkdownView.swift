@@ -157,12 +157,14 @@ enum MarkdownParser {
 struct MarkdownView: View {
     let text: String
     var compact = false
+    /// Joins the transcript-wide selection under this ID; otherwise each block selects on its own.
+    var spanID: String?
 
     var body: some View {
         let blocks = MarkdownParser.parse(text)
         VStack(alignment: .leading, spacing: compact ? 6 : 11) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                BlockView(block: block, compact: compact)
+            ForEach(Array(blocks.enumerated()), id: \.offset) { b, block in
+                BlockView(block: block, compact: compact, spanID: spanID.map { "\($0)#\(b)" })
             }
         }
         .textSelection(.enabled)
@@ -172,23 +174,39 @@ struct MarkdownView: View {
 private struct BlockView: View {
     let block: MarkdownBlock
     let compact: Bool
+    let spanID: String?
 
-    private var bodyFont: Font { compact ? Theme.ui : Theme.body }
+    private var bodySize: CGFloat { compact ? 13 : 13.5 }
+
+    @ViewBuilder
+    private func inlineText(
+        _ text: String, part: String = "", size: CGFloat, weight: NSFont.Weight = .regular, color: Color? = nil,
+        lineSpacing: CGFloat = 0
+    ) -> some View {
+        if let spanID {
+            SpanText(
+                id: spanID + part,
+                text: SpanStyle.attributed(
+                    MarkdownParser.inline(text), font: .systemFont(ofSize: size, weight: weight),
+                    color: NSColor(color ?? Theme.text), lineSpacing: lineSpacing))
+        } else {
+            Text(MarkdownParser.inline(text))
+                .font(.system(size: size, weight: weight == .regular ? .regular : weight == .medium ? .medium : .semibold))
+                .foregroundStyle(color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.foreground))
+                .lineSpacing(lineSpacing)
+        }
+    }
 
     var body: some View {
         switch block {
         case .heading(let level, let text):
-            Text(MarkdownParser.inline(text))
-                .font(.system(size: level == 1 ? 19 : level == 2 ? 16 : 14, weight: .semibold))
-                .foregroundStyle(Theme.text)
+            inlineText(text, size: level == 1 ? 19 : level == 2 ? 16 : 14, weight: .semibold, color: Theme.text)
                 .padding(.top, compact ? 0 : 6)
         case .paragraph(let text):
-            Text(MarkdownParser.inline(text))
-                .font(bodyFont)
-                .lineSpacing(3.5)
+            inlineText(text, size: bodySize, lineSpacing: 3.5)
                 .fixedSize(horizontal: false, vertical: true)
         case .code(let lang, let code):
-            CodeBlockView(language: lang, code: code)
+            CodeBlockView(language: lang, code: code, spanID: spanID)
         case .list(let ordered, let items):
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
@@ -202,18 +220,17 @@ private struct BlockView: View {
                         }
                         .foregroundStyle(Theme.text2)
                         .frame(minWidth: 12, alignment: .trailing)
-                        Text(MarkdownParser.inline(item.text))
-                            .lineSpacing(3)
+                        inlineText(item.text, part: ".\(i)", size: bodySize, lineSpacing: 3)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(bodyFont)
+                    .font(.system(size: bodySize))
                     .padding(.leading, CGFloat(item.indent) * 18 + 4)
                 }
             }
         case .quote(let text):
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 1).fill(Theme.border).frame(width: 3)
-                Text(MarkdownParser.inline(text)).font(bodyFont).foregroundStyle(Theme.text2)
+                inlineText(text, size: bodySize, color: Theme.text2)
             }
         case .rule:
             Hairline().padding(.vertical, 4)
@@ -222,10 +239,8 @@ private struct BlockView: View {
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { r, row in
                         GridRow {
-                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                                Text(MarkdownParser.inline(cell))
-                                    .font(r == 0 ? Theme.uiMedium : Theme.ui)
-                                    .foregroundStyle(r == 0 ? Theme.text : Theme.text)
+                            ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
+                                inlineText(cell, part: ".\(r).\(c)", size: 13, weight: r == 0 ? .medium : .regular, color: Theme.text)
                             }
                         }
                         if r == 0 { Hairline().gridCellUnsizedAxes(.horizontal) }
@@ -242,15 +257,22 @@ private struct BlockView: View {
 struct CodeBlockView: View {
     let language: String
     let code: String
+    var spanID: String?
     @State private var copied = false
     @State private var hovering = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             ScrollView(.horizontal, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(highlighted.enumerated()), id: \.offset) { _, line in
-                        Text(line).font(Theme.mono).fixedSize()
+                Group {
+                    if let spanID {
+                        SpanText(id: spanID, text: joinedLines, wraps: false)
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(highlighted.enumerated()), id: \.offset) { _, line in
+                                Text(line).font(Theme.mono).fixedSize()
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 14)
@@ -279,5 +301,14 @@ struct CodeBlockView: View {
 
     private var highlighted: [AttributedString] {
         CodeHighlight.lines(code, language: language)
+    }
+
+    private var joinedLines: NSAttributedString {
+        var joined = AttributedString()
+        for (i, line) in highlighted.enumerated() {
+            if i > 0 { joined.append(AttributedString("\n")) }
+            joined.append(line)
+        }
+        return SpanStyle.attributed(joined, font: .monospacedSystemFont(ofSize: 12, weight: .regular), color: NSColor(Theme.text))
     }
 }
