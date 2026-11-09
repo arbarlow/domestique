@@ -226,11 +226,27 @@ final class ServerLink {
         await connect()
     }
 
-    /// This Mac only, on quit: hang up and stop the running server (its agents stop too) without waiting.
-    func stopServer() {
-        guard isLocal else { return }
-        close()
-        Self.signalLocalServer()
+    /// This Mac only, on quit: hang up, and stop the running server (its agents stop too) if no other local
+    /// client is using it. A server that can't say within a second is left running. Older servers report 0
+    /// clients, so they stop as they always did.
+    func stopServerIfLastClient() -> Task<Void, Never>? {
+        guard isLocal, let client else { close(); return nil }
+        closed = true
+        serverTask?.cancel()
+        self.client = nil
+        return Task.detached {
+            let clients = await withTaskGroup(of: UInt32?.self) { group in
+                group.addTask { try? await client.serverInfo().localClients }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(1))
+                    return nil
+                }
+                defer { group.cancelAll() }
+                return await group.next() ?? nil
+            }
+            await client.close()
+            if let clients, clients <= 1 { Self.signalLocalServer() }
+        }
     }
 
     /// SIGTERMs whatever domestique process listens on This Mac's socket; returns the pids it signalled.
@@ -731,11 +747,18 @@ final class ServerLink {
         }
     }
 
-    func closeSession(_ tabID: UUID) async {
+    func closeSession(_ tabID: UUID, keepHistory: Bool = false) async {
         pendingTabs.remove(tabID)
         activity[tabID] = nil
         restartIfDeferredAndIdle()
-        _ = try? await ready().closeSession(id: tabID.protoID)
+        _ = try? await ready().closeSession(id: tabID.protoID, keepHistory: keepHistory)
+    }
+
+    /// The tab is already back in the workspace, so it stays pending until the server has the session.
+    func reopenSession(_ tabID: UUID) async throws {
+        pendingTabs.insert(tabID)
+        defer { pendingTabs.remove(tabID) }
+        _ = try await ready().reopenSession(id: tabID.protoID)
     }
 
     /// Swaps the tab's session for a fresh one (e.g. a different provider), keeping the tab.

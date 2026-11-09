@@ -211,6 +211,21 @@ func (c *Client) CloseSession(ctx context.Context, id string) error {
 	return err
 }
 
+// CloseSessionKeepingHistory closes a session so ReopenSession can bring it back.
+func (c *Client) CloseSessionKeepingHistory(ctx context.Context, id string) error {
+	_, err := c.Do(ctx, &domestiquev1.Request{Command: &domestiquev1.Request_CloseSession{CloseSession: &domestiquev1.CloseSession{SessionId: id, KeepHistory: true}}})
+	return err
+}
+
+// ReopenSession brings back a session closed with its history kept.
+func (c *Client) ReopenSession(ctx context.Context, id string) (*domestiquev1.Session, error) {
+	r, err := c.Do(ctx, &domestiquev1.Request{Command: &domestiquev1.Request_ReopenSession{ReopenSession: &domestiquev1.ReopenSession{SessionId: id}}})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetSession(), nil
+}
+
 // Send sends a message to a session. It returns once the agent accepted it; the reply streams on a
 // session subscription (or use Prompt).
 func (c *Client) Send(ctx context.Context, sessionID, text string, attachments []*domestiquev1.Attachment, opts ...CallOption) error {

@@ -669,6 +669,45 @@ struct LocalServerTests {
         #expect(FileManager.default.fileExists(atPath: home.appending(path: "server.log").path))
     }
 
+    @Test func simultaneousLaunchesShareOneServer() async throws {
+        let bin = try ServerBuild.binary.get()
+        let root = try ServerBuild.makeTempDir("rrk-r")
+        defer { try? FileManager.default.removeItem(at: root) }
+        var env = ProcessInfo.processInfo.environment
+        env["DOMESTIQUE_SERVER_HOME"] = root.appending(path: "h").path
+        env["DOMESTIQUE_SERVER_BIN"] = bin.path
+        env["DOMESTIQUE_SERVER_WORKSPACES_ROOT"] = root.appending(path: "ws").path
+        env["DOMESTIQUE_SERVER_REPOS_ROOT"] = root.appending(path: "repos").path
+
+        let environment = env
+        let launches = try await withThrowingTaskGroup(of: (ServerEndpoint, LocalServer.Child?).self) { group in
+            for _ in 0..<4 {
+                group.addTask {
+                    let launch = try await LocalServer.launch(timeout: .seconds(10), environment: environment)
+                    return (launch.endpoint, launch.started)
+                }
+            }
+            return try await group.reduce(into: []) { $0.append($1) }
+        }
+        let children = launches.compactMap(\.1)
+        defer { for child in children where child.exitStatus == nil { kill(child.pid, SIGKILL) } }
+
+        // Losers exit by themselves, possibly just after their launch saw the winner's socket.
+        var alive = children.filter { $0.exitStatus == nil }
+        for _ in 0..<50 where alive.count > 1 {
+            try await Task.sleep(for: .milliseconds(100))
+            alive = children.filter { $0.exitStatus == nil }
+        }
+        #expect(alive.count == 1)
+        for child in children where child.exitStatus != nil {
+            #expect(child.exitStatus == LocalServer.alreadyRunningExitCode << 8)
+        }
+
+        let c = ServerClient(endpoint: launches[0].0, clientName: "t", clientID: "t")
+        _ = try await c.connect()
+        await c.close()
+    }
+
     @Test func ensureRunningRejectsLongSocketPaths() async throws {
         let long = "/tmp/" + String(repeating: "x", count: 120)
         let e = await #expect(throws: LocalServer.LaunchError.self) {

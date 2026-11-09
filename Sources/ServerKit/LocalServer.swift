@@ -161,7 +161,7 @@ public enum LocalServer {
         let deadline = clock.now + timeout
         while clock.now < deadline {
             if socketAccepts(socket) { return (endpoint, child) }
-            if let status = child.exitStatus {
+            if let status = child.exitStatus, status != alreadyRunningWaitStatus {
                 let how = status & 0x7f == 0 ? "exit code \((status >> 8) & 0xff)" : "signal \(status & 0x7f)"
                 throw LaunchError("domestique exited (\(how)) before it was ready.\n\(logTail(logURL))")
             }
@@ -171,6 +171,13 @@ public enum LocalServer {
     }
 
     // MARK: Internals
+
+    /// `domestique serve` exits with this when another server holds the home's lock (exitAlreadyRunning in Go).
+    /// Happens when two copies of the app start together: the loser keeps waiting for the winner's socket.
+    static let alreadyRunningExitCode: Int32 = 75
+
+    /// `alreadyRunningExitCode` as `waitpid` reports a normal exit.
+    private static let alreadyRunningWaitStatus = alreadyRunningExitCode << 8
 
     /// True if something accepts connections on the Unix socket at `path`.
     static func socketAccepts(_ path: String) -> Bool {

@@ -64,8 +64,36 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "domestique:", err)
+		if errors.Is(err, errAlreadyRunning) {
+			os.Exit(exitAlreadyRunning)
+		}
 		os.Exit(1)
 	}
+}
+
+// exitAlreadyRunning tells the app that another server owns this home, so it should connect to that one
+// (LocalServer.alreadyRunningExitCode in Swift).
+const exitAlreadyRunning = 75
+
+var errAlreadyRunning = errors.New("another domestique is already running")
+
+// lockHome makes this process the only server for home until the returned file is closed. The kernel drops
+// the lock when the process dies, so a crash can't leave it stuck, and Go opens files close-on-exec, so agents
+// and tasks don't inherit it. The name is fixed, not dataFile's: that one changes when a pre-rename home migrates.
+func lockHome(home string) (*os.File, error) {
+	path := filepath.Join(home, "server.lock")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("%w on %s", errAlreadyRunning, home)
+		}
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	return f, nil
 }
 
 func usage() {
@@ -129,6 +157,13 @@ func serve(args []string) error {
 	if err := os.MkdirAll(cfg.home, 0o700); err != nil {
 		return err
 	}
+	// Before the store and the sockets: two servers starting together would otherwise both find no live
+	// socket, and the later one would unlink the earlier one's and strand it.
+	lock, err := lockHome(cfg.home)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	st, err := openStore(cfg)
 	if err != nil {
 		return err

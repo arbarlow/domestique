@@ -655,10 +655,20 @@ public actor ServerClient {
         return v
     }
 
-    public func closeSession(id: String) async throws {
+    /// `keepHistory` sets the session aside for `reopenSession` instead of deleting it.
+    public func closeSession(id: String, keepHistory: Bool = false) async throws {
         var req = Proto_CloseSession()
         req.sessionID = id
+        req.keepHistory = keepHistory
         _ = try await send(.closeSession(req))
+    }
+
+    public func reopenSession(id: String) async throws -> Proto_Session {
+        var req = Proto_ReopenSession()
+        req.sessionID = id
+        let r = try await send(.reopenSession(req))
+        guard case .session(let v) = r.result else { throw unexpected(r) }
+        return v
     }
 
     public func sendMessage(sessionID: String, text: String, attachments: [Proto_Attachment] = []) async throws {

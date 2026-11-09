@@ -125,6 +125,7 @@ message Request {
     UpdateSession update_session = 46;
     ListModels list_models = 47;
     GetTranscript get_transcript = 48;
+    ReopenSession reopen_session = 49;
 
     GetDiff get_diff = 60;
     ListFiles list_files = 61;
@@ -229,6 +230,8 @@ message ServerInfo {
   repeated Provider providers = 6;
   // Sandbox services this server can create workspaces' machines on (no account details).
   repeated SandboxProvider sandbox_providers = 7;
+  // Connections on the trusted local listener, the asking client included. 0 from older servers.
+  uint32 local_clients = 8;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -580,6 +583,8 @@ message Session {
   // Highest persisted transcript seq.
   uint64 last_seq = 11;
   string status = 12;
+  // Set while the session is closed with its history kept. Closed sessions aren't listed or streamed.
+  int64 closed_at_ms = 13;
 }
 
 message OpenSession {
@@ -595,6 +600,14 @@ message OpenSession {
 }
 
 message CloseSession {
+  string session_id = 1;
+  // Keep the transcript so ReopenSession can bring the session back. It's kept until the workspace
+  // is archived or deleted. Otherwise the session and its history are deleted.
+  bool keep_history = 2;
+}
+
+// Brings back a session closed with keep_history, with its transcript and agent session.
+message ReopenSession {
   string session_id = 1;
 }
 

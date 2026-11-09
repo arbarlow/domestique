@@ -740,7 +740,12 @@ final class AppModel {
             alert = AppAlert(title: "Couldn't remove worktree", message: error.localizedDescription)
         } }
         workspaceModels[ws.id] = nil
-        updateWorkspace(ws.id) { $0.state = .archived }
+        // An archived workspace can't reopen anything, so closed chats end here.
+        for closed in workspace(ws.id)?.closedTabs ?? [] { await Store.shared.deleteTranscript(tabID: closed.id) }
+        updateWorkspace(ws.id) {
+            $0.state = .archived
+            $0.closedTabs = nil
+        }
         if selectedWorkspaceID == ws.id {
             selectedWorkspaceID = activeWorkspaces(in: repo).first?.id
         }
@@ -850,16 +855,22 @@ final class AppModel {
     // MARK: lifecycle
 
     func shutdown() {
-        // Quitting stops This Mac's server and its agents, unless Settings says to keep it running.
-        // Remote servers always keep going.
+        // Quitting stops This Mac's server and its agents, unless Settings says to keep it running or
+        // another local client is still using it. Remote servers always keep going.
+        var stopping: [Task<Void, Never>] = []
         for link in serverLinks {
-            if link.isLocal, !settings.keepServerRunning { link.stopServer() } else { link.close() }
+            if link.isLocal, !settings.keepServerRunning {
+                if let stop = link.stopServerIfLastClient() { stopping.append(stop) }
+            } else {
+                link.close()
+            }
         }
         for m in workspaceModels.values { m.shutdownNow() }
         let state = self.state
         let sem = DispatchSemaphore(value: 0)
-        Task.detached {
+        Task.detached { [stopping] in
             await Store.shared.save(state)
+            for stop in stopping { await stop.value }
             await CodexAppServer.shared.shutdown()
             for server in CodexAppServer.remoteServers { await server.shutdown() }
             // Drop SSH masters and port forwards; the sandboxes keep running (and auto-stop).

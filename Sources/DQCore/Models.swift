@@ -405,9 +405,6 @@ public struct ClosedChatTab: Codable, Sendable, Identifiable, Hashable {
         self.tab = tab
         self.closedAt = closedAt
     }
-
-    /// How many closed tabs a workspace remembers; older ones are forgotten (and their transcripts deleted).
-    public static let limit = 20
 }
 
 // MARK: - Transcript

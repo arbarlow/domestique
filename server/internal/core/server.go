@@ -148,6 +148,9 @@ func (c *Server) load() error {
 		return err
 	}
 	for _, m := range sessions {
+		if m.ClosedAtMs != 0 {
+			continue // Only ReopenSession brings these back.
+		}
 		last, err := c.store.LastSeq(m.Id)
 		if err != nil {
 			return err
@@ -660,6 +663,10 @@ func (c *Server) ArchiveWorkspace(ctx context.Context, req *domestiquev1.Archive
 		}
 	}
 	c.updateWorkspace(id, func(w *domestiquev1.Workspace) { w.State = domestiquev1.WorkspaceState_WORKSPACE_STATE_ARCHIVED })
+	// An archived workspace can't reopen anything, so closed chats end here.
+	if err := c.store.DeleteClosedSessions(id); err != nil {
+		c.log.Warn("delete closed sessions failed", "workspace", ws.Name, "err", err)
+	}
 	return c.Workspace(id)
 }
 
@@ -938,7 +945,8 @@ func (c *Server) openSessionLocked(req *domestiquev1.OpenSession) (*Session, err
 	return r, nil
 }
 
-func (c *Server) CloseSession(id string) error {
+// CloseSession stops a session and deletes it, or with keepHistory sets it aside for ReopenSession.
+func (c *Server) CloseSession(id string, keepHistory bool) error {
 	c.mu.Lock()
 	r, ok := c.sessions[id]
 	if ok {
@@ -953,11 +961,55 @@ func (c *Server) CloseSession(id string) error {
 		return notFound("session", id)
 	}
 	r.shutdown()
-	err := c.store.DeleteSession(id)
+	var err error
+	if keepHistory {
+		meta := r.Meta()
+		meta.ClosedAtMs = time.Now().UnixMilli()
+		meta.Activity = domestiquev1.SessionActivity_SESSION_ACTIVITY_IDLE
+		meta.Status = ""
+		err = c.store.PutSession(meta)
+	} else {
+		err = c.store.DeleteSession(id)
+	}
 	c.mu.Lock()
 	delete(c.closing, id)
 	c.mu.Unlock()
 	return err
+}
+
+// ReopenSession brings back a session closed with its history kept.
+func (c *Server) ReopenSession(id string) (*domestiquev1.Session, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.sessionIDFreeLocked(id); err != nil {
+		return nil, err
+	}
+	meta, err := c.store.Session(id)
+	if err != nil {
+		return nil, err
+	}
+	if meta == nil || meta.ClosedAtMs == 0 {
+		return nil, notFound("session", id)
+	}
+	w, ok := c.workspaces[meta.WorkspaceId]
+	if !ok {
+		return nil, notFound("workspace", meta.WorkspaceId)
+	}
+	if w.State == domestiquev1.WorkspaceState_WORKSPACE_STATE_ARCHIVED {
+		return nil, fmt.Errorf("%w: workspace is archived", ErrPrecondition)
+	}
+	if meta.LastSeq, err = c.store.LastSeq(id); err != nil {
+		return nil, err
+	}
+	meta.ClosedAtMs = 0
+	if err := c.store.PutSession(meta); err != nil {
+		return nil, err
+	}
+	r := newSession(c, meta)
+	c.sessions[id] = r
+	c.sessionOrder = append(c.sessionOrder, id)
+	c.publishSessionLocked(proto.Clone(meta).(*domestiquev1.Session))
+	return r.Meta(), nil
 }
 
 func (c *Server) Models(ctx context.Context, p domestiquev1.Provider) ([]*domestiquev1.ModelOption, error) {

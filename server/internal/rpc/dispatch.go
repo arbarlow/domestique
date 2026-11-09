@@ -44,7 +44,7 @@ func required(req *domestiquev1.Request) domestiquev1.TokenScope {
 		return domestiquev1.TokenScope_TOKEN_SCOPE_READ
 	case *domestiquev1.Request_AddRepository, *domestiquev1.Request_CreateWorkspace, *domestiquev1.Request_ArchiveWorkspace,
 		*domestiquev1.Request_ImportWorkspace,
-		*domestiquev1.Request_OpenSession, *domestiquev1.Request_CloseSession, *domestiquev1.Request_SendMessage,
+		*domestiquev1.Request_OpenSession, *domestiquev1.Request_CloseSession, *domestiquev1.Request_ReopenSession, *domestiquev1.Request_SendMessage,
 		*domestiquev1.Request_Interrupt, *domestiquev1.Request_RespondApproval, *domestiquev1.Request_AnswerQuestion,
 		*domestiquev1.Request_UpdateSession:
 		return domestiquev1.TokenScope_TOKEN_SCOPE_TRIGGER
@@ -92,6 +92,7 @@ func (c *conn) execute(ctx context.Context, req *domestiquev1.Request) *domestiq
 	switch cmd := req.Command.(type) {
 	case *domestiquev1.Request_GetServerInfo:
 		info := server.Info()
+		info.LocalClients = c.s.localClients.Load()
 		if m := c.s.sandboxes; m != nil {
 			if ps, err := m.Providers(ctx, false); err == nil {
 				info.SandboxProviders = ps
@@ -154,10 +155,16 @@ func (c *conn) execute(ctx context.Context, req *domestiquev1.Request) *domestiq
 		}
 		return &domestiquev1.Response{Result: &domestiquev1.Response_Session{Session: r}}
 	case *domestiquev1.Request_CloseSession:
-		if err := server.CloseSession(cmd.CloseSession.SessionId); err != nil {
+		if err := server.CloseSession(cmd.CloseSession.SessionId, cmd.CloseSession.KeepHistory); err != nil {
 			return fromError(err)
 		}
 		return empty()
+	case *domestiquev1.Request_ReopenSession:
+		r, err := server.ReopenSession(cmd.ReopenSession.SessionId)
+		if err != nil {
+			return fromError(err)
+		}
+		return &domestiquev1.Response{Result: &domestiquev1.Response_Session{Session: r}}
 	case *domestiquev1.Request_SendMessage:
 		r, err := server.Session(cmd.SendMessage.SessionId)
 		if err != nil {

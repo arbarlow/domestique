@@ -1341,6 +1341,14 @@ public nonisolated struct Proto_Request: @unchecked Sendable {
     set {_uniqueStorage()._command = .getTranscript(newValue)}
   }
 
+  public var reopenSession: Proto_ReopenSession {
+    get {
+      if case .reopenSession(let v)? = _storage._command {return v}
+      return Proto_ReopenSession()
+    }
+    set {_uniqueStorage()._command = .reopenSession(newValue)}
+  }
+
   public var getDiff: Proto_GetDiff {
     get {
       if case .getDiff(let v)? = _storage._command {return v}
@@ -1535,6 +1543,7 @@ public nonisolated struct Proto_Request: @unchecked Sendable {
     case updateSession(Proto_UpdateSession)
     case listModels(Proto_ListModels)
     case getTranscript(Proto_GetTranscript)
+    case reopenSession(Proto_ReopenSession)
     case getDiff(Proto_GetDiff)
     case listFiles(Proto_ListFiles)
     case readFile(Proto_ReadFile)
@@ -1857,6 +1866,9 @@ public nonisolated struct Proto_ServerInfo: Sendable {
 
   /// Sandbox services this server can create workspaces' machines on (no account details).
   public var sandboxProviders: [Proto_SandboxProvider] = []
+
+  /// Connections on the trusted local listener, the asking client included. 0 from older servers.
+  public var localClients: UInt32 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2752,6 +2764,9 @@ public nonisolated struct Proto_Session: Sendable {
 
   public var status: String = String()
 
+  /// Set while the session is closed with its history kept. Closed sessions aren't listed or streamed.
+  public var closedAtMs: Int64 = 0
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2784,6 +2799,23 @@ public nonisolated struct Proto_OpenSession: Sendable {
 }
 
 public nonisolated struct Proto_CloseSession: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var sessionID: String = String()
+
+  /// Keep the transcript so ReopenSession can bring the session back. It's kept until the workspace
+  /// is archived or deleted. Otherwise the session and its history are deleted.
+  public var keepHistory: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Brings back a session closed with keep_history, with its transcript and agent session.
+public nonisolated struct Proto_ReopenSession: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -4848,7 +4880,7 @@ nonisolated extension Proto_Gap: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
 
 nonisolated extension Proto_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}idempotency_key\0\u{4}\u{8}get_server_info\0\u{1}subscribe\0\u{1}unsubscribe\0\u{4}\u{8}list_repositories\0\u{3}add_repository\0\u{3}remove_repository\0\u{4}\u{8}list_workspaces\0\u{3}create_workspace\0\u{3}archive_workspace\0\u{3}delete_workspace\0\u{3}import_workspace\0\u{4}\u{6}open_session\0\u{3}close_session\0\u{3}send_message\0\u{1}interrupt\0\u{3}respond_approval\0\u{3}answer_question\0\u{3}update_session\0\u{3}list_models\0\u{3}get_transcript\0\u{4}\u{2}process_input\0\u{3}resize_process\0\u{3}signal_process\0\u{4}\u{8}get_diff\0\u{3}list_files\0\u{3}read_file\0\u{4}\u{12}list_sandbox_providers\0\u{3}save_sandbox_provider\0\u{3}remove_sandbox_provider\0\u{3}list_sandboxes\0\u{3}get_sandbox\0\u{3}create_sandbox\0\u{3}change_sandbox\0\u{3}open_sandbox_access\0\u{4}\u{3}create_token\0\u{3}list_tokens\0\u{3}revoke_token\0\u{4}\u{8}list_mcp_servers\0\u{3}save_mcp_server\0\u{3}remove_mcp_server\0\u{3}resolve_mcp_config\0\u{c}F\u{1}\u{a}\u{c}Y\u{1}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}idempotency_key\0\u{4}\u{8}get_server_info\0\u{1}subscribe\0\u{1}unsubscribe\0\u{4}\u{8}list_repositories\0\u{3}add_repository\0\u{3}remove_repository\0\u{4}\u{8}list_workspaces\0\u{3}create_workspace\0\u{3}archive_workspace\0\u{3}delete_workspace\0\u{3}import_workspace\0\u{4}\u{6}open_session\0\u{3}close_session\0\u{3}send_message\0\u{1}interrupt\0\u{3}respond_approval\0\u{3}answer_question\0\u{3}update_session\0\u{3}list_models\0\u{3}get_transcript\0\u{3}reopen_session\0\u{3}process_input\0\u{3}resize_process\0\u{3}signal_process\0\u{4}\u{8}get_diff\0\u{3}list_files\0\u{3}read_file\0\u{4}\u{12}list_sandbox_providers\0\u{3}save_sandbox_provider\0\u{3}remove_sandbox_provider\0\u{3}list_sandboxes\0\u{3}get_sandbox\0\u{3}create_sandbox\0\u{3}change_sandbox\0\u{3}open_sandbox_access\0\u{4}\u{3}create_token\0\u{3}list_tokens\0\u{3}revoke_token\0\u{4}\u{8}list_mcp_servers\0\u{3}save_mcp_server\0\u{3}remove_mcp_server\0\u{3}resolve_mcp_config\0\u{c}F\u{1}\u{a}\u{c}Y\u{1}\u{1}")
 
   fileprivate class _StorageClass {
     var _id: UInt64 = 0
@@ -5145,6 +5177,19 @@ nonisolated extension Proto_Request: SwiftProtobuf.Message, SwiftProtobuf._Messa
           if let v = v {
             if hadOneofValue {try decoder.handleConflictingOneOf()}
             _storage._command = .getTranscript(v)
+          }
+        }()
+        case 49: try {
+          var v: Proto_ReopenSession?
+          var hadOneofValue = false
+          if let current = _storage._command {
+            hadOneofValue = true
+            if case .reopenSession(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._command = .reopenSession(v)
           }
         }()
         case 50: try {
@@ -5518,6 +5563,10 @@ nonisolated extension Proto_Request: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case .getTranscript?: try {
         guard case .getTranscript(let v)? = _storage._command else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 48)
+      }()
+      case .reopenSession?: try {
+        guard case .reopenSession(let v)? = _storage._command else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 49)
       }()
       case .processInput?: try {
         guard case .processInput(let v)? = _storage._command else { preconditionFailure() }
@@ -6147,7 +6196,7 @@ nonisolated extension Proto_GetServerInfo: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Proto_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ServerInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}server_id\0\u{3}server_name\0\u{3}server_version\0\u{1}platform\0\u{3}workspaces_root\0\u{1}providers\0\u{3}sandbox_providers\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}server_id\0\u{3}server_name\0\u{3}server_version\0\u{1}platform\0\u{3}workspaces_root\0\u{1}providers\0\u{3}sandbox_providers\0\u{3}local_clients\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6162,6 +6211,7 @@ nonisolated extension Proto_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
       case 5: try { try decoder.decodeSingularStringField(value: &self.workspacesRoot) }()
       case 6: try { try decoder.decodeRepeatedEnumField(value: &self.providers) }()
       case 7: try { try decoder.decodeRepeatedMessageField(value: &self.sandboxProviders) }()
+      case 8: try { try decoder.decodeSingularUInt32Field(value: &self.localClients) }()
       default: break
       }
     }
@@ -6189,6 +6239,9 @@ nonisolated extension Proto_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
     if !self.sandboxProviders.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.sandboxProviders, fieldNumber: 7)
     }
+    if self.localClients != 0 {
+      try visitor.visitSingularUInt32Field(value: self.localClients, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -6200,6 +6253,7 @@ nonisolated extension Proto_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._Me
     if lhs.workspacesRoot != rhs.workspacesRoot {return false}
     if lhs.providers != rhs.providers {return false}
     if lhs.sandboxProviders != rhs.sandboxProviders {return false}
+    if lhs.localClients != rhs.localClients {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7933,7 +7987,7 @@ nonisolated extension Proto_ImportSession: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Proto_Session: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Session"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}workspace_id\0\u{1}title\0\u{1}provider\0\u{1}model\0\u{1}effort\0\u{3}permission_mode\0\u{3}provider_session_id\0\u{3}created_at_ms\0\u{1}activity\0\u{3}last_seq\0\u{1}status\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}workspace_id\0\u{1}title\0\u{1}provider\0\u{1}model\0\u{1}effort\0\u{3}permission_mode\0\u{3}provider_session_id\0\u{3}created_at_ms\0\u{1}activity\0\u{3}last_seq\0\u{1}status\0\u{3}closed_at_ms\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7953,6 +8007,7 @@ nonisolated extension Proto_Session: SwiftProtobuf.Message, SwiftProtobuf._Messa
       case 10: try { try decoder.decodeSingularEnumField(value: &self.activity) }()
       case 11: try { try decoder.decodeSingularUInt64Field(value: &self.lastSeq) }()
       case 12: try { try decoder.decodeSingularStringField(value: &self.status) }()
+      case 13: try { try decoder.decodeSingularInt64Field(value: &self.closedAtMs) }()
       default: break
       }
     }
@@ -7995,6 +8050,9 @@ nonisolated extension Proto_Session: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if !self.status.isEmpty {
       try visitor.visitSingularStringField(value: self.status, fieldNumber: 12)
     }
+    if self.closedAtMs != 0 {
+      try visitor.visitSingularInt64Field(value: self.closedAtMs, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -8011,6 +8069,7 @@ nonisolated extension Proto_Session: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if lhs.activity != rhs.activity {return false}
     if lhs.lastSeq != rhs.lastSeq {return false}
     if lhs.status != rhs.status {return false}
+    if lhs.closedAtMs != rhs.closedAtMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8078,6 +8137,41 @@ nonisolated extension Proto_OpenSession: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Proto_CloseSession: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CloseSession"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0\u{3}keep_history\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.sessionID) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.keepHistory) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.sessionID.isEmpty {
+      try visitor.visitSingularStringField(value: self.sessionID, fieldNumber: 1)
+    }
+    if self.keepHistory != false {
+      try visitor.visitSingularBoolField(value: self.keepHistory, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Proto_CloseSession, rhs: Proto_CloseSession) -> Bool {
+    if lhs.sessionID != rhs.sessionID {return false}
+    if lhs.keepHistory != rhs.keepHistory {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Proto_ReopenSession: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ReopenSession"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}session_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -8099,7 +8193,7 @@ nonisolated extension Proto_CloseSession: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Proto_CloseSession, rhs: Proto_CloseSession) -> Bool {
+  public static func ==(lhs: Proto_ReopenSession, rhs: Proto_ReopenSession) -> Bool {
     if lhs.sessionID != rhs.sessionID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

@@ -7,6 +7,7 @@ import GitKit
 import HostKit
 import Observation
 import ProcessKit
+import ServerKit
 
 /// Top half of the right panel.
 enum PanelTab: String, CaseIterable, Identifiable {
@@ -217,27 +218,28 @@ final class WorkspaceModel {
         chats[tabID]?.shutdown()
         chats[tabID] = nil
         let link = app.link(for: ws)
-        var forgotten: [UUID] = []
+        // Replacing a blank last tab leaves nothing worth reopening.
+        let keep = !(isLast && isBlank)
         app.updateWorkspace(id) { w in
             let idx = w.tabs.firstIndex { $0.id == tabID } ?? 0
-            // Local chats keep their transcript so the tab can be reopened. Server deletes a closed
-            // session's history on the server, so there's nothing to bring back there. Replacing a
-            // blank last tab leaves nothing worth reopening either.
-            if link == nil, !(isLast && isBlank), let tab = w.tabs.first(where: { $0.id == tabID }) {
+            // The transcript stays, here or on the server, until the workspace is archived or deleted.
+            if keep, let tab = w.tabs.first(where: { $0.id == tabID }) {
                 var closed = w.closedTabs ?? []
                 closed.removeAll { $0.id == tabID }
                 closed.insert(ClosedChatTab(tab: tab), at: 0)
-                forgotten = closed.dropFirst(ClosedChatTab.limit).map(\.id)
-                w.closedTabs = Array(closed.prefix(ClosedChatTab.limit))
+                w.closedTabs = closed
             }
             w.tabs.removeAll { $0.id == tabID }
             if w.selectedTabID == tabID { w.selectedTabID = w.tabs[max(0, min(idx, w.tabs.count - 1))].id }
         }
         if let link {
-            Task { await link.closeSession(tabID) }
-        } else {
-            Task { for id in forgotten { await Store.shared.deleteTranscript(tabID: id) } }
+            Task { await link.closeSession(tabID, keepHistory: keep) }
         }
+    }
+
+    /// ⌘W: close the chat tab being shown.
+    func closeSelectedTab() {
+        if let tabID = workspace?.selectedTabID ?? workspace?.tabs.first?.id { closeTab(tabID) }
     }
 
     /// Recently closed chat tabs, most recent first.
@@ -252,6 +254,20 @@ final class WorkspaceModel {
             w.selectedTabID = tabID
         }
         app.composerFocusRequest += 1
+        guard let link = app.link(for: workspace) else { return }
+        Task {
+            do {
+                try await link.reopenSession(tabID)
+            } catch {
+                dropTab(tabID)
+                // A session the server doesn't have (closed before it kept history) can never come back.
+                let gone = (error as? ServerError)?.code == .notFound
+                if !gone { app.updateWorkspace(id) { $0.closedTabs = [closed] + ($0.closedTabs ?? []) } }
+                app.alert = AppAlert(
+                    title: "Couldn't reopen \"\(closed.tab.title)\"",
+                    message: gone ? "The server no longer has this chat's history." : error.localizedDescription)
+            }
+        }
     }
 
     /// ⌘⇧T: reopen the most recently closed chat tab.

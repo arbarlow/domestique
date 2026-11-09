@@ -51,6 +51,8 @@ type Server struct {
 	// Sandbox providers; nil = none (every sandbox request answers UNIMPLEMENTED).
 	sandboxes *sandbox.Manager
 	mcp       *mcp.Manager
+	// Connected clients on trusted listeners; the Mac app won't stop a server others still use.
+	localClients atomic.Uint32
 }
 
 // SetSandboxes attaches this server's sandbox providers. Call before Serve.
@@ -143,6 +145,10 @@ func (s *Server) handle(parent context.Context, ws *websocket.Conn, trusted bool
 		return
 	}
 	s.log.Info("client connected", "remote", remote, "scope", c.scope)
+	if trusted {
+		s.localClients.Add(1)
+		defer s.localClients.Add(^uint32(0))
+	}
 	go c.writeLoop()
 	go c.pingLoop()
 	c.readLoop()

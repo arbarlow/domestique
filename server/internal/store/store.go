@@ -303,6 +303,36 @@ ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.update
 	return err
 }
 
+// Session returns a stored session, open or closed, or nil if there's none.
+func (s *Store) Session(id string) (*domestiquev1.Session, error) {
+	var b []byte
+	err := s.db.QueryRow(`SELECT data FROM sessions WHERE id = ?`, id).Scan(&b)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m := &domestiquev1.Session{}
+	return m, proto.Unmarshal(b, m)
+}
+
+// DeleteClosedSessions deletes a workspace's closed sessions and their transcripts.
+func (s *Store) DeleteClosedSessions(workspaceID string) error {
+	sessions, err := s.Sessions()
+	if err != nil {
+		return err
+	}
+	for _, m := range sessions {
+		if m.WorkspaceId == workspaceID && m.ClosedAtMs != 0 {
+			if err := s.DeleteSession(m.Id); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Store) DeleteSession(id string) error {
 	tx, err := s.db.Begin()
 	if err != nil {

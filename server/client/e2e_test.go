@@ -786,6 +786,49 @@ func TestReopenClosedSessionID(t *testing.T) {
 	}
 }
 
+func TestCloseKeepingHistoryThenReopen(t *testing.T) {
+	e := newEnv(t)
+	c := e.dial()
+	cx := ctx(t)
+	ws, _ := setup(t, e, c)
+	const id = "9a7d2c10-0000-4000-8000-00000000000b"
+	if _, err := c.OpenSession(cx, &domestiquev1.OpenSession{WorkspaceId: ws.Id, Id: id}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Prompt(cx, id, "before", client.PromptOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CloseSessionKeepingHistory(cx, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Transcript(cx, id); client.Code(err) != domestiquev1.ErrorCode_ERROR_CODE_NOT_FOUND {
+		t.Fatalf("closed session is still open: %v", err)
+	}
+	// Closed sessions stay closed, and reopenable, across a restart.
+	e.stop()
+	e.start()
+	c = e.dial()
+	if _, err := c.Transcript(cx, id); client.Code(err) != domestiquev1.ErrorCode_ERROR_CODE_NOT_FOUND {
+		t.Fatalf("closed session came back after a restart: %v", err)
+	}
+	r, err := c.ReopenSession(cx, id)
+	if err != nil || r.ClosedAtMs != 0 || r.LastSeq == 0 || r.ProviderSessionId == "" {
+		t.Fatalf("reopened = %v, %v", r, err)
+	}
+	if tr, err := c.Transcript(cx, id); err != nil || len(tr.Items) != 4 || tr.Items[0].GetUser() != "before" {
+		t.Fatalf("reopened transcript = %v, %v", tr, err)
+	}
+	if err := c.CloseSessionKeepingHistory(cx, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ArchiveWorkspaceWith(cx, &domestiquev1.ArchiveWorkspace{WorkspaceId: ws.Id, SkipArchiveScript: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ReopenSession(cx, id); client.Code(err) != domestiquev1.ErrorCode_ERROR_CODE_NOT_FOUND {
+		t.Fatalf("closed session survived archiving: %v", err)
+	}
+}
+
 func TestDeleteWorkspace(t *testing.T) {
 	e := newEnv(t)
 	c := e.dial()
@@ -1044,5 +1087,27 @@ func TestImportWorkspace(t *testing.T) {
 	}
 	if _, err := c.Transcript(cx, r4); client.Code(err) != domestiquev1.ErrorCode_ERROR_CODE_NOT_FOUND {
 		t.Fatalf("deleted archived import's session: %v", err)
+	}
+}
+
+func TestServerInfoCountsLocalClients(t *testing.T) {
+	e := newEnv(t)
+	cx := ctx(t)
+	first, other := e.dial(), e.dial()
+	info, err := first.ServerInfo(cx)
+	if err != nil || info.LocalClients != 2 {
+		t.Fatalf("with two clients: %v, %v", info, err)
+	}
+	other.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err = first.ServerInfo(cx)
+		if err == nil && info.LocalClients == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after one hung up: %v, %v", info, err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

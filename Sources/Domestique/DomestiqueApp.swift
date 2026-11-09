@@ -121,6 +121,20 @@ struct AppCommands: Commands {
             Button("Clone from GitHub…") { app.showGitHubPicker = true }
                 .keyboardShortcut("o", modifiers: [.command, .option])
         }
+        // Replaces the system Close item, whose ⌘W would close the only window and so quit the app.
+        CommandGroup(replacing: .saveItem) {
+            Button(app.settingsRoute == nil ? "Close Tab" : "Close Settings") {
+                if app.settingsRoute != nil {
+                    app.settingsRoute = nil
+                } else {
+                    app.selectedWorkspaceModel?.closeSelectedTab()
+                }
+            }
+            .keyboardShortcut("w", modifiers: .command)
+            .disabled(app.settingsRoute == nil && app.selectedWorkspaceModel == nil)
+            Button("Close Window") { NSApp.keyWindow?.performClose(nil) }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+        }
         CommandGroup(after: .sidebar) {
             Button("Toggle Sidebar") { app.sidebarVisible.toggle() }
                 .keyboardShortcut("\\", modifiers: .command)

@@ -1730,6 +1730,7 @@ type Request struct {
 	//	*Request_UpdateSession
 	//	*Request_ListModels
 	//	*Request_GetTranscript
+	//	*Request_ReopenSession
 	//	*Request_GetDiff
 	//	*Request_ListFiles
 	//	*Request_ReadFile
@@ -1982,6 +1983,15 @@ func (x *Request) GetGetTranscript() *GetTranscript {
 	if x != nil {
 		if x, ok := x.Command.(*Request_GetTranscript); ok {
 			return x.GetTranscript
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetReopenSession() *ReopenSession {
+	if x != nil {
+		if x, ok := x.Command.(*Request_ReopenSession); ok {
+			return x.ReopenSession
 		}
 	}
 	return nil
@@ -2260,6 +2270,10 @@ type Request_GetTranscript struct {
 	GetTranscript *GetTranscript `protobuf:"bytes,48,opt,name=get_transcript,json=getTranscript,proto3,oneof"`
 }
 
+type Request_ReopenSession struct {
+	ReopenSession *ReopenSession `protobuf:"bytes,49,opt,name=reopen_session,json=reopenSession,proto3,oneof"`
+}
+
 type Request_GetDiff struct {
 	GetDiff *GetDiff `protobuf:"bytes,60,opt,name=get_diff,json=getDiff,proto3,oneof"`
 }
@@ -2386,6 +2400,8 @@ func (*Request_UpdateSession) isRequest_Command() {}
 func (*Request_ListModels) isRequest_Command() {}
 
 func (*Request_GetTranscript) isRequest_Command() {}
+
+func (*Request_ReopenSession) isRequest_Command() {}
 
 func (*Request_GetDiff) isRequest_Command() {}
 
@@ -3008,8 +3024,10 @@ type ServerInfo struct {
 	Providers []Provider `protobuf:"varint,6,rep,packed,name=providers,proto3,enum=domestique.v1.Provider" json:"providers,omitempty"`
 	// Sandbox services this server can create workspaces' machines on (no account details).
 	SandboxProviders []*SandboxProvider `protobuf:"bytes,7,rep,name=sandbox_providers,json=sandboxProviders,proto3" json:"sandbox_providers,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Connections on the trusted local listener, the asking client included. 0 from older servers.
+	LocalClients  uint32 `protobuf:"varint,8,opt,name=local_clients,json=localClients,proto3" json:"local_clients,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerInfo) Reset() {
@@ -3089,6 +3107,13 @@ func (x *ServerInfo) GetSandboxProviders() []*SandboxProvider {
 		return x.SandboxProviders
 	}
 	return nil
+}
+
+func (x *ServerInfo) GetLocalClients() uint32 {
+	if x != nil {
+		return x.LocalClients
+	}
+	return 0
 }
 
 type Subscribe struct {
@@ -5497,8 +5522,10 @@ type Session struct {
 	CreatedAtMs       int64           `protobuf:"varint,9,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
 	Activity          SessionActivity `protobuf:"varint,10,opt,name=activity,proto3,enum=domestique.v1.SessionActivity" json:"activity,omitempty"`
 	// Highest persisted transcript seq.
-	LastSeq       uint64 `protobuf:"varint,11,opt,name=last_seq,json=lastSeq,proto3" json:"last_seq,omitempty"`
-	Status        string `protobuf:"bytes,12,opt,name=status,proto3" json:"status,omitempty"`
+	LastSeq uint64 `protobuf:"varint,11,opt,name=last_seq,json=lastSeq,proto3" json:"last_seq,omitempty"`
+	Status  string `protobuf:"bytes,12,opt,name=status,proto3" json:"status,omitempty"`
+	// Set while the session is closed with its history kept. Closed sessions aren't listed or streamed.
+	ClosedAtMs    int64 `protobuf:"varint,13,opt,name=closed_at_ms,json=closedAtMs,proto3" json:"closed_at_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5617,6 +5644,13 @@ func (x *Session) GetStatus() string {
 	return ""
 }
 
+func (x *Session) GetClosedAtMs() int64 {
+	if x != nil {
+		return x.ClosedAtMs
+	}
+	return 0
+}
+
 type OpenSession struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Ignored inside CreateWorkspace.
@@ -5712,8 +5746,11 @@ func (x *OpenSession) GetId() string {
 }
 
 type CloseSession struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Keep the transcript so ReopenSession can bring the session back. It's kept until the workspace
+	// is archived or deleted. Otherwise the session and its history are deleted.
+	KeepHistory   bool `protobuf:"varint,2,opt,name=keep_history,json=keepHistory,proto3" json:"keep_history,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5755,6 +5792,58 @@ func (x *CloseSession) GetSessionId() string {
 	return ""
 }
 
+func (x *CloseSession) GetKeepHistory() bool {
+	if x != nil {
+		return x.KeepHistory
+	}
+	return false
+}
+
+// Brings back a session closed with keep_history, with its transcript and agent session.
+type ReopenSession struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReopenSession) Reset() {
+	*x = ReopenSession{}
+	mi := &file_domestique_v1_domestique_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReopenSession) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReopenSession) ProtoMessage() {}
+
+func (x *ReopenSession) ProtoReflect() protoreflect.Message {
+	mi := &file_domestique_v1_domestique_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReopenSession.ProtoReflect.Descriptor instead.
+func (*ReopenSession) Descriptor() ([]byte, []int) {
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ReopenSession) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type Attachment struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
@@ -5766,7 +5855,7 @@ type Attachment struct {
 
 func (x *Attachment) Reset() {
 	*x = Attachment{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[51]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5778,7 +5867,7 @@ func (x *Attachment) String() string {
 func (*Attachment) ProtoMessage() {}
 
 func (x *Attachment) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[51]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5791,7 +5880,7 @@ func (x *Attachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
 func (*Attachment) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{51}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Attachment) GetData() []byte {
@@ -5826,7 +5915,7 @@ type SendMessage struct {
 
 func (x *SendMessage) Reset() {
 	*x = SendMessage{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[52]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5838,7 +5927,7 @@ func (x *SendMessage) String() string {
 func (*SendMessage) ProtoMessage() {}
 
 func (x *SendMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[52]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5851,7 +5940,7 @@ func (x *SendMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessage.ProtoReflect.Descriptor instead.
 func (*SendMessage) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{52}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *SendMessage) GetSessionId() string {
@@ -5884,7 +5973,7 @@ type Interrupt struct {
 
 func (x *Interrupt) Reset() {
 	*x = Interrupt{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[53]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5896,7 +5985,7 @@ func (x *Interrupt) String() string {
 func (*Interrupt) ProtoMessage() {}
 
 func (x *Interrupt) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[53]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5909,7 +5998,7 @@ func (x *Interrupt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interrupt.ProtoReflect.Descriptor instead.
 func (*Interrupt) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{53}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *Interrupt) GetSessionId() string {
@@ -5932,7 +6021,7 @@ type RespondApproval struct {
 
 func (x *RespondApproval) Reset() {
 	*x = RespondApproval{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[54]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5944,7 +6033,7 @@ func (x *RespondApproval) String() string {
 func (*RespondApproval) ProtoMessage() {}
 
 func (x *RespondApproval) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[54]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5957,7 +6046,7 @@ func (x *RespondApproval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondApproval.ProtoReflect.Descriptor instead.
 func (*RespondApproval) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{54}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *RespondApproval) GetSessionId() string {
@@ -6000,7 +6089,7 @@ type AnswerQuestion struct {
 
 func (x *AnswerQuestion) Reset() {
 	*x = AnswerQuestion{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[55]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6012,7 +6101,7 @@ func (x *AnswerQuestion) String() string {
 func (*AnswerQuestion) ProtoMessage() {}
 
 func (x *AnswerQuestion) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[55]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6025,7 +6114,7 @@ func (x *AnswerQuestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerQuestion.ProtoReflect.Descriptor instead.
 func (*AnswerQuestion) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{55}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *AnswerQuestion) GetSessionId() string {
@@ -6062,7 +6151,7 @@ type UpdateSession struct {
 
 func (x *UpdateSession) Reset() {
 	*x = UpdateSession{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[56]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6074,7 +6163,7 @@ func (x *UpdateSession) String() string {
 func (*UpdateSession) ProtoMessage() {}
 
 func (x *UpdateSession) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[56]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6087,7 +6176,7 @@ func (x *UpdateSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSession.ProtoReflect.Descriptor instead.
 func (*UpdateSession) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{56}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *UpdateSession) GetSessionId() string {
@@ -6134,7 +6223,7 @@ type ListModels struct {
 
 func (x *ListModels) Reset() {
 	*x = ListModels{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[57]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6146,7 +6235,7 @@ func (x *ListModels) String() string {
 func (*ListModels) ProtoMessage() {}
 
 func (x *ListModels) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[57]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6159,7 +6248,7 @@ func (x *ListModels) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModels.ProtoReflect.Descriptor instead.
 func (*ListModels) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{57}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListModels) GetProvider() Provider {
@@ -6183,7 +6272,7 @@ type ModelOption struct {
 
 func (x *ModelOption) Reset() {
 	*x = ModelOption{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[58]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6195,7 +6284,7 @@ func (x *ModelOption) String() string {
 func (*ModelOption) ProtoMessage() {}
 
 func (x *ModelOption) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[58]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6208,7 +6297,7 @@ func (x *ModelOption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelOption.ProtoReflect.Descriptor instead.
 func (*ModelOption) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{58}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ModelOption) GetId() string {
@@ -6262,7 +6351,7 @@ type ModelList struct {
 
 func (x *ModelList) Reset() {
 	*x = ModelList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[59]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6274,7 +6363,7 @@ func (x *ModelList) String() string {
 func (*ModelList) ProtoMessage() {}
 
 func (x *ModelList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[59]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6287,7 +6376,7 @@ func (x *ModelList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelList.ProtoReflect.Descriptor instead.
 func (*ModelList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{59}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ModelList) GetModels() []*ModelOption {
@@ -6310,7 +6399,7 @@ type GetTranscript struct {
 
 func (x *GetTranscript) Reset() {
 	*x = GetTranscript{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[60]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6322,7 +6411,7 @@ func (x *GetTranscript) String() string {
 func (*GetTranscript) ProtoMessage() {}
 
 func (x *GetTranscript) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[60]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6335,7 +6424,7 @@ func (x *GetTranscript) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTranscript.ProtoReflect.Descriptor instead.
 func (*GetTranscript) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{60}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetTranscript) GetSessionId() string {
@@ -6371,7 +6460,7 @@ type TranscriptPage struct {
 
 func (x *TranscriptPage) Reset() {
 	*x = TranscriptPage{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[61]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6383,7 +6472,7 @@ func (x *TranscriptPage) String() string {
 func (*TranscriptPage) ProtoMessage() {}
 
 func (x *TranscriptPage) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[61]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6396,7 +6485,7 @@ func (x *TranscriptPage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptPage.ProtoReflect.Descriptor instead.
 func (*TranscriptPage) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{61}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *TranscriptPage) GetEntries() []*TranscriptEntry {
@@ -6434,7 +6523,7 @@ type TranscriptEntry struct {
 
 func (x *TranscriptEntry) Reset() {
 	*x = TranscriptEntry{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[62]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6446,7 +6535,7 @@ func (x *TranscriptEntry) String() string {
 func (*TranscriptEntry) ProtoMessage() {}
 
 func (x *TranscriptEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[62]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6459,7 +6548,7 @@ func (x *TranscriptEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptEntry.ProtoReflect.Descriptor instead.
 func (*TranscriptEntry) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{62}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *TranscriptEntry) GetSeq() uint64 {
@@ -6505,7 +6594,7 @@ type TranscriptItem struct {
 
 func (x *TranscriptItem) Reset() {
 	*x = TranscriptItem{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[63]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6517,7 +6606,7 @@ func (x *TranscriptItem) String() string {
 func (*TranscriptItem) ProtoMessage() {}
 
 func (x *TranscriptItem) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[63]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6530,7 +6619,7 @@ func (x *TranscriptItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptItem.ProtoReflect.Descriptor instead.
 func (*TranscriptItem) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{63}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *TranscriptItem) GetId() string {
@@ -6714,7 +6803,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[64]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6726,7 +6815,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[64]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6739,7 +6828,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{64}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ToolCall) GetName() string {
@@ -6802,7 +6891,7 @@ type FileChange struct {
 
 func (x *FileChange) Reset() {
 	*x = FileChange{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[65]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6814,7 +6903,7 @@ func (x *FileChange) String() string {
 func (*FileChange) ProtoMessage() {}
 
 func (x *FileChange) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[65]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6827,7 +6916,7 @@ func (x *FileChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileChange.ProtoReflect.Descriptor instead.
 func (*FileChange) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{65}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *FileChange) GetPath() string {
@@ -6860,7 +6949,7 @@ type ApprovalRequest struct {
 
 func (x *ApprovalRequest) Reset() {
 	*x = ApprovalRequest{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[66]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6872,7 +6961,7 @@ func (x *ApprovalRequest) String() string {
 func (*ApprovalRequest) ProtoMessage() {}
 
 func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[66]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6885,7 +6974,7 @@ func (x *ApprovalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalRequest.ProtoReflect.Descriptor instead.
 func (*ApprovalRequest) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{66}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ApprovalRequest) GetRequestId() string {
@@ -6943,7 +7032,7 @@ type AgentQuestion struct {
 
 func (x *AgentQuestion) Reset() {
 	*x = AgentQuestion{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[67]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6955,7 +7044,7 @@ func (x *AgentQuestion) String() string {
 func (*AgentQuestion) ProtoMessage() {}
 
 func (x *AgentQuestion) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[67]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6968,7 +7057,7 @@ func (x *AgentQuestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentQuestion.ProtoReflect.Descriptor instead.
 func (*AgentQuestion) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{67}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *AgentQuestion) GetId() string {
@@ -7016,7 +7105,7 @@ type QuestionOption struct {
 
 func (x *QuestionOption) Reset() {
 	*x = QuestionOption{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[68]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7028,7 +7117,7 @@ func (x *QuestionOption) String() string {
 func (*QuestionOption) ProtoMessage() {}
 
 func (x *QuestionOption) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[68]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7041,7 +7130,7 @@ func (x *QuestionOption) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuestionOption.ProtoReflect.Descriptor instead.
 func (*QuestionOption) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{68}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *QuestionOption) GetLabel() string {
@@ -7072,7 +7161,7 @@ type TurnSummary struct {
 
 func (x *TurnSummary) Reset() {
 	*x = TurnSummary{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[69]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7084,7 +7173,7 @@ func (x *TurnSummary) String() string {
 func (*TurnSummary) ProtoMessage() {}
 
 func (x *TurnSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[69]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7097,7 +7186,7 @@ func (x *TurnSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TurnSummary.ProtoReflect.Descriptor instead.
 func (*TurnSummary) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{69}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *TurnSummary) GetDurationMs() int64 {
@@ -7167,7 +7256,7 @@ type AgentTask struct {
 
 func (x *AgentTask) Reset() {
 	*x = AgentTask{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[70]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7179,7 +7268,7 @@ func (x *AgentTask) String() string {
 func (*AgentTask) ProtoMessage() {}
 
 func (x *AgentTask) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[70]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7192,7 +7281,7 @@ func (x *AgentTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentTask.ProtoReflect.Descriptor instead.
 func (*AgentTask) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{70}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *AgentTask) GetId() string {
@@ -7310,7 +7399,7 @@ type AgentTaskStep struct {
 
 func (x *AgentTaskStep) Reset() {
 	*x = AgentTaskStep{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[71]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7322,7 +7411,7 @@ func (x *AgentTaskStep) String() string {
 func (*AgentTaskStep) ProtoMessage() {}
 
 func (x *AgentTaskStep) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[71]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7335,7 +7424,7 @@ func (x *AgentTaskStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentTaskStep.ProtoReflect.Descriptor instead.
 func (*AgentTaskStep) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{71}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *AgentTaskStep) GetName() string {
@@ -7374,7 +7463,7 @@ type RateLimit struct {
 
 func (x *RateLimit) Reset() {
 	*x = RateLimit{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[72]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7386,7 +7475,7 @@ func (x *RateLimit) String() string {
 func (*RateLimit) ProtoMessage() {}
 
 func (x *RateLimit) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[72]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7399,7 +7488,7 @@ func (x *RateLimit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RateLimit.ProtoReflect.Descriptor instead.
 func (*RateLimit) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{72}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *RateLimit) GetUsedFraction() float64 {
@@ -7476,7 +7565,7 @@ type RateLimitWindow struct {
 
 func (x *RateLimitWindow) Reset() {
 	*x = RateLimitWindow{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[73]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7488,7 +7577,7 @@ func (x *RateLimitWindow) String() string {
 func (*RateLimitWindow) ProtoMessage() {}
 
 func (x *RateLimitWindow) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[73]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7501,7 +7590,7 @@ func (x *RateLimitWindow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RateLimitWindow.ProtoReflect.Descriptor instead.
 func (*RateLimitWindow) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{73}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *RateLimitWindow) GetId() string {
@@ -7557,7 +7646,7 @@ type GetDiff struct {
 
 func (x *GetDiff) Reset() {
 	*x = GetDiff{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[74]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7569,7 +7658,7 @@ func (x *GetDiff) String() string {
 func (*GetDiff) ProtoMessage() {}
 
 func (x *GetDiff) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[74]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7582,7 +7671,7 @@ func (x *GetDiff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDiff.ProtoReflect.Descriptor instead.
 func (*GetDiff) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{74}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetDiff) GetWorkspaceId() string {
@@ -7612,7 +7701,7 @@ type Diff struct {
 
 func (x *Diff) Reset() {
 	*x = Diff{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[75]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7624,7 +7713,7 @@ func (x *Diff) String() string {
 func (*Diff) ProtoMessage() {}
 
 func (x *Diff) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[75]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7637,7 +7726,7 @@ func (x *Diff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Diff.ProtoReflect.Descriptor instead.
 func (*Diff) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{75}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *Diff) GetBase() string {
@@ -7684,7 +7773,7 @@ type FileDiff struct {
 
 func (x *FileDiff) Reset() {
 	*x = FileDiff{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[76]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7696,7 +7785,7 @@ func (x *FileDiff) String() string {
 func (*FileDiff) ProtoMessage() {}
 
 func (x *FileDiff) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[76]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7709,7 +7798,7 @@ func (x *FileDiff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileDiff.ProtoReflect.Descriptor instead.
 func (*FileDiff) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{76}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *FileDiff) GetPath() string {
@@ -7770,7 +7859,7 @@ type ListFiles struct {
 
 func (x *ListFiles) Reset() {
 	*x = ListFiles{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[77]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7782,7 +7871,7 @@ func (x *ListFiles) String() string {
 func (*ListFiles) ProtoMessage() {}
 
 func (x *ListFiles) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[77]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7795,7 +7884,7 @@ func (x *ListFiles) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFiles.ProtoReflect.Descriptor instead.
 func (*ListFiles) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{77}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ListFiles) GetWorkspaceId() string {
@@ -7815,7 +7904,7 @@ type FileList struct {
 
 func (x *FileList) Reset() {
 	*x = FileList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[78]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7827,7 +7916,7 @@ func (x *FileList) String() string {
 func (*FileList) ProtoMessage() {}
 
 func (x *FileList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[78]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7840,7 +7929,7 @@ func (x *FileList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileList.ProtoReflect.Descriptor instead.
 func (*FileList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{78}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *FileList) GetPaths() []string {
@@ -7863,7 +7952,7 @@ type ReadFile struct {
 
 func (x *ReadFile) Reset() {
 	*x = ReadFile{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[79]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7875,7 +7964,7 @@ func (x *ReadFile) String() string {
 func (*ReadFile) ProtoMessage() {}
 
 func (x *ReadFile) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[79]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7888,7 +7977,7 @@ func (x *ReadFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFile.ProtoReflect.Descriptor instead.
 func (*ReadFile) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{79}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ReadFile) GetWorkspaceId() string {
@@ -7923,7 +8012,7 @@ type FileContent struct {
 
 func (x *FileContent) Reset() {
 	*x = FileContent{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[80]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7935,7 +8024,7 @@ func (x *FileContent) String() string {
 func (*FileContent) ProtoMessage() {}
 
 func (x *FileContent) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[80]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7948,7 +8037,7 @@ func (x *FileContent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileContent.ProtoReflect.Descriptor instead.
 func (*FileContent) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{80}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *FileContent) GetPath() string {
@@ -7982,7 +8071,7 @@ type CreateToken struct {
 
 func (x *CreateToken) Reset() {
 	*x = CreateToken{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[81]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7994,7 +8083,7 @@ func (x *CreateToken) String() string {
 func (*CreateToken) ProtoMessage() {}
 
 func (x *CreateToken) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[81]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8007,7 +8096,7 @@ func (x *CreateToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateToken.ProtoReflect.Descriptor instead.
 func (*CreateToken) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{81}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *CreateToken) GetName() string {
@@ -8035,7 +8124,7 @@ type CreatedToken struct {
 
 func (x *CreatedToken) Reset() {
 	*x = CreatedToken{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[82]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8047,7 +8136,7 @@ func (x *CreatedToken) String() string {
 func (*CreatedToken) ProtoMessage() {}
 
 func (x *CreatedToken) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[82]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8060,7 +8149,7 @@ func (x *CreatedToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatedToken.ProtoReflect.Descriptor instead.
 func (*CreatedToken) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{82}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *CreatedToken) GetInfo() *TokenInfo {
@@ -8085,7 +8174,7 @@ type ListTokens struct {
 
 func (x *ListTokens) Reset() {
 	*x = ListTokens{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[83]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8097,7 +8186,7 @@ func (x *ListTokens) String() string {
 func (*ListTokens) ProtoMessage() {}
 
 func (x *ListTokens) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[83]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8110,7 +8199,7 @@ func (x *ListTokens) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokens.ProtoReflect.Descriptor instead.
 func (*ListTokens) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{83}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{84}
 }
 
 type TokenList struct {
@@ -8122,7 +8211,7 @@ type TokenList struct {
 
 func (x *TokenList) Reset() {
 	*x = TokenList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[84]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8134,7 +8223,7 @@ func (x *TokenList) String() string {
 func (*TokenList) ProtoMessage() {}
 
 func (x *TokenList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[84]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8147,7 +8236,7 @@ func (x *TokenList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenList.ProtoReflect.Descriptor instead.
 func (*TokenList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{84}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *TokenList) GetTokens() []*TokenInfo {
@@ -8170,7 +8259,7 @@ type TokenInfo struct {
 
 func (x *TokenInfo) Reset() {
 	*x = TokenInfo{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[85]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8182,7 +8271,7 @@ func (x *TokenInfo) String() string {
 func (*TokenInfo) ProtoMessage() {}
 
 func (x *TokenInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[85]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8195,7 +8284,7 @@ func (x *TokenInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenInfo.ProtoReflect.Descriptor instead.
 func (*TokenInfo) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{85}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *TokenInfo) GetId() string {
@@ -8242,7 +8331,7 @@ type RevokeToken struct {
 
 func (x *RevokeToken) Reset() {
 	*x = RevokeToken{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[86]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8254,7 +8343,7 @@ func (x *RevokeToken) String() string {
 func (*RevokeToken) ProtoMessage() {}
 
 func (x *RevokeToken) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[86]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8267,7 +8356,7 @@ func (x *RevokeToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeToken.ProtoReflect.Descriptor instead.
 func (*RevokeToken) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{86}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *RevokeToken) GetTokenId() string {
@@ -8296,7 +8385,7 @@ type SandboxProvider struct {
 
 func (x *SandboxProvider) Reset() {
 	*x = SandboxProvider{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[87]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8308,7 +8397,7 @@ func (x *SandboxProvider) String() string {
 func (*SandboxProvider) ProtoMessage() {}
 
 func (x *SandboxProvider) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[87]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8321,7 +8410,7 @@ func (x *SandboxProvider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxProvider.ProtoReflect.Descriptor instead.
 func (*SandboxProvider) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{87}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *SandboxProvider) GetId() string {
@@ -8391,7 +8480,7 @@ type SandboxDefaults struct {
 
 func (x *SandboxDefaults) Reset() {
 	*x = SandboxDefaults{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[88]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8403,7 +8492,7 @@ func (x *SandboxDefaults) String() string {
 func (*SandboxDefaults) ProtoMessage() {}
 
 func (x *SandboxDefaults) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[88]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8416,7 +8505,7 @@ func (x *SandboxDefaults) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxDefaults.ProtoReflect.Descriptor instead.
 func (*SandboxDefaults) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{88}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *SandboxDefaults) GetMachineType() string {
@@ -8472,7 +8561,7 @@ type SandboxAccount struct {
 
 func (x *SandboxAccount) Reset() {
 	*x = SandboxAccount{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[89]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8484,7 +8573,7 @@ func (x *SandboxAccount) String() string {
 func (*SandboxAccount) ProtoMessage() {}
 
 func (x *SandboxAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[89]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8497,7 +8586,7 @@ func (x *SandboxAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxAccount.ProtoReflect.Descriptor instead.
 func (*SandboxAccount) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{89}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *SandboxAccount) GetLogin() string {
@@ -8567,7 +8656,7 @@ type SandboxMachineType struct {
 
 func (x *SandboxMachineType) Reset() {
 	*x = SandboxMachineType{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[90]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8579,7 +8668,7 @@ func (x *SandboxMachineType) String() string {
 func (*SandboxMachineType) ProtoMessage() {}
 
 func (x *SandboxMachineType) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[90]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8592,7 +8681,7 @@ func (x *SandboxMachineType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxMachineType.ProtoReflect.Descriptor instead.
 func (*SandboxMachineType) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{90}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *SandboxMachineType) GetType() string {
@@ -8625,7 +8714,7 @@ type SandboxProviderList struct {
 
 func (x *SandboxProviderList) Reset() {
 	*x = SandboxProviderList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[91]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8637,7 +8726,7 @@ func (x *SandboxProviderList) String() string {
 func (*SandboxProviderList) ProtoMessage() {}
 
 func (x *SandboxProviderList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[91]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8650,7 +8739,7 @@ func (x *SandboxProviderList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxProviderList.ProtoReflect.Descriptor instead.
 func (*SandboxProviderList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{91}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *SandboxProviderList) GetProviders() []*SandboxProvider {
@@ -8670,7 +8759,7 @@ type ListSandboxProviders struct {
 
 func (x *ListSandboxProviders) Reset() {
 	*x = ListSandboxProviders{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[92]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8682,7 +8771,7 @@ func (x *ListSandboxProviders) String() string {
 func (*ListSandboxProviders) ProtoMessage() {}
 
 func (x *ListSandboxProviders) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[92]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8695,7 +8784,7 @@ func (x *ListSandboxProviders) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSandboxProviders.ProtoReflect.Descriptor instead.
 func (*ListSandboxProviders) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{92}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ListSandboxProviders) GetCheckAccount() bool {
@@ -8717,7 +8806,7 @@ type SaveSandboxProvider struct {
 
 func (x *SaveSandboxProvider) Reset() {
 	*x = SaveSandboxProvider{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[93]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8729,7 +8818,7 @@ func (x *SaveSandboxProvider) String() string {
 func (*SaveSandboxProvider) ProtoMessage() {}
 
 func (x *SaveSandboxProvider) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[93]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8742,7 +8831,7 @@ func (x *SaveSandboxProvider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveSandboxProvider.ProtoReflect.Descriptor instead.
 func (*SaveSandboxProvider) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{93}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *SaveSandboxProvider) GetProvider() *SandboxProvider {
@@ -8768,7 +8857,7 @@ type RemoveSandboxProvider struct {
 
 func (x *RemoveSandboxProvider) Reset() {
 	*x = RemoveSandboxProvider{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[94]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8780,7 +8869,7 @@ func (x *RemoveSandboxProvider) String() string {
 func (*RemoveSandboxProvider) ProtoMessage() {}
 
 func (x *RemoveSandboxProvider) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[94]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8793,7 +8882,7 @@ func (x *RemoveSandboxProvider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSandboxProvider.ProtoReflect.Descriptor instead.
 func (*RemoveSandboxProvider) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{94}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *RemoveSandboxProvider) GetProviderId() string {
@@ -8837,7 +8926,7 @@ type Sandbox struct {
 
 func (x *Sandbox) Reset() {
 	*x = Sandbox{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[95]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8849,7 +8938,7 @@ func (x *Sandbox) String() string {
 func (*Sandbox) ProtoMessage() {}
 
 func (x *Sandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[95]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8862,7 +8951,7 @@ func (x *Sandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sandbox.ProtoReflect.Descriptor instead.
 func (*Sandbox) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{95}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *Sandbox) GetId() string {
@@ -9021,7 +9110,7 @@ type SandboxList struct {
 
 func (x *SandboxList) Reset() {
 	*x = SandboxList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[96]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9033,7 +9122,7 @@ func (x *SandboxList) String() string {
 func (*SandboxList) ProtoMessage() {}
 
 func (x *SandboxList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[96]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9046,7 +9135,7 @@ func (x *SandboxList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxList.ProtoReflect.Descriptor instead.
 func (*SandboxList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{96}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *SandboxList) GetSandboxes() []*Sandbox {
@@ -9065,7 +9154,7 @@ type ListSandboxes struct {
 
 func (x *ListSandboxes) Reset() {
 	*x = ListSandboxes{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[97]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9077,7 +9166,7 @@ func (x *ListSandboxes) String() string {
 func (*ListSandboxes) ProtoMessage() {}
 
 func (x *ListSandboxes) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[97]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9090,7 +9179,7 @@ func (x *ListSandboxes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSandboxes.ProtoReflect.Descriptor instead.
 func (*ListSandboxes) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{97}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *ListSandboxes) GetProviderId() string {
@@ -9110,7 +9199,7 @@ type GetSandbox struct {
 
 func (x *GetSandbox) Reset() {
 	*x = GetSandbox{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[98]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9122,7 +9211,7 @@ func (x *GetSandbox) String() string {
 func (*GetSandbox) ProtoMessage() {}
 
 func (x *GetSandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[98]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9135,7 +9224,7 @@ func (x *GetSandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandbox.ProtoReflect.Descriptor instead.
 func (*GetSandbox) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{98}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *GetSandbox) GetProviderId() string {
@@ -9172,7 +9261,7 @@ type CreateSandbox struct {
 
 func (x *CreateSandbox) Reset() {
 	*x = CreateSandbox{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[99]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9184,7 +9273,7 @@ func (x *CreateSandbox) String() string {
 func (*CreateSandbox) ProtoMessage() {}
 
 func (x *CreateSandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[99]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9197,7 +9286,7 @@ func (x *CreateSandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSandbox.ProtoReflect.Descriptor instead.
 func (*CreateSandbox) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{99}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *CreateSandbox) GetProviderId() string {
@@ -9270,7 +9359,7 @@ type ChangeSandbox struct {
 
 func (x *ChangeSandbox) Reset() {
 	*x = ChangeSandbox{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[100]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9282,7 +9371,7 @@ func (x *ChangeSandbox) String() string {
 func (*ChangeSandbox) ProtoMessage() {}
 
 func (x *ChangeSandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[100]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9295,7 +9384,7 @@ func (x *ChangeSandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangeSandbox.ProtoReflect.Descriptor instead.
 func (*ChangeSandbox) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{100}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ChangeSandbox) GetProviderId() string {
@@ -9349,7 +9438,7 @@ type OpenSandboxAccess struct {
 
 func (x *OpenSandboxAccess) Reset() {
 	*x = OpenSandboxAccess{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[101]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9361,7 +9450,7 @@ func (x *OpenSandboxAccess) String() string {
 func (*OpenSandboxAccess) ProtoMessage() {}
 
 func (x *OpenSandboxAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[101]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9374,7 +9463,7 @@ func (x *OpenSandboxAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenSandboxAccess.ProtoReflect.Descriptor instead.
 func (*OpenSandboxAccess) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{101}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *OpenSandboxAccess) GetProviderId() string {
@@ -9458,7 +9547,7 @@ type DesktopAccess struct {
 
 func (x *DesktopAccess) Reset() {
 	*x = DesktopAccess{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[102]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9470,7 +9559,7 @@ func (x *DesktopAccess) String() string {
 func (*DesktopAccess) ProtoMessage() {}
 
 func (x *DesktopAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[102]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9483,7 +9572,7 @@ func (x *DesktopAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DesktopAccess.ProtoReflect.Descriptor instead.
 func (*DesktopAccess) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{102}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *DesktopAccess) GetDark() bool {
@@ -9505,7 +9594,7 @@ type PortAccess struct {
 
 func (x *PortAccess) Reset() {
 	*x = PortAccess{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[103]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9517,7 +9606,7 @@ func (x *PortAccess) String() string {
 func (*PortAccess) ProtoMessage() {}
 
 func (x *PortAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[103]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9530,7 +9619,7 @@ func (x *PortAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortAccess.ProtoReflect.Descriptor instead.
 func (*PortAccess) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{103}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *PortAccess) GetPort() uint32 {
@@ -9569,7 +9658,7 @@ type SandboxAccess struct {
 
 func (x *SandboxAccess) Reset() {
 	*x = SandboxAccess{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[104]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9581,7 +9670,7 @@ func (x *SandboxAccess) String() string {
 func (*SandboxAccess) ProtoMessage() {}
 
 func (x *SandboxAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[104]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9594,7 +9683,7 @@ func (x *SandboxAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxAccess.ProtoReflect.Descriptor instead.
 func (*SandboxAccess) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{104}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *SandboxAccess) GetSshUser() string {
@@ -9657,7 +9746,7 @@ type McpServer struct {
 
 func (x *McpServer) Reset() {
 	*x = McpServer{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[105]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9669,7 +9758,7 @@ func (x *McpServer) String() string {
 func (*McpServer) ProtoMessage() {}
 
 func (x *McpServer) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[105]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9682,7 +9771,7 @@ func (x *McpServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use McpServer.ProtoReflect.Descriptor instead.
 func (*McpServer) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{105}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *McpServer) GetId() string {
@@ -9764,7 +9853,7 @@ type McpServerList struct {
 
 func (x *McpServerList) Reset() {
 	*x = McpServerList{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[106]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9776,7 +9865,7 @@ func (x *McpServerList) String() string {
 func (*McpServerList) ProtoMessage() {}
 
 func (x *McpServerList) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[106]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9789,7 +9878,7 @@ func (x *McpServerList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use McpServerList.ProtoReflect.Descriptor instead.
 func (*McpServerList) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{106}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *McpServerList) GetServers() []*McpServer {
@@ -9807,7 +9896,7 @@ type ListMcpServers struct {
 
 func (x *ListMcpServers) Reset() {
 	*x = ListMcpServers{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[107]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9819,7 +9908,7 @@ func (x *ListMcpServers) String() string {
 func (*ListMcpServers) ProtoMessage() {}
 
 func (x *ListMcpServers) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[107]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9832,7 +9921,7 @@ func (x *ListMcpServers) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMcpServers.ProtoReflect.Descriptor instead.
 func (*ListMcpServers) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{107}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{108}
 }
 
 // Creates or replaces a server (ADMIN). Secrets not named here keep their stored values.
@@ -9849,7 +9938,7 @@ type SaveMcpServer struct {
 
 func (x *SaveMcpServer) Reset() {
 	*x = SaveMcpServer{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[108]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9861,7 +9950,7 @@ func (x *SaveMcpServer) String() string {
 func (*SaveMcpServer) ProtoMessage() {}
 
 func (x *SaveMcpServer) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[108]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9874,7 +9963,7 @@ func (x *SaveMcpServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveMcpServer.ProtoReflect.Descriptor instead.
 func (*SaveMcpServer) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{108}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *SaveMcpServer) GetServer() *McpServer {
@@ -9921,7 +10010,7 @@ type RemoveMcpServer struct {
 
 func (x *RemoveMcpServer) Reset() {
 	*x = RemoveMcpServer{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[109]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9933,7 +10022,7 @@ func (x *RemoveMcpServer) String() string {
 func (*RemoveMcpServer) ProtoMessage() {}
 
 func (x *RemoveMcpServer) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[109]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9946,7 +10035,7 @@ func (x *RemoveMcpServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMcpServer.ProtoReflect.Descriptor instead.
 func (*RemoveMcpServer) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{109}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *RemoveMcpServer) GetServerId() string {
@@ -9965,7 +10054,7 @@ type ResolveMcpConfig struct {
 
 func (x *ResolveMcpConfig) Reset() {
 	*x = ResolveMcpConfig{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[110]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9977,7 +10066,7 @@ func (x *ResolveMcpConfig) String() string {
 func (*ResolveMcpConfig) ProtoMessage() {}
 
 func (x *ResolveMcpConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[110]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9990,7 +10079,7 @@ func (x *ResolveMcpConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveMcpConfig.ProtoReflect.Descriptor instead.
 func (*ResolveMcpConfig) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{110}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{111}
 }
 
 type McpConfig struct {
@@ -10004,7 +10093,7 @@ type McpConfig struct {
 
 func (x *McpConfig) Reset() {
 	*x = McpConfig{}
-	mi := &file_domestique_v1_domestique_proto_msgTypes[111]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10016,7 +10105,7 @@ func (x *McpConfig) String() string {
 func (*McpConfig) ProtoMessage() {}
 
 func (x *McpConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_domestique_v1_domestique_proto_msgTypes[111]
+	mi := &file_domestique_v1_domestique_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10029,7 +10118,7 @@ func (x *McpConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use McpConfig.ProtoReflect.Descriptor instead.
 func (*McpConfig) Descriptor() ([]byte, []int) {
-	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{111}
+	return file_domestique_v1_domestique_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *McpConfig) GetJson() string {
@@ -10090,7 +10179,7 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\x0fsubscription_id\x18\x01 \x01(\x04R\x0esubscriptionId\x12\x1d\n" +
 	"\n" +
 	"resume_seq\x18\x02 \x01(\x04R\tresumeSeq\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd0\x17\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x97\x18\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12F\n" +
@@ -10115,7 +10204,8 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\x0eupdate_session\x18. \x01(\v2\x1c.domestique.v1.UpdateSessionH\x00R\rupdateSession\x12<\n" +
 	"\vlist_models\x18/ \x01(\v2\x19.domestique.v1.ListModelsH\x00R\n" +
 	"listModels\x12E\n" +
-	"\x0eget_transcript\x180 \x01(\v2\x1c.domestique.v1.GetTranscriptH\x00R\rgetTranscript\x123\n" +
+	"\x0eget_transcript\x180 \x01(\v2\x1c.domestique.v1.GetTranscriptH\x00R\rgetTranscript\x12E\n" +
+	"\x0ereopen_session\x181 \x01(\v2\x1c.domestique.v1.ReopenSessionH\x00R\rreopenSession\x123\n" +
 	"\bget_diff\x18< \x01(\v2\x16.domestique.v1.GetDiffH\x00R\agetDiff\x129\n" +
 	"\n" +
 	"list_files\x18= \x01(\v2\x18.domestique.v1.ListFilesH\x00R\tlistFiles\x126\n" +
@@ -10183,7 +10273,7 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\x05Error\x12,\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x18.domestique.v1.ErrorCodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x0f\n" +
-	"\rGetServerInfo\"\xba\x02\n" +
+	"\rGetServerInfo\"\xdf\x02\n" +
 	"\n" +
 	"ServerInfo\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\x12\x1f\n" +
@@ -10193,7 +10283,8 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12'\n" +
 	"\x0fworkspaces_root\x18\x05 \x01(\tR\x0eworkspacesRoot\x125\n" +
 	"\tproviders\x18\x06 \x03(\x0e2\x17.domestique.v1.ProviderR\tproviders\x12K\n" +
-	"\x11sandbox_providers\x18\a \x03(\v2\x1e.domestique.v1.SandboxProviderR\x10sandboxProviders\"\xc0\x01\n" +
+	"\x11sandbox_providers\x18\a \x03(\v2\x1e.domestique.v1.SandboxProviderR\x10sandboxProviders\x12#\n" +
+	"\rlocal_clients\x18\b \x01(\rR\flocalClients\"\xc0\x01\n" +
 	"\tSubscribe\x125\n" +
 	"\x06server\x18\x01 \x01(\v2\x1b.domestique.v1.ServerTargetH\x00R\x06server\x128\n" +
 	"\asession\x18\x02 \x01(\v2\x1c.domestique.v1.SessionTargetH\x00R\asession\x128\n" +
@@ -10370,7 +10461,7 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\bsessions\x18\x02 \x03(\v2\x1c.domestique.v1.ImportSessionR\bsessions\"v\n" +
 	"\rImportSession\x120\n" +
 	"\asession\x18\x01 \x01(\v2\x16.domestique.v1.SessionR\asession\x123\n" +
-	"\x05items\x18\x02 \x03(\v2\x1d.domestique.v1.TranscriptItemR\x05items\"\xc0\x03\n" +
+	"\x05items\x18\x02 \x03(\v2\x1d.domestique.v1.TranscriptItemR\x05items\"\xe2\x03\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x14\n" +
@@ -10384,7 +10475,9 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\bactivity\x18\n" +
 	" \x01(\x0e2\x1e.domestique.v1.SessionActivityR\bactivity\x12\x19\n" +
 	"\blast_seq\x18\v \x01(\x04R\alastSeq\x12\x16\n" +
-	"\x06status\x18\f \x01(\tR\x06status\"\x81\x02\n" +
+	"\x06status\x18\f \x01(\tR\x06status\x12 \n" +
+	"\fclosed_at_ms\x18\r \x01(\x03R\n" +
+	"closedAtMs\"\x81\x02\n" +
 	"\vOpenSession\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x123\n" +
 	"\bprovider\x18\x02 \x01(\x0e2\x17.domestique.v1.ProviderR\bprovider\x12\x14\n" +
@@ -10392,8 +10485,12 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\x06effort\x18\x04 \x01(\tR\x06effort\x12F\n" +
 	"\x0fpermission_mode\x18\x05 \x01(\x0e2\x1d.domestique.v1.PermissionModeR\x0epermissionMode\x12\x14\n" +
 	"\x05title\x18\x06 \x01(\tR\x05title\x12\x0e\n" +
-	"\x02id\x18\a \x01(\tR\x02id\"-\n" +
+	"\x02id\x18\a \x01(\tR\x02id\"P\n" +
 	"\fCloseSession\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
+	"\fkeep_history\x18\x02 \x01(\bR\vkeepHistory\".\n" +
+	"\rReopenSession\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"[\n" +
 	"\n" +
@@ -10900,7 +10997,7 @@ func file_domestique_v1_domestique_proto_rawDescGZIP() []byte {
 }
 
 var file_domestique_v1_domestique_proto_enumTypes = make([]protoimpl.EnumInfo, 19)
-var file_domestique_v1_domestique_proto_msgTypes = make([]protoimpl.MessageInfo, 118)
+var file_domestique_v1_domestique_proto_msgTypes = make([]protoimpl.MessageInfo, 119)
 var file_domestique_v1_domestique_proto_goTypes = []any{
 	(ProtocolVersion)(0),          // 0: domestique.v1.ProtocolVersion
 	(ErrorCode)(0),                // 1: domestique.v1.ErrorCode
@@ -10972,73 +11069,74 @@ var file_domestique_v1_domestique_proto_goTypes = []any{
 	(*Session)(nil),               // 67: domestique.v1.Session
 	(*OpenSession)(nil),           // 68: domestique.v1.OpenSession
 	(*CloseSession)(nil),          // 69: domestique.v1.CloseSession
-	(*Attachment)(nil),            // 70: domestique.v1.Attachment
-	(*SendMessage)(nil),           // 71: domestique.v1.SendMessage
-	(*Interrupt)(nil),             // 72: domestique.v1.Interrupt
-	(*RespondApproval)(nil),       // 73: domestique.v1.RespondApproval
-	(*AnswerQuestion)(nil),        // 74: domestique.v1.AnswerQuestion
-	(*UpdateSession)(nil),         // 75: domestique.v1.UpdateSession
-	(*ListModels)(nil),            // 76: domestique.v1.ListModels
-	(*ModelOption)(nil),           // 77: domestique.v1.ModelOption
-	(*ModelList)(nil),             // 78: domestique.v1.ModelList
-	(*GetTranscript)(nil),         // 79: domestique.v1.GetTranscript
-	(*TranscriptPage)(nil),        // 80: domestique.v1.TranscriptPage
-	(*TranscriptEntry)(nil),       // 81: domestique.v1.TranscriptEntry
-	(*TranscriptItem)(nil),        // 82: domestique.v1.TranscriptItem
-	(*ToolCall)(nil),              // 83: domestique.v1.ToolCall
-	(*FileChange)(nil),            // 84: domestique.v1.FileChange
-	(*ApprovalRequest)(nil),       // 85: domestique.v1.ApprovalRequest
-	(*AgentQuestion)(nil),         // 86: domestique.v1.AgentQuestion
-	(*QuestionOption)(nil),        // 87: domestique.v1.QuestionOption
-	(*TurnSummary)(nil),           // 88: domestique.v1.TurnSummary
-	(*AgentTask)(nil),             // 89: domestique.v1.AgentTask
-	(*AgentTaskStep)(nil),         // 90: domestique.v1.AgentTaskStep
-	(*RateLimit)(nil),             // 91: domestique.v1.RateLimit
-	(*RateLimitWindow)(nil),       // 92: domestique.v1.RateLimitWindow
-	(*GetDiff)(nil),               // 93: domestique.v1.GetDiff
-	(*Diff)(nil),                  // 94: domestique.v1.Diff
-	(*FileDiff)(nil),              // 95: domestique.v1.FileDiff
-	(*ListFiles)(nil),             // 96: domestique.v1.ListFiles
-	(*FileList)(nil),              // 97: domestique.v1.FileList
-	(*ReadFile)(nil),              // 98: domestique.v1.ReadFile
-	(*FileContent)(nil),           // 99: domestique.v1.FileContent
-	(*CreateToken)(nil),           // 100: domestique.v1.CreateToken
-	(*CreatedToken)(nil),          // 101: domestique.v1.CreatedToken
-	(*ListTokens)(nil),            // 102: domestique.v1.ListTokens
-	(*TokenList)(nil),             // 103: domestique.v1.TokenList
-	(*TokenInfo)(nil),             // 104: domestique.v1.TokenInfo
-	(*RevokeToken)(nil),           // 105: domestique.v1.RevokeToken
-	(*SandboxProvider)(nil),       // 106: domestique.v1.SandboxProvider
-	(*SandboxDefaults)(nil),       // 107: domestique.v1.SandboxDefaults
-	(*SandboxAccount)(nil),        // 108: domestique.v1.SandboxAccount
-	(*SandboxMachineType)(nil),    // 109: domestique.v1.SandboxMachineType
-	(*SandboxProviderList)(nil),   // 110: domestique.v1.SandboxProviderList
-	(*ListSandboxProviders)(nil),  // 111: domestique.v1.ListSandboxProviders
-	(*SaveSandboxProvider)(nil),   // 112: domestique.v1.SaveSandboxProvider
-	(*RemoveSandboxProvider)(nil), // 113: domestique.v1.RemoveSandboxProvider
-	(*Sandbox)(nil),               // 114: domestique.v1.Sandbox
-	(*SandboxList)(nil),           // 115: domestique.v1.SandboxList
-	(*ListSandboxes)(nil),         // 116: domestique.v1.ListSandboxes
-	(*GetSandbox)(nil),            // 117: domestique.v1.GetSandbox
-	(*CreateSandbox)(nil),         // 118: domestique.v1.CreateSandbox
-	(*ChangeSandbox)(nil),         // 119: domestique.v1.ChangeSandbox
-	(*OpenSandboxAccess)(nil),     // 120: domestique.v1.OpenSandboxAccess
-	(*DesktopAccess)(nil),         // 121: domestique.v1.DesktopAccess
-	(*PortAccess)(nil),            // 122: domestique.v1.PortAccess
-	(*SandboxAccess)(nil),         // 123: domestique.v1.SandboxAccess
-	(*McpServer)(nil),             // 124: domestique.v1.McpServer
-	(*McpServerList)(nil),         // 125: domestique.v1.McpServerList
-	(*ListMcpServers)(nil),        // 126: domestique.v1.ListMcpServers
-	(*SaveMcpServer)(nil),         // 127: domestique.v1.SaveMcpServer
-	(*RemoveMcpServer)(nil),       // 128: domestique.v1.RemoveMcpServer
-	(*ResolveMcpConfig)(nil),      // 129: domestique.v1.ResolveMcpConfig
-	(*McpConfig)(nil),             // 130: domestique.v1.McpConfig
-	nil,                           // 131: domestique.v1.ProcessTarget.EnvEntry
-	nil,                           // 132: domestique.v1.AnswerQuestion.AnswersEntry
-	nil,                           // 133: domestique.v1.ApprovalRequest.AnswersEntry
-	nil,                           // 134: domestique.v1.CreateSandbox.LabelsEntry
-	nil,                           // 135: domestique.v1.SaveMcpServer.SetEnvEntry
-	nil,                           // 136: domestique.v1.SaveMcpServer.SetHeadersEntry
+	(*ReopenSession)(nil),         // 70: domestique.v1.ReopenSession
+	(*Attachment)(nil),            // 71: domestique.v1.Attachment
+	(*SendMessage)(nil),           // 72: domestique.v1.SendMessage
+	(*Interrupt)(nil),             // 73: domestique.v1.Interrupt
+	(*RespondApproval)(nil),       // 74: domestique.v1.RespondApproval
+	(*AnswerQuestion)(nil),        // 75: domestique.v1.AnswerQuestion
+	(*UpdateSession)(nil),         // 76: domestique.v1.UpdateSession
+	(*ListModels)(nil),            // 77: domestique.v1.ListModels
+	(*ModelOption)(nil),           // 78: domestique.v1.ModelOption
+	(*ModelList)(nil),             // 79: domestique.v1.ModelList
+	(*GetTranscript)(nil),         // 80: domestique.v1.GetTranscript
+	(*TranscriptPage)(nil),        // 81: domestique.v1.TranscriptPage
+	(*TranscriptEntry)(nil),       // 82: domestique.v1.TranscriptEntry
+	(*TranscriptItem)(nil),        // 83: domestique.v1.TranscriptItem
+	(*ToolCall)(nil),              // 84: domestique.v1.ToolCall
+	(*FileChange)(nil),            // 85: domestique.v1.FileChange
+	(*ApprovalRequest)(nil),       // 86: domestique.v1.ApprovalRequest
+	(*AgentQuestion)(nil),         // 87: domestique.v1.AgentQuestion
+	(*QuestionOption)(nil),        // 88: domestique.v1.QuestionOption
+	(*TurnSummary)(nil),           // 89: domestique.v1.TurnSummary
+	(*AgentTask)(nil),             // 90: domestique.v1.AgentTask
+	(*AgentTaskStep)(nil),         // 91: domestique.v1.AgentTaskStep
+	(*RateLimit)(nil),             // 92: domestique.v1.RateLimit
+	(*RateLimitWindow)(nil),       // 93: domestique.v1.RateLimitWindow
+	(*GetDiff)(nil),               // 94: domestique.v1.GetDiff
+	(*Diff)(nil),                  // 95: domestique.v1.Diff
+	(*FileDiff)(nil),              // 96: domestique.v1.FileDiff
+	(*ListFiles)(nil),             // 97: domestique.v1.ListFiles
+	(*FileList)(nil),              // 98: domestique.v1.FileList
+	(*ReadFile)(nil),              // 99: domestique.v1.ReadFile
+	(*FileContent)(nil),           // 100: domestique.v1.FileContent
+	(*CreateToken)(nil),           // 101: domestique.v1.CreateToken
+	(*CreatedToken)(nil),          // 102: domestique.v1.CreatedToken
+	(*ListTokens)(nil),            // 103: domestique.v1.ListTokens
+	(*TokenList)(nil),             // 104: domestique.v1.TokenList
+	(*TokenInfo)(nil),             // 105: domestique.v1.TokenInfo
+	(*RevokeToken)(nil),           // 106: domestique.v1.RevokeToken
+	(*SandboxProvider)(nil),       // 107: domestique.v1.SandboxProvider
+	(*SandboxDefaults)(nil),       // 108: domestique.v1.SandboxDefaults
+	(*SandboxAccount)(nil),        // 109: domestique.v1.SandboxAccount
+	(*SandboxMachineType)(nil),    // 110: domestique.v1.SandboxMachineType
+	(*SandboxProviderList)(nil),   // 111: domestique.v1.SandboxProviderList
+	(*ListSandboxProviders)(nil),  // 112: domestique.v1.ListSandboxProviders
+	(*SaveSandboxProvider)(nil),   // 113: domestique.v1.SaveSandboxProvider
+	(*RemoveSandboxProvider)(nil), // 114: domestique.v1.RemoveSandboxProvider
+	(*Sandbox)(nil),               // 115: domestique.v1.Sandbox
+	(*SandboxList)(nil),           // 116: domestique.v1.SandboxList
+	(*ListSandboxes)(nil),         // 117: domestique.v1.ListSandboxes
+	(*GetSandbox)(nil),            // 118: domestique.v1.GetSandbox
+	(*CreateSandbox)(nil),         // 119: domestique.v1.CreateSandbox
+	(*ChangeSandbox)(nil),         // 120: domestique.v1.ChangeSandbox
+	(*OpenSandboxAccess)(nil),     // 121: domestique.v1.OpenSandboxAccess
+	(*DesktopAccess)(nil),         // 122: domestique.v1.DesktopAccess
+	(*PortAccess)(nil),            // 123: domestique.v1.PortAccess
+	(*SandboxAccess)(nil),         // 124: domestique.v1.SandboxAccess
+	(*McpServer)(nil),             // 125: domestique.v1.McpServer
+	(*McpServerList)(nil),         // 126: domestique.v1.McpServerList
+	(*ListMcpServers)(nil),        // 127: domestique.v1.ListMcpServers
+	(*SaveMcpServer)(nil),         // 128: domestique.v1.SaveMcpServer
+	(*RemoveMcpServer)(nil),       // 129: domestique.v1.RemoveMcpServer
+	(*ResolveMcpConfig)(nil),      // 130: domestique.v1.ResolveMcpConfig
+	(*McpConfig)(nil),             // 131: domestique.v1.McpConfig
+	nil,                           // 132: domestique.v1.ProcessTarget.EnvEntry
+	nil,                           // 133: domestique.v1.AnswerQuestion.AnswersEntry
+	nil,                           // 134: domestique.v1.ApprovalRequest.AnswersEntry
+	nil,                           // 135: domestique.v1.CreateSandbox.LabelsEntry
+	nil,                           // 136: domestique.v1.SaveMcpServer.SetEnvEntry
+	nil,                           // 137: domestique.v1.SaveMcpServer.SetHeadersEntry
 }
 var file_domestique_v1_domestique_proto_depIdxs = []int32{
 	21,  // 0: domestique.v1.ClientFrame.hello:type_name -> domestique.v1.Hello
@@ -11067,151 +11165,152 @@ var file_domestique_v1_domestique_proto_depIdxs = []int32{
 	65,  // 23: domestique.v1.Request.import_workspace:type_name -> domestique.v1.ImportWorkspace
 	68,  // 24: domestique.v1.Request.open_session:type_name -> domestique.v1.OpenSession
 	69,  // 25: domestique.v1.Request.close_session:type_name -> domestique.v1.CloseSession
-	71,  // 26: domestique.v1.Request.send_message:type_name -> domestique.v1.SendMessage
-	72,  // 27: domestique.v1.Request.interrupt:type_name -> domestique.v1.Interrupt
-	73,  // 28: domestique.v1.Request.respond_approval:type_name -> domestique.v1.RespondApproval
-	74,  // 29: domestique.v1.Request.answer_question:type_name -> domestique.v1.AnswerQuestion
-	75,  // 30: domestique.v1.Request.update_session:type_name -> domestique.v1.UpdateSession
-	76,  // 31: domestique.v1.Request.list_models:type_name -> domestique.v1.ListModels
-	79,  // 32: domestique.v1.Request.get_transcript:type_name -> domestique.v1.GetTranscript
-	93,  // 33: domestique.v1.Request.get_diff:type_name -> domestique.v1.GetDiff
-	96,  // 34: domestique.v1.Request.list_files:type_name -> domestique.v1.ListFiles
-	98,  // 35: domestique.v1.Request.read_file:type_name -> domestique.v1.ReadFile
-	111, // 36: domestique.v1.Request.list_sandbox_providers:type_name -> domestique.v1.ListSandboxProviders
-	112, // 37: domestique.v1.Request.save_sandbox_provider:type_name -> domestique.v1.SaveSandboxProvider
-	113, // 38: domestique.v1.Request.remove_sandbox_provider:type_name -> domestique.v1.RemoveSandboxProvider
-	116, // 39: domestique.v1.Request.list_sandboxes:type_name -> domestique.v1.ListSandboxes
-	117, // 40: domestique.v1.Request.get_sandbox:type_name -> domestique.v1.GetSandbox
-	118, // 41: domestique.v1.Request.create_sandbox:type_name -> domestique.v1.CreateSandbox
-	119, // 42: domestique.v1.Request.change_sandbox:type_name -> domestique.v1.ChangeSandbox
-	120, // 43: domestique.v1.Request.open_sandbox_access:type_name -> domestique.v1.OpenSandboxAccess
-	126, // 44: domestique.v1.Request.list_mcp_servers:type_name -> domestique.v1.ListMcpServers
-	127, // 45: domestique.v1.Request.save_mcp_server:type_name -> domestique.v1.SaveMcpServer
-	128, // 46: domestique.v1.Request.remove_mcp_server:type_name -> domestique.v1.RemoveMcpServer
-	129, // 47: domestique.v1.Request.resolve_mcp_config:type_name -> domestique.v1.ResolveMcpConfig
-	38,  // 48: domestique.v1.Request.process_input:type_name -> domestique.v1.ProcessInput
-	39,  // 49: domestique.v1.Request.resize_process:type_name -> domestique.v1.ResizeProcess
-	40,  // 50: domestique.v1.Request.signal_process:type_name -> domestique.v1.SignalProcess
-	100, // 51: domestique.v1.Request.create_token:type_name -> domestique.v1.CreateToken
-	102, // 52: domestique.v1.Request.list_tokens:type_name -> domestique.v1.ListTokens
-	105, // 53: domestique.v1.Request.revoke_token:type_name -> domestique.v1.RevokeToken
-	30,  // 54: domestique.v1.Response.error:type_name -> domestique.v1.Error
-	29,  // 55: domestique.v1.Response.empty:type_name -> domestique.v1.Empty
-	32,  // 56: domestique.v1.Response.server_info:type_name -> domestique.v1.ServerInfo
-	43,  // 57: domestique.v1.Response.subscribe:type_name -> domestique.v1.SubscribeResult
-	55,  // 58: domestique.v1.Response.repositories:type_name -> domestique.v1.RepositoryList
-	54,  // 59: domestique.v1.Response.repository:type_name -> domestique.v1.Repository
-	60,  // 60: domestique.v1.Response.workspaces:type_name -> domestique.v1.WorkspaceList
-	59,  // 61: domestique.v1.Response.workspace:type_name -> domestique.v1.Workspace
-	67,  // 62: domestique.v1.Response.session:type_name -> domestique.v1.Session
-	78,  // 63: domestique.v1.Response.models:type_name -> domestique.v1.ModelList
-	80,  // 64: domestique.v1.Response.transcript:type_name -> domestique.v1.TranscriptPage
-	94,  // 65: domestique.v1.Response.diff:type_name -> domestique.v1.Diff
-	97,  // 66: domestique.v1.Response.files:type_name -> domestique.v1.FileList
-	99,  // 67: domestique.v1.Response.file:type_name -> domestique.v1.FileContent
-	101, // 68: domestique.v1.Response.created_token:type_name -> domestique.v1.CreatedToken
-	103, // 69: domestique.v1.Response.tokens:type_name -> domestique.v1.TokenList
-	110, // 70: domestique.v1.Response.sandbox_providers:type_name -> domestique.v1.SandboxProviderList
-	106, // 71: domestique.v1.Response.sandbox_provider:type_name -> domestique.v1.SandboxProvider
-	115, // 72: domestique.v1.Response.sandboxes:type_name -> domestique.v1.SandboxList
-	114, // 73: domestique.v1.Response.sandbox:type_name -> domestique.v1.Sandbox
-	123, // 74: domestique.v1.Response.sandbox_access:type_name -> domestique.v1.SandboxAccess
-	125, // 75: domestique.v1.Response.mcp_servers:type_name -> domestique.v1.McpServerList
-	124, // 76: domestique.v1.Response.mcp_server:type_name -> domestique.v1.McpServer
-	130, // 77: domestique.v1.Response.mcp_config:type_name -> domestique.v1.McpConfig
-	1,   // 78: domestique.v1.Error.code:type_name -> domestique.v1.ErrorCode
-	5,   // 79: domestique.v1.ServerInfo.providers:type_name -> domestique.v1.Provider
-	106, // 80: domestique.v1.ServerInfo.sandbox_providers:type_name -> domestique.v1.SandboxProvider
-	41,  // 81: domestique.v1.Subscribe.server:type_name -> domestique.v1.ServerTarget
-	42,  // 82: domestique.v1.Subscribe.session:type_name -> domestique.v1.SessionTarget
-	34,  // 83: domestique.v1.Subscribe.process:type_name -> domestique.v1.ProcessTarget
-	131, // 84: domestique.v1.ProcessTarget.env:type_name -> domestique.v1.ProcessTarget.EnvEntry
-	2,   // 85: domestique.v1.ProcessOutput.stream:type_name -> domestique.v1.OutputStream
-	46,  // 86: domestique.v1.Event.server_snapshot:type_name -> domestique.v1.ServerSnapshot
-	54,  // 87: domestique.v1.Event.repository_upserted:type_name -> domestique.v1.Repository
-	59,  // 88: domestique.v1.Event.workspace_upserted:type_name -> domestique.v1.Workspace
-	67,  // 89: domestique.v1.Event.session_upserted:type_name -> domestique.v1.Session
-	82,  // 90: domestique.v1.Event.item_upserted:type_name -> domestique.v1.TranscriptItem
-	47,  // 91: domestique.v1.Event.append_text:type_name -> domestique.v1.AppendText
-	48,  // 92: domestique.v1.Event.turn_started:type_name -> domestique.v1.TurnStarted
-	49,  // 93: domestique.v1.Event.turn_ended:type_name -> domestique.v1.TurnEnded
-	50,  // 94: domestique.v1.Event.status:type_name -> domestique.v1.StatusLine
-	89,  // 95: domestique.v1.Event.task:type_name -> domestique.v1.AgentTask
-	91,  // 96: domestique.v1.Event.rate_limit:type_name -> domestique.v1.RateLimit
-	51,  // 97: domestique.v1.Event.exited:type_name -> domestique.v1.AgentExited
-	52,  // 98: domestique.v1.Event.auto_turn_started:type_name -> domestique.v1.AutoTurnStarted
-	78,  // 99: domestique.v1.Event.models:type_name -> domestique.v1.ModelList
-	53,  // 100: domestique.v1.Event.replay_done:type_name -> domestique.v1.ReplayDone
-	35,  // 101: domestique.v1.Event.process_started:type_name -> domestique.v1.ProcessStarted
-	36,  // 102: domestique.v1.Event.process_output:type_name -> domestique.v1.ProcessOutput
-	37,  // 103: domestique.v1.Event.process_exited:type_name -> domestique.v1.ProcessExited
-	54,  // 104: domestique.v1.ServerSnapshot.repositories:type_name -> domestique.v1.Repository
-	59,  // 105: domestique.v1.ServerSnapshot.workspaces:type_name -> domestique.v1.Workspace
-	67,  // 106: domestique.v1.ServerSnapshot.sessions:type_name -> domestique.v1.Session
-	88,  // 107: domestique.v1.TurnEnded.summary:type_name -> domestique.v1.TurnSummary
-	3,   // 108: domestique.v1.Repository.ship_mode:type_name -> domestique.v1.ShipMode
-	54,  // 109: domestique.v1.RepositoryList.repositories:type_name -> domestique.v1.Repository
-	4,   // 110: domestique.v1.Workspace.state:type_name -> domestique.v1.WorkspaceState
-	59,  // 111: domestique.v1.WorkspaceList.workspaces:type_name -> domestique.v1.Workspace
-	68,  // 112: domestique.v1.CreateWorkspace.session:type_name -> domestique.v1.OpenSession
-	59,  // 113: domestique.v1.ImportWorkspace.workspace:type_name -> domestique.v1.Workspace
-	66,  // 114: domestique.v1.ImportWorkspace.sessions:type_name -> domestique.v1.ImportSession
-	67,  // 115: domestique.v1.ImportSession.session:type_name -> domestique.v1.Session
-	82,  // 116: domestique.v1.ImportSession.items:type_name -> domestique.v1.TranscriptItem
-	5,   // 117: domestique.v1.Session.provider:type_name -> domestique.v1.Provider
-	6,   // 118: domestique.v1.Session.permission_mode:type_name -> domestique.v1.PermissionMode
-	7,   // 119: domestique.v1.Session.activity:type_name -> domestique.v1.SessionActivity
-	5,   // 120: domestique.v1.OpenSession.provider:type_name -> domestique.v1.Provider
-	6,   // 121: domestique.v1.OpenSession.permission_mode:type_name -> domestique.v1.PermissionMode
-	70,  // 122: domestique.v1.SendMessage.attachments:type_name -> domestique.v1.Attachment
-	8,   // 123: domestique.v1.RespondApproval.decision:type_name -> domestique.v1.Decision
-	132, // 124: domestique.v1.AnswerQuestion.answers:type_name -> domestique.v1.AnswerQuestion.AnswersEntry
-	6,   // 125: domestique.v1.UpdateSession.permission_mode:type_name -> domestique.v1.PermissionMode
-	5,   // 126: domestique.v1.ListModels.provider:type_name -> domestique.v1.Provider
-	77,  // 127: domestique.v1.ModelList.models:type_name -> domestique.v1.ModelOption
-	81,  // 128: domestique.v1.TranscriptPage.entries:type_name -> domestique.v1.TranscriptEntry
-	82,  // 129: domestique.v1.TranscriptEntry.item:type_name -> domestique.v1.TranscriptItem
-	83,  // 130: domestique.v1.TranscriptItem.tool:type_name -> domestique.v1.ToolCall
-	85,  // 131: domestique.v1.TranscriptItem.approval:type_name -> domestique.v1.ApprovalRequest
-	88,  // 132: domestique.v1.TranscriptItem.turn_summary:type_name -> domestique.v1.TurnSummary
-	9,   // 133: domestique.v1.ToolCall.status:type_name -> domestique.v1.ToolStatus
-	84,  // 134: domestique.v1.ToolCall.file_changes:type_name -> domestique.v1.FileChange
-	10,  // 135: domestique.v1.ApprovalRequest.resolution:type_name -> domestique.v1.ApprovalResolution
-	86,  // 136: domestique.v1.ApprovalRequest.questions:type_name -> domestique.v1.AgentQuestion
-	133, // 137: domestique.v1.ApprovalRequest.answers:type_name -> domestique.v1.ApprovalRequest.AnswersEntry
-	87,  // 138: domestique.v1.AgentQuestion.options:type_name -> domestique.v1.QuestionOption
-	11,  // 139: domestique.v1.AgentTask.status:type_name -> domestique.v1.AgentTaskStatus
-	90,  // 140: domestique.v1.AgentTask.steps:type_name -> domestique.v1.AgentTaskStep
-	92,  // 141: domestique.v1.RateLimit.windows:type_name -> domestique.v1.RateLimitWindow
-	95,  // 142: domestique.v1.Diff.files:type_name -> domestique.v1.FileDiff
-	12,  // 143: domestique.v1.FileDiff.status:type_name -> domestique.v1.FileDiffStatus
-	13,  // 144: domestique.v1.CreateToken.scope:type_name -> domestique.v1.TokenScope
-	104, // 145: domestique.v1.CreatedToken.info:type_name -> domestique.v1.TokenInfo
-	104, // 146: domestique.v1.TokenList.tokens:type_name -> domestique.v1.TokenInfo
-	13,  // 147: domestique.v1.TokenInfo.scope:type_name -> domestique.v1.TokenScope
-	14,  // 148: domestique.v1.SandboxProvider.kind:type_name -> domestique.v1.SandboxKind
-	107, // 149: domestique.v1.SandboxProvider.defaults:type_name -> domestique.v1.SandboxDefaults
-	15,  // 150: domestique.v1.SandboxProvider.credential_source:type_name -> domestique.v1.SandboxCredentialSource
-	108, // 151: domestique.v1.SandboxProvider.account:type_name -> domestique.v1.SandboxAccount
-	109, // 152: domestique.v1.SandboxAccount.machine_types:type_name -> domestique.v1.SandboxMachineType
-	106, // 153: domestique.v1.SandboxProviderList.providers:type_name -> domestique.v1.SandboxProvider
-	106, // 154: domestique.v1.SaveSandboxProvider.provider:type_name -> domestique.v1.SandboxProvider
-	16,  // 155: domestique.v1.Sandbox.phase:type_name -> domestique.v1.SandboxPhase
-	114, // 156: domestique.v1.SandboxList.sandboxes:type_name -> domestique.v1.Sandbox
-	134, // 157: domestique.v1.CreateSandbox.labels:type_name -> domestique.v1.CreateSandbox.LabelsEntry
-	17,  // 158: domestique.v1.ChangeSandbox.action:type_name -> domestique.v1.SandboxAction
-	121, // 159: domestique.v1.OpenSandboxAccess.desktop:type_name -> domestique.v1.DesktopAccess
-	122, // 160: domestique.v1.OpenSandboxAccess.port:type_name -> domestique.v1.PortAccess
-	18,  // 161: domestique.v1.McpServer.transport:type_name -> domestique.v1.McpTransport
-	124, // 162: domestique.v1.McpServerList.servers:type_name -> domestique.v1.McpServer
-	124, // 163: domestique.v1.SaveMcpServer.server:type_name -> domestique.v1.McpServer
-	135, // 164: domestique.v1.SaveMcpServer.set_env:type_name -> domestique.v1.SaveMcpServer.SetEnvEntry
-	136, // 165: domestique.v1.SaveMcpServer.set_headers:type_name -> domestique.v1.SaveMcpServer.SetHeadersEntry
-	166, // [166:166] is the sub-list for method output_type
-	166, // [166:166] is the sub-list for method input_type
-	166, // [166:166] is the sub-list for extension type_name
-	166, // [166:166] is the sub-list for extension extendee
-	0,   // [0:166] is the sub-list for field type_name
+	72,  // 26: domestique.v1.Request.send_message:type_name -> domestique.v1.SendMessage
+	73,  // 27: domestique.v1.Request.interrupt:type_name -> domestique.v1.Interrupt
+	74,  // 28: domestique.v1.Request.respond_approval:type_name -> domestique.v1.RespondApproval
+	75,  // 29: domestique.v1.Request.answer_question:type_name -> domestique.v1.AnswerQuestion
+	76,  // 30: domestique.v1.Request.update_session:type_name -> domestique.v1.UpdateSession
+	77,  // 31: domestique.v1.Request.list_models:type_name -> domestique.v1.ListModels
+	80,  // 32: domestique.v1.Request.get_transcript:type_name -> domestique.v1.GetTranscript
+	70,  // 33: domestique.v1.Request.reopen_session:type_name -> domestique.v1.ReopenSession
+	94,  // 34: domestique.v1.Request.get_diff:type_name -> domestique.v1.GetDiff
+	97,  // 35: domestique.v1.Request.list_files:type_name -> domestique.v1.ListFiles
+	99,  // 36: domestique.v1.Request.read_file:type_name -> domestique.v1.ReadFile
+	112, // 37: domestique.v1.Request.list_sandbox_providers:type_name -> domestique.v1.ListSandboxProviders
+	113, // 38: domestique.v1.Request.save_sandbox_provider:type_name -> domestique.v1.SaveSandboxProvider
+	114, // 39: domestique.v1.Request.remove_sandbox_provider:type_name -> domestique.v1.RemoveSandboxProvider
+	117, // 40: domestique.v1.Request.list_sandboxes:type_name -> domestique.v1.ListSandboxes
+	118, // 41: domestique.v1.Request.get_sandbox:type_name -> domestique.v1.GetSandbox
+	119, // 42: domestique.v1.Request.create_sandbox:type_name -> domestique.v1.CreateSandbox
+	120, // 43: domestique.v1.Request.change_sandbox:type_name -> domestique.v1.ChangeSandbox
+	121, // 44: domestique.v1.Request.open_sandbox_access:type_name -> domestique.v1.OpenSandboxAccess
+	127, // 45: domestique.v1.Request.list_mcp_servers:type_name -> domestique.v1.ListMcpServers
+	128, // 46: domestique.v1.Request.save_mcp_server:type_name -> domestique.v1.SaveMcpServer
+	129, // 47: domestique.v1.Request.remove_mcp_server:type_name -> domestique.v1.RemoveMcpServer
+	130, // 48: domestique.v1.Request.resolve_mcp_config:type_name -> domestique.v1.ResolveMcpConfig
+	38,  // 49: domestique.v1.Request.process_input:type_name -> domestique.v1.ProcessInput
+	39,  // 50: domestique.v1.Request.resize_process:type_name -> domestique.v1.ResizeProcess
+	40,  // 51: domestique.v1.Request.signal_process:type_name -> domestique.v1.SignalProcess
+	101, // 52: domestique.v1.Request.create_token:type_name -> domestique.v1.CreateToken
+	103, // 53: domestique.v1.Request.list_tokens:type_name -> domestique.v1.ListTokens
+	106, // 54: domestique.v1.Request.revoke_token:type_name -> domestique.v1.RevokeToken
+	30,  // 55: domestique.v1.Response.error:type_name -> domestique.v1.Error
+	29,  // 56: domestique.v1.Response.empty:type_name -> domestique.v1.Empty
+	32,  // 57: domestique.v1.Response.server_info:type_name -> domestique.v1.ServerInfo
+	43,  // 58: domestique.v1.Response.subscribe:type_name -> domestique.v1.SubscribeResult
+	55,  // 59: domestique.v1.Response.repositories:type_name -> domestique.v1.RepositoryList
+	54,  // 60: domestique.v1.Response.repository:type_name -> domestique.v1.Repository
+	60,  // 61: domestique.v1.Response.workspaces:type_name -> domestique.v1.WorkspaceList
+	59,  // 62: domestique.v1.Response.workspace:type_name -> domestique.v1.Workspace
+	67,  // 63: domestique.v1.Response.session:type_name -> domestique.v1.Session
+	79,  // 64: domestique.v1.Response.models:type_name -> domestique.v1.ModelList
+	81,  // 65: domestique.v1.Response.transcript:type_name -> domestique.v1.TranscriptPage
+	95,  // 66: domestique.v1.Response.diff:type_name -> domestique.v1.Diff
+	98,  // 67: domestique.v1.Response.files:type_name -> domestique.v1.FileList
+	100, // 68: domestique.v1.Response.file:type_name -> domestique.v1.FileContent
+	102, // 69: domestique.v1.Response.created_token:type_name -> domestique.v1.CreatedToken
+	104, // 70: domestique.v1.Response.tokens:type_name -> domestique.v1.TokenList
+	111, // 71: domestique.v1.Response.sandbox_providers:type_name -> domestique.v1.SandboxProviderList
+	107, // 72: domestique.v1.Response.sandbox_provider:type_name -> domestique.v1.SandboxProvider
+	116, // 73: domestique.v1.Response.sandboxes:type_name -> domestique.v1.SandboxList
+	115, // 74: domestique.v1.Response.sandbox:type_name -> domestique.v1.Sandbox
+	124, // 75: domestique.v1.Response.sandbox_access:type_name -> domestique.v1.SandboxAccess
+	126, // 76: domestique.v1.Response.mcp_servers:type_name -> domestique.v1.McpServerList
+	125, // 77: domestique.v1.Response.mcp_server:type_name -> domestique.v1.McpServer
+	131, // 78: domestique.v1.Response.mcp_config:type_name -> domestique.v1.McpConfig
+	1,   // 79: domestique.v1.Error.code:type_name -> domestique.v1.ErrorCode
+	5,   // 80: domestique.v1.ServerInfo.providers:type_name -> domestique.v1.Provider
+	107, // 81: domestique.v1.ServerInfo.sandbox_providers:type_name -> domestique.v1.SandboxProvider
+	41,  // 82: domestique.v1.Subscribe.server:type_name -> domestique.v1.ServerTarget
+	42,  // 83: domestique.v1.Subscribe.session:type_name -> domestique.v1.SessionTarget
+	34,  // 84: domestique.v1.Subscribe.process:type_name -> domestique.v1.ProcessTarget
+	132, // 85: domestique.v1.ProcessTarget.env:type_name -> domestique.v1.ProcessTarget.EnvEntry
+	2,   // 86: domestique.v1.ProcessOutput.stream:type_name -> domestique.v1.OutputStream
+	46,  // 87: domestique.v1.Event.server_snapshot:type_name -> domestique.v1.ServerSnapshot
+	54,  // 88: domestique.v1.Event.repository_upserted:type_name -> domestique.v1.Repository
+	59,  // 89: domestique.v1.Event.workspace_upserted:type_name -> domestique.v1.Workspace
+	67,  // 90: domestique.v1.Event.session_upserted:type_name -> domestique.v1.Session
+	83,  // 91: domestique.v1.Event.item_upserted:type_name -> domestique.v1.TranscriptItem
+	47,  // 92: domestique.v1.Event.append_text:type_name -> domestique.v1.AppendText
+	48,  // 93: domestique.v1.Event.turn_started:type_name -> domestique.v1.TurnStarted
+	49,  // 94: domestique.v1.Event.turn_ended:type_name -> domestique.v1.TurnEnded
+	50,  // 95: domestique.v1.Event.status:type_name -> domestique.v1.StatusLine
+	90,  // 96: domestique.v1.Event.task:type_name -> domestique.v1.AgentTask
+	92,  // 97: domestique.v1.Event.rate_limit:type_name -> domestique.v1.RateLimit
+	51,  // 98: domestique.v1.Event.exited:type_name -> domestique.v1.AgentExited
+	52,  // 99: domestique.v1.Event.auto_turn_started:type_name -> domestique.v1.AutoTurnStarted
+	79,  // 100: domestique.v1.Event.models:type_name -> domestique.v1.ModelList
+	53,  // 101: domestique.v1.Event.replay_done:type_name -> domestique.v1.ReplayDone
+	35,  // 102: domestique.v1.Event.process_started:type_name -> domestique.v1.ProcessStarted
+	36,  // 103: domestique.v1.Event.process_output:type_name -> domestique.v1.ProcessOutput
+	37,  // 104: domestique.v1.Event.process_exited:type_name -> domestique.v1.ProcessExited
+	54,  // 105: domestique.v1.ServerSnapshot.repositories:type_name -> domestique.v1.Repository
+	59,  // 106: domestique.v1.ServerSnapshot.workspaces:type_name -> domestique.v1.Workspace
+	67,  // 107: domestique.v1.ServerSnapshot.sessions:type_name -> domestique.v1.Session
+	89,  // 108: domestique.v1.TurnEnded.summary:type_name -> domestique.v1.TurnSummary
+	3,   // 109: domestique.v1.Repository.ship_mode:type_name -> domestique.v1.ShipMode
+	54,  // 110: domestique.v1.RepositoryList.repositories:type_name -> domestique.v1.Repository
+	4,   // 111: domestique.v1.Workspace.state:type_name -> domestique.v1.WorkspaceState
+	59,  // 112: domestique.v1.WorkspaceList.workspaces:type_name -> domestique.v1.Workspace
+	68,  // 113: domestique.v1.CreateWorkspace.session:type_name -> domestique.v1.OpenSession
+	59,  // 114: domestique.v1.ImportWorkspace.workspace:type_name -> domestique.v1.Workspace
+	66,  // 115: domestique.v1.ImportWorkspace.sessions:type_name -> domestique.v1.ImportSession
+	67,  // 116: domestique.v1.ImportSession.session:type_name -> domestique.v1.Session
+	83,  // 117: domestique.v1.ImportSession.items:type_name -> domestique.v1.TranscriptItem
+	5,   // 118: domestique.v1.Session.provider:type_name -> domestique.v1.Provider
+	6,   // 119: domestique.v1.Session.permission_mode:type_name -> domestique.v1.PermissionMode
+	7,   // 120: domestique.v1.Session.activity:type_name -> domestique.v1.SessionActivity
+	5,   // 121: domestique.v1.OpenSession.provider:type_name -> domestique.v1.Provider
+	6,   // 122: domestique.v1.OpenSession.permission_mode:type_name -> domestique.v1.PermissionMode
+	71,  // 123: domestique.v1.SendMessage.attachments:type_name -> domestique.v1.Attachment
+	8,   // 124: domestique.v1.RespondApproval.decision:type_name -> domestique.v1.Decision
+	133, // 125: domestique.v1.AnswerQuestion.answers:type_name -> domestique.v1.AnswerQuestion.AnswersEntry
+	6,   // 126: domestique.v1.UpdateSession.permission_mode:type_name -> domestique.v1.PermissionMode
+	5,   // 127: domestique.v1.ListModels.provider:type_name -> domestique.v1.Provider
+	78,  // 128: domestique.v1.ModelList.models:type_name -> domestique.v1.ModelOption
+	82,  // 129: domestique.v1.TranscriptPage.entries:type_name -> domestique.v1.TranscriptEntry
+	83,  // 130: domestique.v1.TranscriptEntry.item:type_name -> domestique.v1.TranscriptItem
+	84,  // 131: domestique.v1.TranscriptItem.tool:type_name -> domestique.v1.ToolCall
+	86,  // 132: domestique.v1.TranscriptItem.approval:type_name -> domestique.v1.ApprovalRequest
+	89,  // 133: domestique.v1.TranscriptItem.turn_summary:type_name -> domestique.v1.TurnSummary
+	9,   // 134: domestique.v1.ToolCall.status:type_name -> domestique.v1.ToolStatus
+	85,  // 135: domestique.v1.ToolCall.file_changes:type_name -> domestique.v1.FileChange
+	10,  // 136: domestique.v1.ApprovalRequest.resolution:type_name -> domestique.v1.ApprovalResolution
+	87,  // 137: domestique.v1.ApprovalRequest.questions:type_name -> domestique.v1.AgentQuestion
+	134, // 138: domestique.v1.ApprovalRequest.answers:type_name -> domestique.v1.ApprovalRequest.AnswersEntry
+	88,  // 139: domestique.v1.AgentQuestion.options:type_name -> domestique.v1.QuestionOption
+	11,  // 140: domestique.v1.AgentTask.status:type_name -> domestique.v1.AgentTaskStatus
+	91,  // 141: domestique.v1.AgentTask.steps:type_name -> domestique.v1.AgentTaskStep
+	93,  // 142: domestique.v1.RateLimit.windows:type_name -> domestique.v1.RateLimitWindow
+	96,  // 143: domestique.v1.Diff.files:type_name -> domestique.v1.FileDiff
+	12,  // 144: domestique.v1.FileDiff.status:type_name -> domestique.v1.FileDiffStatus
+	13,  // 145: domestique.v1.CreateToken.scope:type_name -> domestique.v1.TokenScope
+	105, // 146: domestique.v1.CreatedToken.info:type_name -> domestique.v1.TokenInfo
+	105, // 147: domestique.v1.TokenList.tokens:type_name -> domestique.v1.TokenInfo
+	13,  // 148: domestique.v1.TokenInfo.scope:type_name -> domestique.v1.TokenScope
+	14,  // 149: domestique.v1.SandboxProvider.kind:type_name -> domestique.v1.SandboxKind
+	108, // 150: domestique.v1.SandboxProvider.defaults:type_name -> domestique.v1.SandboxDefaults
+	15,  // 151: domestique.v1.SandboxProvider.credential_source:type_name -> domestique.v1.SandboxCredentialSource
+	109, // 152: domestique.v1.SandboxProvider.account:type_name -> domestique.v1.SandboxAccount
+	110, // 153: domestique.v1.SandboxAccount.machine_types:type_name -> domestique.v1.SandboxMachineType
+	107, // 154: domestique.v1.SandboxProviderList.providers:type_name -> domestique.v1.SandboxProvider
+	107, // 155: domestique.v1.SaveSandboxProvider.provider:type_name -> domestique.v1.SandboxProvider
+	16,  // 156: domestique.v1.Sandbox.phase:type_name -> domestique.v1.SandboxPhase
+	115, // 157: domestique.v1.SandboxList.sandboxes:type_name -> domestique.v1.Sandbox
+	135, // 158: domestique.v1.CreateSandbox.labels:type_name -> domestique.v1.CreateSandbox.LabelsEntry
+	17,  // 159: domestique.v1.ChangeSandbox.action:type_name -> domestique.v1.SandboxAction
+	122, // 160: domestique.v1.OpenSandboxAccess.desktop:type_name -> domestique.v1.DesktopAccess
+	123, // 161: domestique.v1.OpenSandboxAccess.port:type_name -> domestique.v1.PortAccess
+	18,  // 162: domestique.v1.McpServer.transport:type_name -> domestique.v1.McpTransport
+	125, // 163: domestique.v1.McpServerList.servers:type_name -> domestique.v1.McpServer
+	125, // 164: domestique.v1.SaveMcpServer.server:type_name -> domestique.v1.McpServer
+	136, // 165: domestique.v1.SaveMcpServer.set_env:type_name -> domestique.v1.SaveMcpServer.SetEnvEntry
+	137, // 166: domestique.v1.SaveMcpServer.set_headers:type_name -> domestique.v1.SaveMcpServer.SetHeadersEntry
+	167, // [167:167] is the sub-list for method output_type
+	167, // [167:167] is the sub-list for method input_type
+	167, // [167:167] is the sub-list for extension type_name
+	167, // [167:167] is the sub-list for extension extendee
+	0,   // [0:167] is the sub-list for field type_name
 }
 
 func init() { file_domestique_v1_domestique_proto_init() }
@@ -11253,6 +11352,7 @@ func file_domestique_v1_domestique_proto_init() {
 		(*Request_UpdateSession)(nil),
 		(*Request_ListModels)(nil),
 		(*Request_GetTranscript)(nil),
+		(*Request_ReopenSession)(nil),
 		(*Request_GetDiff)(nil),
 		(*Request_ListFiles)(nil),
 		(*Request_ReadFile)(nil),
@@ -11329,8 +11429,8 @@ func file_domestique_v1_domestique_proto_init() {
 		(*Event_ProcessOutput)(nil),
 		(*Event_ProcessExited)(nil),
 	}
-	file_domestique_v1_domestique_proto_msgTypes[56].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[63].OneofWrappers = []any{
+	file_domestique_v1_domestique_proto_msgTypes[57].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[64].OneofWrappers = []any{
 		(*TranscriptItem_User)(nil),
 		(*TranscriptItem_Assistant)(nil),
 		(*TranscriptItem_Reasoning)(nil),
@@ -11341,25 +11441,25 @@ func file_domestique_v1_domestique_proto_init() {
 		(*TranscriptItem_TurnSummary)(nil),
 		(*TranscriptItem_Trigger)(nil),
 	}
-	file_domestique_v1_domestique_proto_msgTypes[69].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[88].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[93].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[95].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[99].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[70].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[89].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[94].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[96].OneofWrappers = []any{}
 	file_domestique_v1_domestique_proto_msgTypes[100].OneofWrappers = []any{}
-	file_domestique_v1_domestique_proto_msgTypes[101].OneofWrappers = []any{
+	file_domestique_v1_domestique_proto_msgTypes[101].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[102].OneofWrappers = []any{
 		(*OpenSandboxAccess_SshPublicKey)(nil),
 		(*OpenSandboxAccess_Desktop)(nil),
 		(*OpenSandboxAccess_Port)(nil),
 	}
-	file_domestique_v1_domestique_proto_msgTypes[102].OneofWrappers = []any{}
+	file_domestique_v1_domestique_proto_msgTypes[103].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_domestique_v1_domestique_proto_rawDesc), len(file_domestique_v1_domestique_proto_rawDesc)),
 			NumEnums:      19,
-			NumMessages:   118,
+			NumMessages:   119,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
