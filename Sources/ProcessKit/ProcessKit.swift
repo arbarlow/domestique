@@ -81,14 +81,23 @@ public final class TaskSupervisor {
     private func applyProbe(_ r: RemotePortProbe.Result) {
         if remoteBaseline == nil {
             // First look at the machine: anything a Domestique run doesn't own is a system service.
-            let owned = Set(r.byRun.values.flatMap { $0 })
-            remoteBaseline = r.listening.subtracting(owned)
+            remoteBaseline = Self.systemPorts(
+                listening: r.listening, owned: Set(r.byRun.values.flatMap { $0 }),
+                portBase: environment["DOMESTIQUE_PORT"].flatMap(Int.init))
         }
         let sorted = r.listening.sorted()
         if sorted != remoteListening { remoteListening = sorted }
         for run in allRuns {
             run.applyRemotePorts((r.byRun[run.remoteKey] ?? []).sorted(), listening: r.listening)
         }
+    }
+
+    /// Ports on the first probe that count as system services. The workspace's own port block never
+    /// does: a dev server still up from before (the app restarted, a setup script started it) is the app's.
+    nonisolated static func systemPorts(listening: Set<Int>, owned: Set<Int>, portBase: Int?) -> Set<Int> {
+        let system = listening.subtracting(owned)
+        guard let portBase else { return system }
+        return system.subtracting(portBase..<(portBase + PortAllocator.blockSize))
     }
 
     private var allRuns: [TaskRun] { runs + adhocRuns + [setupRun].compactMap { $0 } }

@@ -5,6 +5,18 @@ import Testing
 
 @testable import ProcessKit
 
+@Suite struct RemoteBaselineTests {
+    @Test func workspacePortsAreNeverSystemPorts() {
+        // Backend and frontend were already up on the first probe, in the workspace's block.
+        let system = TaskSupervisor.systemPorts(listening: [22, 51000, 51001, 51010], owned: [], portBase: 51000)
+        #expect(system == [22, 51010])
+    }
+
+    @Test func ownedPortsAreExcludedWithoutAPortBase() {
+        #expect(TaskSupervisor.systemPorts(listening: [22, 3000], owned: [3000], portBase: nil) == [22])
+    }
+}
+
 @Suite struct ANSITests {
     @Test func parsesSGR() {
         let segs = ANSI.parse("\u{1B}[1;31mred\u{1B}[0m plain \u{1B}[32mgreen\u{1B}[39m")
