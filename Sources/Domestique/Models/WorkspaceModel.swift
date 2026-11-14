@@ -501,8 +501,6 @@ final class WorkspaceModel {
         return targets.sorted { ($0.score, $0.target.port) < ($1.score, $1.target.port) }.map(\.target)
     }
 
-    var primaryOpenTarget: OpenTarget? { openTargets.first }
-
     /// The port on this Mac that reaches `remotePort` (itself for local workspaces; nil until forwarded).
     func localPort(for remotePort: Int) -> Int? { isSandbox ? forwards[remotePort] : remotePort }
 

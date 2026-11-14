@@ -99,7 +99,7 @@ private struct WorkspaceHeader: View {
             }
             Spacer(minLength: 12)
 
-            if let target = model.primaryOpenTarget {
+            ForEach(model.openTargets) { target in
                 Button {
                     NSWorkspace.shared.open(target.url)
                 } label: {
