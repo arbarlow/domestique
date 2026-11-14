@@ -98,6 +98,9 @@ struct ComposerView: View {
     @Environment(AppModel.self) private var app
     @Bindable var chat: ChatModel
     @FocusState private var focused: Bool
+    @State private var draftHeight: CGFloat = 34
+    /// About 14 lines of body text; taller drafts scroll inside the composer.
+    private static let maxDraftHeight: CGFloat = 250
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -111,36 +114,45 @@ struct ComposerView: View {
                     .padding(.top, 2)
                 }
             }
-            TextField(placeholder, text: $chat.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(Theme.body)
-                .lineLimit(1...14)
-                .focused($focused)
-                .onSubmit { chat.send() }
-                .onKeyPress(.return, phases: .down) { press in
-                    if press.modifiers.contains(.shift) {
-                        chat.draft += "\n"
-                        return .handled
+            // The field grows with its text; past `maxDraftHeight` it sits in a scroll view so long
+            // drafts scroll with the wheel/trackpad (a line-limited TextField clips but won't scroll).
+            ScrollView(.vertical) {
+                TextField(placeholder, text: $chat.draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(Theme.body)
+                    .focused($focused)
+                    .onSubmit { chat.send() }
+                    .onKeyPress(.return, phases: .down) { press in
+                        if press.modifiers.contains(.shift) {
+                            chat.draft += "\n"
+                            return .handled
+                        }
+                        // ⌘↩ mid-turn steers: the message goes into the running turn instead of the queue.
+                        if press.modifiers.contains(.command) {
+                            chat.send(steer: true)
+                            return .handled
+                        }
+                        return .ignored
                     }
-                    // ⌘↩ mid-turn steers: the message goes into the running turn instead of the queue.
-                    if press.modifiers.contains(.command) {
-                        chat.send(steer: true)
-                        return .handled
-                    }
-                    return .ignored
-                }
-                .padding(.top, 4)
-                .padding(.bottom, 6)
-                .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
-                // The whole text region (not just the glyphs) is the text target: I-beam on hover,
-                // click anywhere in it to focus. Leaving it restores the normal arrow. The tap lives on
-                // a background layer so clicks on text still reach the field (caret, drag-select).
-                .background {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .pointerStyle(.horizontalText)
-                        .onTapGesture { focused = true }
-                }
+                    .padding(.top, 4)
+                    .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { draftHeight = $0 }
+            }
+            .scrollIndicators(.automatic)
+            .scrollBounceBehavior(.basedOnSize)
+            // Typing at the end keeps the newest line in view as the draft outgrows the cap.
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .frame(height: min(max(draftHeight, 34), Self.maxDraftHeight))
+            // The whole text region (not just the glyphs) is the text target: I-beam on hover,
+            // click anywhere in it to focus. Leaving it restores the normal arrow. The tap lives on
+            // a background layer so clicks on text still reach the field (caret, drag-select).
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .pointerStyle(.horizontalText)
+                    .onTapGesture { focused = true }
+            }
             HStack(spacing: 6) {
                 Menu {
                     Button("Attach images…") { pickImages() }
