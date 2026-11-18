@@ -320,11 +320,30 @@ struct SpanText: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: SpanTextView, context: Context) -> CGSize? {
         guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
-        let unbounded = CGFloat.greatestFiniteMagnitude
-        container.size = NSSize(width: wraps ? (proposal.width ?? unbounded) : unbounded, height: unbounded)
+        // TextKit treats a zero width as "no limit" and, for very wide containers, can report the container's
+        // width as the used width. Either way a nil, zero or infinite proposal would stretch the view to all
+        // the room it's given instead of hugging its text, so measure against a wide but finite container.
+        let unbounded: CGFloat = 20_000
+        let proposed = proposal.width.flatMap { $0 > 0 && $0.isFinite ? min($0, unbounded) : nil } ?? unbounded
+        container.size = NSSize(width: wraps ? proposed : unbounded, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
         let used = layout.usedRect(for: container)
         return CGSize(width: ceil(used.width), height: ceil(used.height))
+    }
+
+    /// Where the first line's baseline sits, measured from the top. An NSView has no text baselines SwiftUI
+    /// can see, so without this `.firstTextBaseline` stacks align to its bottom edge (bullets drop to the
+    /// last line of a wrapped item).
+    var firstBaseline: CGFloat {
+        let font = text.length > 0 ? text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil
+        return NSLayoutManager().defaultBaselineOffset(for: font ?? .systemFont(ofSize: NSFont.systemFontSize))
+    }
+}
+
+extension View {
+    /// Lines a `SpanText` up with neighbouring `Text` in baseline-aligned stacks.
+    func spanBaseline(_ span: SpanText) -> some View {
+        alignmentGuide(.firstTextBaseline) { _ in span.firstBaseline }
     }
 }
 

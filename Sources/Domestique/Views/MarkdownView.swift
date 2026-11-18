@@ -184,11 +184,12 @@ private struct BlockView: View {
         lineSpacing: CGFloat = 0
     ) -> some View {
         if let spanID {
-            SpanText(
+            let span = SpanText(
                 id: spanID + part,
                 text: SpanStyle.attributed(
                     MarkdownParser.inline(text), font: .systemFont(ofSize: size, weight: weight),
                     color: NSColor(color ?? Theme.text), lineSpacing: lineSpacing))
+            span.spanBaseline(span)
         } else {
             Text(MarkdownParser.inline(text))
                 .font(.system(size: size, weight: weight == .regular ? .regular : weight == .medium ? .medium : .semibold))
