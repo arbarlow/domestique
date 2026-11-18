@@ -73,6 +73,9 @@ public actor ClaudeSession: AgentSession {
             "--permission-mode", Self.cliMode(config.permissionMode),
             // Lets us switch into bypass mid-session without restarting.
             "--allow-dangerously-skip-permissions",
+            // Print mode never attaches Claude in Chrome on its own (the user's
+            // claudeInChromeDefaultEnabled only applies to interactive sessions).
+            "--chrome",
         ]
         if let model = config.model, model != "default" { args += ["--model", model] }
         if let effort = config.effort { args += ["--effort", effort] }
