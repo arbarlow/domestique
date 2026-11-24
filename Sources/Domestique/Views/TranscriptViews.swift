@@ -1,5 +1,6 @@
 import DQCore
 import GitKit
+import QuickLook
 import SwiftUI
 
 // MARK: - Turn grouping
@@ -141,7 +142,7 @@ private struct TurnView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let user = turn.user, case .user(let text) = user.kind {
-                UserBubble(id: user.id, text: text, date: user.timestamp)
+                UserBubble(id: user.id, text: text, date: user.timestamp, tabID: chat.tabID)
             } else if !turn.triggers.isEmpty {
                 TriggerPill(texts: turn.triggers)
             }
@@ -195,29 +196,111 @@ private struct UserBubble: View {
     let id: String
     let text: String
     let date: Date
+    let tabID: UUID
     @State private var hovering = false
+    @State private var images: [URL] = []
+    @State private var previewing: URL?
 
     var body: some View {
+        let parts = SentAttachments.split(text)
+        // Without saved images (sent before this, or from another device) the names stay as chips.
+        let otherNames = images.isEmpty ? parts.filenames : []
         VStack(alignment: .trailing, spacing: 6) {
-            SpanText(
-                id: id,
-                text: SpanStyle.attributed(
-                    AttributedString(text), font: .systemFont(ofSize: 13.5), color: NSColor(Theme.userBubbleText), lineSpacing: 3)
-            )
+            if !images.isEmpty {
+                SentImages(urls: images) { previewing = $0 }
+            }
+            if !parts.text.isEmpty || !otherNames.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !parts.text.isEmpty {
+                        SpanText(
+                            id: id,
+                            text: SpanStyle.attributed(
+                                AttributedString(parts.text), font: .systemFont(ofSize: 14),
+                                color: NSColor(Theme.userBubbleText),
+                                lineSpacing: Theme.lineSpacing(size: 14, lineHeight: 22))
+                        )
+                    }
+                    if !otherNames.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(otherNames, id: \.self) { name in
+                                Label(name, systemImage: "paperclip")
+                                    .font(Theme.small)
+                                    .foregroundStyle(Theme.text2)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
                 .padding(.horizontal, 15)
                 .padding(.vertical, 10)
-                .background(Theme.userBubble, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Theme.userBubble, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
             HStack(spacing: 6) {
                 Text(date, format: .dateTime.day().month(.abbreviated).hour().minute())
                     .font(Theme.small)
                     .foregroundStyle(Theme.text3)
-                IconButton(symbol: "doc.on.doc", help: "Copy", size: 11) { copy(text) }
+                IconButton(symbol: "doc.on.doc", help: "Copy", size: 11) { copy(parts.text) }
             }
             .opacity(hovering ? 1 : 0)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.leading, 80)
         .onHover { hovering = $0 }
+        .quickLookPreview($previewing, in: images)
+        .task(id: text) {
+            guard !parts.filenames.isEmpty else { return }
+            let (tab, message, at) = (tabID, text, date)
+            images = await Task.detached { SentAttachments.images(tabID: tab, message: message, near: at) }.value
+        }
+    }
+}
+
+/// Thumbnails of the images in a sent message. Click one to open it in Quick Look (arrow keys page through).
+private struct SentImages: View {
+    let urls: [URL]
+    let open: (URL) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(urls, id: \.self) { url in
+                SentImageThumb(url: url, height: urls.count == 1 ? 180 : 110) { open(url) }
+            }
+        }
+    }
+}
+
+private struct SentImageThumb: View {
+    let url: URL
+    let height: CGFloat
+    let action: () -> Void
+    @State private var image: NSImage?
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Rectangle().fill(Theme.sunken).frame(width: height * 1.4)
+                }
+            }
+            .frame(maxWidth: 320, maxHeight: height)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
+            .brightness(hovering ? -0.03 : 0)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("\(url.lastPathComponent) · click to view")
+        .task(id: url) {
+            let u = url
+            image = await Task.detached { NSImage(contentsOf: u) }.value
+        }
     }
 }
 

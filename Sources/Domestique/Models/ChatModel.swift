@@ -302,8 +302,11 @@ final class ChatModel {
             let title = text.split(separator: "\n").first.map { String($0.prefix(40)) } ?? "Chat"
             updateTab { $0.title = title }
         }
-        var display = text
-        if !attachments.isEmpty { display += "\n\n" + attachments.map { "📎 \($0.filename)" }.joined(separator: "  ") }
+        let display = SentAttachments.displayText(text, filenames: attachments.map(\.filename))
+        // Keep the images so the sent message can still show them (servers keep only the names).
+        SentAttachments.record(
+            tabID: tabID, message: display,
+            attachments: attachments.map { (data: $0.data, mediaType: $0.mediaType, filename: $0.filename) })
         clearFinishedFromTray()
         if viaServer {
             isRunning = true

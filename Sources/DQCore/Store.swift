@@ -348,6 +348,7 @@ public actor Store {
 
     public func deleteTranscript(tabID: UUID) {
         _ = try? db?.run("DELETE FROM transcript_items WHERE tab_id=?", [.text(tabID.uuidString)])
+        SentAttachments.delete(tabID: tabID)
     }
 
 }
@@ -383,5 +384,80 @@ extension SandboxProviderConfig {
     /// The original single boat.dev setup as a provider.
     public static func legacy(_ boat: BoatSettings) -> SandboxProviderConfig {
         SandboxProviderConfig(id: legacyID, kind: .boat, name: "boat.dev", credentialAccount: "api-key", boat: boat)
+    }
+}
+
+/// Local copies of images the user attached to messages, so the transcript can keep showing them.
+/// Servers record a sent message as its text plus "📎 name" markers and don't keep the files, so the
+/// app saves each image when it sends and finds it again from the message text and send time.
+public enum SentAttachments {
+    public struct File: Codable, Sendable, Hashable {
+        /// Stored file name inside the tab's folder.
+        public var stored: String
+        public var filename: String
+        public var mediaType: String
+    }
+
+    struct Entry: Codable {
+        var message: String
+        var sentAt: Date
+        var files: [File]
+    }
+
+    /// The text a server shows for a sent message: the prompt, then a "📎 name" per attachment.
+    public static func displayText(_ text: String, filenames: [String]) -> String {
+        filenames.isEmpty ? text : text + "\n\n" + filenames.map { "📎 \($0)" }.joined(separator: "  ")
+    }
+
+    /// Splits a sent message back into its prompt and attachment names.
+    public static func split(_ display: String) -> (text: String, filenames: [String]) {
+        guard let r = display.range(of: "\n\n📎 ", options: .backwards) else { return (display, []) }
+        let names = display[r.upperBound...].components(separatedBy: "  📎 ")
+        return (String(display[..<r.lowerBound]), names)
+    }
+
+    static func folder(_ tabID: UUID) -> URL {
+        Paths.appSupport.appendingPathComponent("attachments/\(tabID.uuidString)", isDirectory: true)
+    }
+
+    private static func index(_ tabID: UUID) -> URL { folder(tabID).appendingPathComponent("index.json") }
+
+    private static func load(_ tabID: UUID) -> [Entry] {
+        guard let data = try? Data(contentsOf: index(tabID)) else { return [] }
+        return (try? JSONDecoder().decode([Entry].self, from: data)) ?? []
+    }
+
+    /// Saves the image attachments of a message being sent. Non-images are skipped.
+    public static func record(tabID: UUID, message: String, attachments: [(data: Data, mediaType: String, filename: String)]) {
+        let images = attachments.filter { $0.mediaType.hasPrefix("image/") }
+        guard !images.isEmpty else { return }
+        let dir = folder(tabID)
+        Paths.ensure(dir)
+        var files: [File] = []
+        for a in images {
+            let ext = (a.filename as NSString).pathExtension.isEmpty
+                ? String(a.mediaType.split(separator: "/").last ?? "png") : (a.filename as NSString).pathExtension
+            let stored = "\(UUID().uuidString).\(ext)"
+            do {
+                try a.data.write(to: dir.appendingPathComponent(stored))
+                files.append(File(stored: stored, filename: a.filename, mediaType: a.mediaType))
+            } catch { continue }
+        }
+        var entries = load(tabID)
+        entries.append(Entry(message: message, sentAt: .now, files: files))
+        if let data = try? JSONEncoder().encode(entries) { try? data.write(to: index(tabID)) }
+    }
+
+    /// The saved images for a message, matched by its text and the send time closest to `near`.
+    public static func images(tabID: UUID, message: String, near: Date) -> [URL] {
+        let match = load(tabID).filter { $0.message == message }
+            .min { abs($0.sentAt.timeIntervalSince(near)) < abs($1.sentAt.timeIntervalSince(near)) }
+        let dir = folder(tabID)
+        return (match?.files ?? []).map { dir.appendingPathComponent($0.stored) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    public static func delete(tabID: UUID) {
+        try? FileManager.default.removeItem(at: folder(tabID))
     }
 }
