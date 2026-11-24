@@ -5,7 +5,7 @@ import SwiftUI
 enum Theme {
     // MARK: Surfaces
     static let canvas = dyn(light: 0xFFFFFF, dark: 0x1C1C1E)
-    static let sidebar = dyn(light: 0xF7F7F7, dark: 0x232325)
+    static let sidebar = dyn(light: 0xF2F2F4, dark: 0x232325)
     static let panel = dyn(light: 0xFAFAFA, dark: 0x202022)
     static let raised = dyn(light: 0xFFFFFF, dark: 0x2A2A2D)
     static let sunken = dyn(light: 0xF3F3F3, dark: 0x2A2A2C)
@@ -18,16 +18,21 @@ enum Theme {
     static let border = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.11, darkAlpha: 0.13)
 
     // MARK: Text
-    static let text = dyn(light: 0x1D1D1F, dark: 0xECECEE)
-    static let text2 = dyn(light: 0x6E6E73, dark: 0xA1A1A6)
-    static let text3 = dyn(light: 0xA1A1A6, dark: 0x6E6E73)
+    // Charcoal rather than near-black (and off-white in dark mode): calmer on long transcripts.
+    static let text = dyn(light: 0x34343A, dark: 0xD8D8DC)
+    static let text2 = dyn(light: 0x7A7A80, dark: 0x9C9CA2)
+    static let text3 = dyn(light: 0xA8A8AE, dark: 0x6C6C72)
+    /// Unselected sidebar titles: a step down from `text` so the selected and unread rows lead.
+    static let textSoft = dyn(light: 0x55555B, dark: 0xB4B4BA)
 
     // MARK: Accents
     static let accent = Color.accentColor
-    static let userBubble = dyn(light: 0x111111, dark: 0x3A3A3D)
-    static let userBubbleText = Color.white
-    static let added = dyn(light: 0x1A7F37, dark: 0x3FB950)
-    static let removed = dyn(light: 0xCF222E, dark: 0xF85149)
+    static let userBubble = dyn(light: 0xF2F2F4, dark: 0x2E2E31)
+    static let userBubbleText = text
+    /// The composer's round send button.
+    static let sendButton = dyn(light: 0x2C2C30, dark: 0x4A4A4E)
+    static let added = dyn(light: 0x3E8E58, dark: 0x5DBB74)
+    static let removed = dyn(light: 0xC9575E, dark: 0xF07A7F)
     static let addedBG = dyn(light: 0x1A7F37, dark: 0x3FB950, lightAlpha: 0.09, darkAlpha: 0.14)
     static let removedBG = dyn(light: 0xCF222E, dark: 0xF85149, lightAlpha: 0.08, darkAlpha: 0.14)
     static let warning = dyn(light: 0xD9480F, dark: 0xFF8A4C)
@@ -38,14 +43,9 @@ enum Theme {
     static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)
     static let codex = dyn(light: 0x111111, dark: 0xECECEE)
 
-    // Tool kinds in the transcript: icon colour, and a faint wash of it behind chips.
-    static let toolCommand = running
-    static let toolRead = dyn(light: 0x0E7C86, dark: 0x39C5CF)
-    static let toolEdit = added
-    static let toolSearch = merged
-    static let toolWeb = dyn(light: 0xBF3989, dark: 0xF778BA)
-    static let toolAgent = warning
-    static let toolThought = dyn(light: 0x8C6D1F, dark: 0xD4A72C)
+    // Tools and thinking stay neutral: colour is kept for status you act on (PRs, checks, needs-you, errors).
+    static let toolIcon = dyn(light: 0x8E8E93, dark: 0x8E8E93)
+    static let toolWash = dyn(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.04, darkAlpha: 0.06)
 
     // MARK: Syntax (Codex/GitHub-light-ish)
     static let synKeyword = dyn(light: 0xCF222E, dark: 0xFF7B72)
@@ -57,8 +57,8 @@ enum Theme {
     static let synAttr = dyn(light: 0x0550AE, dark: 0x79C0FF)
 
     // MARK: Type
-    static let body = Font.system(size: 13.5)
-    static let bodyMedium = Font.system(size: 13.5, weight: .medium)
+    static let body = Font.system(size: 13)
+    static let bodyMedium = Font.system(size: 13, weight: .medium)
     static let ui = Font.system(size: 13)
     static let uiMedium = Font.system(size: 13, weight: .medium)
     static let small = Font.system(size: 12)
@@ -75,6 +75,13 @@ enum Theme {
     static let contentWidth: CGFloat = 760
     /// Max width of the chat column (transcript, composer, trays). It shrinks with the window below this.
     static let chatWidth: CGFloat = 900
+
+    /// Extra space between lines so text of `size` sits on a `lineHeight` grid, like CSS line-height
+    /// (13pt on 21pt for transcript prose).
+    static func lineSpacing(size: CGFloat, lineHeight: CGFloat) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: size)
+        return max(0, lineHeight - (font.ascender - font.descender + font.leading))
+    }
 
     private static func dyn(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(

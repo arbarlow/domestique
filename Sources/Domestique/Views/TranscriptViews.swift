@@ -149,7 +149,7 @@ private struct TurnView: View {
             if isLive {
                 // While working, show the steps as they happen.
                 if !turn.work.isEmpty {
-                    WorkLog(items: turn.work, chat: chat, basePath: basePath)
+                    WorkLog(items: turn.work, chat: chat, basePath: basePath, live: true)
                 }
             } else if !turn.work.isEmpty {
                 WorkedForLine(summary: turn.summary, steps: turn.toolCount, expanded: $expanded)
@@ -179,10 +179,9 @@ private struct TurnView: View {
             }
 
             if turn.finished {
-                let changes = EditedFile.aggregate(turn.fileChanges, basePath: basePath)
-                if !changes.isEmpty {
-                    EditedFilesCard(files: changes, model: chat.workspace)
-                }
+                TurnMetaRow(
+                    summary: turn.summary, date: turn.answer?.timestamp,
+                    files: EditedFile.aggregate(turn.fileChanges, basePath: basePath), model: chat.workspace)
                 TurnFooter(turn: turn)
             }
         }
@@ -232,17 +231,20 @@ private struct WorkedForLine: View {
         Button {
             expanded.toggle()
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 5) {
-                    Text(label)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .font(Theme.ui)
-                .foregroundStyle(hovering ? Theme.text : Theme.text2)
-                Hairline()
+            HStack(spacing: 7) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.toolIcon)
+                    .frame(width: 13)
+                Text(label)
+                    .font(Theme.ui)
+                    .foregroundStyle(hovering ? Theme.text : Theme.text2)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Theme.text3)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
+            .frame(height: 20)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -252,39 +254,181 @@ private struct WorkedForLine: View {
     private var label: String {
         var s = "Worked"
         if let ms = summary?.durationMs { s += " for \(formatDuration(ms))" }
-        if steps > 0 { s += " · \(steps) step\(steps == 1 ? "" : "s")" }
+        if steps > 0 { s += " · \(steps) tool call\(steps == 1 ? "" : "s")" }
         return s
     }
 }
 
-/// The detailed steps of a turn: tool calls as compact lines, thinking, commentary.
+/// The detailed steps of a turn, Conductor-style: each run of tool calls after a bit of commentary becomes one
+/// group ("🔧 9 tool calls"), showing the commentary and only the newest action; the rest opens from the header.
 private struct WorkLog: View {
     let items: [TranscriptItem]
     let chat: ChatModel
     let basePath: String?
+    /// The turn is still running: the last group's action updates in place.
+    var live = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(items) { item in
-                switch item.kind {
-                case .tool(let call):
-                    ToolLine(call: call, basePath: basePath, model: chat.workspace)
-                case .reasoning(let text):
-                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { ReasoningLine(text: text) }
-                case .assistant(let text):
-                    if !text.isEmpty {
-                        MarkdownView(text: text, compact: true)
-                            .foregroundStyle(Theme.text2)
+        let segments = WorkSegment.build(items)
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(segments.enumerated()), id: \.element.id) { i, segment in
+                switch segment {
+                case .group(let group):
+                    ToolGroupView(group: group, chat: chat, basePath: basePath, live: live && i == segments.count - 1)
+                case .single(let item):
+                    switch item.kind {
+                    case .approval(let req):
+                        ApprovalCard(request: req, chat: chat)
+                    case .notice(let text):
+                        Label(text, systemImage: "info.circle").font(Theme.small).foregroundStyle(Theme.text3)
+                    default:
+                        EmptyView()
                     }
-                case .approval(let req):
-                    ApprovalCard(request: req, chat: chat)
-                case .notice(let text):
-                    Label(text, systemImage: "info.circle").font(Theme.small).foregroundStyle(Theme.text3)
-                default:
-                    EmptyView()
                 }
             }
         }
+    }
+}
+
+/// Commentary followed by the tool calls (and thinking) that came after it, until the agent speaks again.
+struct ToolGroup {
+    var id: String
+    var commentary: [String] = []
+    /// Tools and thinking in order, for the expanded view.
+    var steps: [TranscriptItem] = []
+    var tools: [(id: String, call: ToolCall)] {
+        steps.compactMap { if case .tool(let c) = $0.kind { (id: $0.id, call: c) } else { nil } }
+    }
+}
+
+enum WorkSegment: Identifiable {
+    case group(ToolGroup)
+    case single(TranscriptItem)
+
+    var id: String {
+        switch self {
+        case .group(let g): "g-\(g.id)"
+        case .single(let item): item.id
+        }
+    }
+
+    static func build(_ items: [TranscriptItem]) -> [WorkSegment] {
+        var out: [WorkSegment] = []
+        var current: ToolGroup?
+        func flush() {
+            if let g = current, !g.commentary.isEmpty || !g.steps.isEmpty { out.append(.group(g)) }
+            current = nil
+        }
+        for item in items {
+            switch item.kind {
+            case .assistant(let text):
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                // Speaking after some tool calls starts the next group.
+                if current?.steps.isEmpty == false { flush() }
+                if current == nil { current = ToolGroup(id: item.id) }
+                current?.commentary.append(text)
+            case .tool, .reasoning:
+                if case .reasoning(let t) = item.kind, t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+                if current == nil { current = ToolGroup(id: item.id) }
+                current?.steps.append(item)
+            case .approval, .notice:
+                flush()
+                out.append(.single(item))
+            default:
+                continue
+            }
+        }
+        flush()
+        return out
+    }
+}
+
+private struct ToolGroupView: View {
+    let group: ToolGroup
+    let chat: ChatModel
+    let basePath: String?
+    let live: Bool
+    @State private var expanded = false
+    @State private var hovering = false
+
+    var body: some View {
+        let tools = group.tools
+        VStack(alignment: .leading, spacing: 7) {
+            if !tools.isEmpty {
+                header(tools)
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(Array(group.commentary.enumerated()), id: \.offset) { _, text in
+                    MarkdownView(text: text, compact: true)
+                }
+                if expanded {
+                    ForEach(group.steps) { item in
+                        switch item.kind {
+                        case .tool(let call): ToolLine(call: call, basePath: basePath, model: chat.workspace)
+                        case .reasoning(let text): ReasoningLine(text: text)
+                        default: EmptyView()
+                        }
+                    }
+                } else if let last = tools.last {
+                    // Only the newest action: it slides in as each tool starts.
+                    ToolLine(call: last.call, basePath: basePath, model: chat.workspace)
+                        .id(last.id)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity))
+                }
+            }
+            .padding(.leading, tools.isEmpty ? 0 : 15)
+            .overlay(alignment: .leading) {
+                if !tools.isEmpty {
+                    Rectangle().fill(Theme.hairline).frame(width: 1).padding(.leading, 6)
+                }
+            }
+            .clipped()
+        }
+        .animation(.snappy(duration: 0.22), value: tools.last?.id)
+        .animation(.snappy(duration: 0.18), value: expanded)
+    }
+
+    private func header(_ tools: [(id: String, call: ToolCall)]) -> some View {
+        Button {
+            expanded.toggle()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.toolIcon)
+                    .frame(width: 13)
+                Text("\(tools.count) tool call\(tools.count == 1 ? "" : "s")")
+                    .font(Theme.ui)
+                    .foregroundStyle(hovering ? Theme.text : Theme.text2)
+                    .contentTransition(.numericText())
+                HStack(spacing: 5) {
+                    ForEach(kinds(tools), id: \.self) { symbol in
+                        Image(systemName: symbol)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.text3)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Theme.text3)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .frame(height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(expanded ? "Hide steps" : "Show every step")
+    }
+
+    /// The kinds of tool used, in first-use order (terminal, doc, pencil…).
+    private func kinds(_ tools: [(id: String, call: ToolCall)]) -> [String] {
+        var seen: [String] = []
+        for t in tools where !seen.contains(t.call.kindSymbol) { seen.append(t.call.kindSymbol) }
+        return Array(seen.prefix(6))
     }
 }
 
@@ -342,7 +486,7 @@ struct ToolLine: View {
                             .truncationMode(.tail)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 5))
+                            .background(Theme.toolWash, in: RoundedRectangle(cornerRadius: 5))
                     } else {
                         Text(detail)
                             .foregroundStyle(Theme.text)
@@ -363,6 +507,7 @@ struct ToolLine: View {
                 .font(Theme.ui)
                 .frame(height: 22)
                 .contentShape(Rectangle())
+                .shimmering(call.status == .running)
             }
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
@@ -378,23 +523,7 @@ struct ToolLine: View {
         return d
     }
 
-    private var verb: String {
-        let running = call.status == .running
-        switch call.name {
-        case "Bash": return running ? "Running" : "Ran"
-        case "Read": return running ? "Reading" : "Read"
-        case "Edit", "MultiEdit", "NotebookEdit": return running ? "Editing" : "Edited"
-        case "Write": return running ? "Writing" : "Wrote"
-        case "Grep", "Glob": return running ? "Searching" : "Searched"
-        case "WebSearch": return "Searched the web"
-        case "WebFetch": return "Fetched"
-        case "Agent": return "Delegated"
-        case "Todos": return "Updated todos"
-        case "MCP": return "Called"
-        case "Skill": return "Used skill"
-        default: return call.name
-        }
-    }
+    private var verb: String { call.verb }
 
     private var detail: String {
         if call.name == "Todos" {
@@ -422,31 +551,9 @@ struct ToolLine: View {
         }
     }
 
-    private var tint: Color {
-        switch call.name {
-        case "Bash": Theme.toolCommand
-        case "Read": Theme.toolRead
-        case "Edit", "Write", "MultiEdit", "NotebookEdit": Theme.toolEdit
-        case "Grep", "Glob": Theme.toolSearch
-        case "WebFetch", "WebSearch": Theme.toolWeb
-        case "Agent": Theme.toolAgent
-        default: Theme.text3
-        }
-    }
+    private var tint: Color { Theme.toolIcon }
 
-    private var symbol: String {
-        switch call.name {
-        case "Bash": "terminal"
-        case "Read": "doc.text"
-        case "Edit", "Write", "MultiEdit": "pencil"
-        case "Grep", "Glob": "magnifyingglass"
-        case "WebFetch", "WebSearch": "globe"
-        case "Agent": "person.2"
-        case "Todos": "checklist"
-        case "MCP": "puzzlepiece.extension"
-        default: "wrench.and.screwdriver"
-        }
-    }
+    private var symbol: String { call.kindSymbol }
 }
 
 private struct ToolDetail: View {
@@ -532,7 +639,7 @@ private struct ReasoningLine: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "brain").font(.system(size: 11)).foregroundStyle(Theme.toolThought)
+                    Image(systemName: "brain").font(.system(size: 11)).foregroundStyle(Theme.toolIcon)
                         .frame(width: 14)
                     Text("Thought").foregroundStyle(Theme.text2)
                     if !expanded {
@@ -542,7 +649,7 @@ private struct ReasoningLine: View {
                             .lineLimit(1)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Theme.toolThought.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                            .background(Theme.toolWash, in: RoundedRectangle(cornerRadius: 5))
                     }
                 }
                 .font(Theme.ui)
@@ -597,30 +704,67 @@ struct EditedFile: Identifiable, Hashable {
     }
 }
 
-private struct EditedFilesCard: View {
+/// "18m 42s · 2:58 pm  [HealthHRVMeasure.swift +118 −0]  [+6 more +94 −38]" under a finished turn.
+/// The chips open the file's diff, or the Changes tab.
+private struct TurnMetaRow: View {
+    let summary: TurnSummary?
+    let date: Date?
     let files: [EditedFile]
     let model: WorkspaceModel
 
     var body: some View {
-        let add = files.reduce(0) { $0 + $1.additions }
-        let del = files.reduce(0) { $0 + $1.deletions }
-        HStack(spacing: 12) {
-            Image(systemName: "plus.forwardslash.minus")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.text2)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Edited \(files.count) file\(files.count == 1 ? "" : "s")").font(Theme.uiMedium)
-                DiffCount(additions: add, deletions: del)
+        let parts = [summary?.durationMs.map { formatDuration($0) }, date.map { $0.formatted(date: .omitted, time: .shortened) }]
+            .compactMap { $0 }
+        if !parts.isEmpty || !files.isEmpty {
+            HStack(spacing: 8) {
+                if !parts.isEmpty {
+                    Text(parts.joined(separator: " · "))
+                        .font(Theme.small)
+                        .foregroundStyle(Theme.text3)
+                        .monospacedDigit()
+                }
+                if let first = files.first {
+                    MetaChip(title: (first.path as NSString).lastPathComponent, additions: first.additions, deletions: first.deletions) {
+                        model.openFile(first.path, diff: true)
+                    }
+                    .help(first.path)
+                }
+                if files.count > 1 {
+                    let rest = files.dropFirst()
+                    MetaChip(
+                        title: "+\(rest.count) more",
+                        additions: rest.reduce(0) { $0 + $1.additions }, deletions: rest.reduce(0) { $0 + $1.deletions }
+                    ) { model.showChanges() }
+                    .help(rest.map(\.path).joined(separator: "\n"))
+                }
             }
-            Spacer()
-            Button("View changes") { model.showChanges() }
-                .buttonStyle(.soft)
         }
-        .padding(12)
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border, lineWidth: 0.5))
+    }
+}
+
+private struct MetaChip: View {
+    let title: String
+    let additions: Int
+    let deletions: Int
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title).foregroundStyle(Theme.text2).lineLimit(1)
+                Text(verbatim: "+\(DiffCount.short(additions))").foregroundStyle(Theme.added)
+                Text(verbatim: "−\(DiffCount.short(deletions))").foregroundStyle(Theme.removed)
+            }
+            .font(.system(size: 11.5).monospacedDigit())
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Theme.hover : .clear))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border, lineWidth: 0.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -783,6 +927,50 @@ struct FlowLayout: Layout {
 }
 
 // MARK: - Helpers
+
+extension ToolCall {
+    /// "Reading" while it runs, "Read" once done.
+    var verb: String {
+        let running = status == .running
+        switch name {
+        case "Bash": return running ? "Running" : "Ran"
+        case "Read": return running ? "Reading" : "Read"
+        case "Edit", "MultiEdit", "NotebookEdit": return running ? "Editing" : "Edited"
+        case "Write": return running ? "Writing" : "Wrote"
+        case "Grep", "Glob": return running ? "Searching" : "Searched"
+        case "WebSearch": return running ? "Searching the web" : "Searched the web"
+        case "WebFetch": return running ? "Fetching" : "Fetched"
+        case "Agent": return "Delegated"
+        case "Todos": return "Updated todos"
+        case "MCP": return running ? "Calling" : "Called"
+        case "Skill": return "Used skill"
+        default: return name
+        }
+    }
+
+    /// The tool's kind, for grouping and its icon.
+    var kindSymbol: String {
+        switch name {
+        case "Bash": "terminal"
+        case "Read": "doc.text"
+        case "Edit", "Write", "MultiEdit", "NotebookEdit": "pencil"
+        case "Grep", "Glob": "magnifyingglass"
+        case "WebFetch", "WebSearch": "globe"
+        case "Agent": "sparkles"
+        case "Todos": "checklist"
+        case "MCP": "puzzlepiece.extension"
+        default: "wrench.and.screwdriver"
+        }
+    }
+
+    /// One line for status displays: the agent's own description, else verb + file name or command.
+    func activityLine(basePath: String?) -> String {
+        if let d = description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty { return d }
+        let first = summary.split(separator: "\n").first.map(String.init) ?? ""
+        let target = name == "Bash" ? first : (relativize(first, basePath: basePath) as NSString).lastPathComponent
+        return target.isEmpty ? verb : "\(verb) \(target)"
+    }
+}
 
 func formatDuration(_ ms: Int) -> String {
     let s = ms / 1000

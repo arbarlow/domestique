@@ -226,11 +226,23 @@ struct PathValue: View {
 
 private struct GeneralSettings: View {
     @Environment(AppModel.self) private var app
+    @AppStorage(SidebarDensity.storageKey) private var sidebarDensity: SidebarDensity = .comfortable
 
     var body: some View {
         @Bindable var app = app
         VStack(alignment: .leading, spacing: 0) {
             PageTitle(title: "General")
+            SettingsSection(title: "Appearance") {
+                SettingsRow(
+                    title: "Sidebar rows",
+                    subtitle: "Comfortable adds a second line with what each workspace is doing; Compact fits more on screen"
+                ) {
+                    Picker("", selection: $sidebarDensity) {
+                        ForEach(SidebarDensity.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).fixedSize()
+                }
+            }
             SettingsSection(title: "Workspaces") {
                 SettingsRow(title: "Branch prefix", subtitle: "New branches are named prefix/workspace") {
                     TextField("alex", text: $app.settings.branchPrefix).modifier(FieldStyle())

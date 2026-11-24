@@ -22,6 +22,8 @@ final class AppModel {
     var settingsRoute: SettingsRoute?
     /// "Clone from GitHub" sheet.
     var showGitHubPicker = false
+    /// ⌘K search over workspaces, projects and commands.
+    var showQuickOpen = false
     /// "New workspace from pull request" sheet, for this repository.
     var pullRequestPickerRepo: Repository?
     // Layout (persisted)

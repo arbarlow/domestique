@@ -70,6 +70,8 @@ struct EmptyChatHint: View {
     }
 }
 
+/// Spinner and a ticking timer under a running turn ("◌ 4m 12s"); a status line replaces the timer when
+/// the agent reports one (compacting, retrying…).
 struct WorkingIndicator: View {
     let status: String?
     let since: Date?
@@ -77,18 +79,21 @@ struct WorkingIndicator: View {
     var body: some View {
         HStack(spacing: 8) {
             Spinner(size: 11)
-            if let since {
+            if let status {
+                Text(status).font(Theme.ui).shimmering()
+            } else if let since {
                 TimelineView(.periodic(from: since, by: 1)) { ctx in
-                    Text(status ?? "Working for \(formatDuration(Int(ctx.date.timeIntervalSince(since) * 1000)))")
+                    Text(formatDuration(Int(ctx.date.timeIntervalSince(since) * 1000)))
+                        .font(.system(size: 11.5, design: .monospaced))
                         .monospacedDigit()
+                        .contentTransition(.numericText())
                 }
             } else {
-                Text(status ?? "Working…")
+                Text("Working…").font(Theme.ui).shimmering()
             }
         }
-        .font(Theme.ui)
-        .foregroundStyle(Theme.text2)
-        .shimmering()
+        .foregroundStyle(Theme.text3)
+        .frame(height: 20)
     }
 }
 
@@ -268,12 +273,14 @@ private struct PermissionMenu: View {
                     }
                 }
             } label: {
+                // Full access is the everyday mode, so it's just a quiet icon; the modes that change
+                // behaviour (Auto, Ask) say their name.
                 HStack(spacing: 4) {
-                    Image(systemName: symbol(tab.permissionMode)).font(.system(size: 11))
-                    Text(tab.permissionMode.displayName)
+                    Image(systemName: symbol(tab.permissionMode)).font(.system(size: 11.5))
+                    if tab.permissionMode != .bypass { Text(tab.permissionMode.displayName) }
                 }
                 .font(Theme.ui)
-                .foregroundStyle(tab.permissionMode == .bypass ? Theme.warning : Theme.text2)
+                .foregroundStyle(Theme.text3)
                 .padding(.horizontal, 6)
                 .frame(height: 26)
                 .contentShape(Rectangle())
@@ -282,13 +289,13 @@ private struct PermissionMenu: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Full access never asks · Auto lets the provider's reviewer decide · Ask shows approvals here")
+            .help("\(tab.permissionMode.displayName). Full access never asks · Auto lets the provider's reviewer decide · Ask shows approvals here")
         }
     }
 
     private func symbol(_ m: AgentPermissionMode) -> String {
         switch m {
-        case .bypass: "exclamationmark.circle"
+        case .bypass: "checkmark.shield"
         case .auto: "wand.and.stars"
         case .ask: "hand.raised"
         }
@@ -308,7 +315,7 @@ private struct ModelMenu: View {
             } label: {
                 ComposerChip {
                     ProviderIcon(provider: tab.provider, size: 10)
-                    Text(app.modelLabel(tab.provider, tab.model)).foregroundStyle(Theme.text)
+                    Text(app.modelLabel(tab.provider, tab.model)).foregroundStyle(Theme.text2)
                     Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.text3)
                 }
             }
@@ -556,7 +563,7 @@ private struct SendButton: View {
                 .font(.system(size: stop ? 10 : 13, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
-                .background(Circle().fill(Theme.userBubble))
+                .background(Circle().fill(Theme.sendButton))
                 .opacity(!stop && empty ? 0.3 : 1)
         }
         .buttonStyle(.plain)
@@ -661,4 +668,8 @@ private struct Shimmer: ViewModifier {
 
 extension View {
     func shimmering() -> some View { modifier(Shimmer()) }
+    /// Shimmers only while `on`, e.g. a tool line while its tool runs.
+    @ViewBuilder func shimmering(_ on: Bool) -> some View {
+        if on { modifier(Shimmer()) } else { self }
+    }
 }

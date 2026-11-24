@@ -66,6 +66,23 @@ struct RootView: View {
             }
         }
         .animation(.snappy(duration: 0.2), value: app.toast)
+        .overlay {
+            if app.showQuickOpen {
+                ZStack(alignment: .top) {
+                    // Dims the whole window, title bar included, so the palette is the only thing in focus.
+                    Color.black.opacity(0.14)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { app.showQuickOpen = false }
+                    QuickOpenView()
+                        .padding(.top, 96)
+                        .transition(.scale(scale: 0.98, anchor: .top).combined(with: .opacity))
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: app.showQuickOpen)
         .alert(item: $app.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
         }

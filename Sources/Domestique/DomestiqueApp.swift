@@ -136,6 +136,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut("w", modifiers: [.command, .shift])
         }
         CommandGroup(after: .sidebar) {
+            Button("Search…") { app.showQuickOpen.toggle() }
+                .keyboardShortcut("k", modifiers: .command)
             Button("Toggle Sidebar") { app.sidebarVisible.toggle() }
                 .keyboardShortcut("\\", modifiers: .command)
             Button("Toggle Panel") { app.rightPanelVisible.toggle() }

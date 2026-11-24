@@ -57,11 +57,13 @@ private struct DockTabBar: View {
                     }
                     UnderlineTab(selected: model.dockTab == .run) { select(.run) } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "waveform")
-                                .font(.system(size: 11))
-                                .foregroundStyle((model.supervisor?.anyRunning ?? false) ? Theme.added : Theme.text3)
+                            if model.supervisor?.anyRunning ?? false {
+                                Circle().fill(Theme.added).frame(width: 6, height: 6)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
                             Text("Run")
                         }
+                        .animation(.snappy(duration: 0.2), value: model.supervisor?.anyRunning ?? false)
                     }
                     ForEach(model.terminals) { term in
                         UnderlineTab(selected: model.dockTab == .terminal(term.id)) { select(.terminal(term.id)) } label: {
@@ -121,38 +123,23 @@ private struct StackControls: View {
                             NSWorkspace.shared.open(primary.url)
                         } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: "globe")
-                                Text("Open")
+                                Image(systemName: "globe").font(.system(size: 11)).foregroundStyle(Theme.text2)
+                                Text("Open").font(Theme.small).foregroundStyle(Theme.text)
                                 Text(verbatim: ":\(primary.port)")
-                                    .font(Theme.small.monospacedDigit())
+                                    .font(.system(size: 11, design: .monospaced))
                                     .foregroundStyle(Theme.text2)
                             }
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.softCompact)
+                        .buttonStyle(.plain)
                         .help("\(primary.name) · \(primary.url.absoluteString)")
-                        if targets.count > 1 {
-                            Menu {
-                                ForEach(targets) { t in
-                                    Button {
-                                        NSWorkspace.shared.open(t.url)
-                                    } label: {
-                                        Text(verbatim: "\(t.name) — localhost:\(t.port)")
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 8, weight: .semibold))
-                                    .foregroundStyle(Theme.text2)
-                                    .frame(width: 18, height: 24)
-                                    .contentShape(Rectangle())
-                            }
-                            .menuStyle(.button)
-                            .buttonStyle(.plain)
-                            .menuIndicator(.hidden)
-                            .fixedSize()
-                            .help("Other ports")
-                        }
+                        Rectangle().fill(Theme.hairline).frame(width: 1, height: 14)
+                        PortsButton(model: model)
                     }
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raised))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border, lineWidth: 0.5))
                 }
                 Button {
                     supervisor?.stopAll()
@@ -183,9 +170,173 @@ private struct StackControls: View {
 
 }
 
+/// The chevron beside Open: every port this workspace serves, its free ports, and what else is
+/// listening on this Mac (other workspaces, databases).
+private struct PortsButton: View {
+    let model: WorkspaceModel
+    @State private var shown = false
+
+    var body: some View {
+        Button { shown.toggle() } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Theme.text2)
+                .frame(width: 20, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Ports")
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            PortsMenu(model: model) { shown = false }
+        }
+    }
+}
+
+private struct PortsMenu: View {
+    @Environment(AppModel.self) private var app
+    let model: WorkspaceModel
+    let dismiss: () -> Void
+    @State private var services: [(name: String, port: Int)] = []
+
+    /// Well-known local services worth listing when they're up.
+    nonisolated private static let knownServices: [(String, Int)] = [
+        ("Postgres", 5432), ("MySQL", 3306), ("Redis", 6379), ("MongoDB", 27017),
+        ("Elasticsearch", 9200), ("Pub/Sub emulator", 8085), ("Firestore emulator", 8080),
+    ]
+
+    var body: some View {
+        let targets = model.openTargets
+        let others = otherWorkspaces
+        VStack(alignment: .leading, spacing: 1) {
+            sectionTitle("This workspace")
+            ForEach(targets) { t in
+                row(dot: .live, name: t.name, port: "localhost:\(t.port)") { NSWorkspace.shared.open(t.url) }
+            }
+            if let free = freeRange(used: Set(targets.map(\.port))) {
+                row(dot: .free, name: free, port: nil, action: nil)
+            }
+            if !others.isEmpty || !services.isEmpty {
+                Rectangle().fill(Theme.hairline).frame(height: 1).padding(.vertical, 4).padding(.horizontal, 2)
+                sectionTitle("Shared on this Mac")
+                ForEach(services, id: \.port) { s in
+                    row(symbol: "cylinder", name: s.name, port: ":\(s.port)") { open(port: s.port) }
+                }
+                ForEach(others, id: \.target.port) { o in
+                    row(symbol: "rectangle.on.rectangle", name: "\(o.workspace) · \(o.target.name)", port: ":\(o.target.port)") {
+                        NSWorkspace.shared.open(o.target.url)
+                    }
+                }
+            }
+        }
+        .padding(6)
+        .frame(width: 300)
+        .task {
+            let known = Self.knownServices
+            let found = await Task.detached {
+                known.filter { PortScanner.isPortListening($0.1) }
+            }.value
+            services = found.map { (name: $0.0, port: $0.1) }
+        }
+    }
+
+    private var otherWorkspaces: [(workspace: String, target: WorkspaceModel.OpenTarget)] {
+        app.state.workspaces
+            .filter { !$0.isArchived && $0.id != model.id }
+            .flatMap { ws in
+                (app.existingModel(for: ws.id)?.openTargets ?? []).map { (workspace: ws.name, target: $0) }
+            }
+    }
+
+    /// "41002 – 41009 free": the rest of this workspace's port block.
+    private func freeRange(used: Set<Int>) -> String? {
+        guard let base = model.workspace?.portBase, base > 0, !model.isSandbox else { return nil }
+        let free = (base..<(base + 10)).filter { !used.contains($0) }
+        guard let lo = free.first, let hi = free.last else { return nil }
+        return lo == hi ? "\(lo) free" : "\(lo) – \(hi) free"
+    }
+
+    private func open(port: Int) {
+        if let url = URL(string: "http://localhost:\(port)") { NSWorkspace.shared.open(url) }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 10, weight: .medium))
+            .kerning(0.5)
+            .foregroundStyle(Theme.text3)
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
+            .padding(.bottom, 3)
+    }
+
+    private enum Dot { case live, free }
+
+    private func row(
+        dot: Dot? = nil, symbol: String? = nil, name: String, port: String?, action: (() -> Void)?
+    ) -> some View {
+        PortRow(dot: dot.map { $0 == .live }, symbol: symbol, name: name, port: port) {
+            guard let action else { return }
+            dismiss()
+            action()
+        }
+        .disabled(action == nil)
+    }
+}
+
+private struct PortRow: View {
+    /// true = live (green), false = free (hollow), nil = use `symbol`.
+    let dot: Bool?
+    let symbol: String?
+    let name: String
+    let port: String?
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Group {
+                    if let dot {
+                        if dot {
+                            Circle().fill(Theme.added).frame(width: 6, height: 6)
+                        } else {
+                            Circle().strokeBorder(Theme.text3, lineWidth: 1).frame(width: 6, height: 6)
+                        }
+                    } else if let symbol {
+                        Image(systemName: symbol).font(.system(size: 10.5)).foregroundStyle(Theme.text3)
+                    }
+                }
+                .frame(width: 12)
+                Text(name)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(enabled ? (dot == nil ? Theme.text2 : Theme.text) : Theme.text3)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let port {
+                    Text(port).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.text3)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovering && enabled ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
 // MARK: - Run
 
-private let tagPalette: [Color] = [Theme.running, Theme.added, Theme.merged, Theme.warning, .teal, .pink]
+/// Log prefixes stay grey: with colour reserved for status, the task name is enough to tell lines apart.
+private let tagPalette: [Color] = [Theme.text3]
+
+/// "Run Stack", but not "Run Run this branch" when the stack's own name already says it.
+private func runLabel(_ name: String?) -> String {
+    guard let name, !name.isEmpty else { return "Run stack" }
+    return name.lowercased().hasPrefix("run") ? name : "Run \(name)"
+}
 
 private struct RunPane: View {
     let model: WorkspaceModel
@@ -207,7 +358,7 @@ private struct RunPane: View {
                             Button {
                                 model.startDefaultStack()
                             } label: {
-                                Label("Run \(config.stacks.first?.name ?? "stack")", systemImage: "play.fill")
+                                Label(runLabel(config.stacks.first?.name), systemImage: "play.fill")
                             }
                             .buttonStyle(.soft)
                             .disabled(!model.canRunStack)
@@ -245,9 +396,6 @@ private struct RunCaption: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "laptopcomputer")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.text3)
             Text(caption)
                 .font(Theme.ui)
                 .foregroundStyle(Theme.text2)
@@ -309,6 +457,11 @@ private struct TaskChip: View {
             HStack(spacing: 5) {
                 Circle().fill(dotColor).frame(width: 6, height: 6)
                 Text(run.name).font(Theme.small).foregroundStyle(Theme.text)
+                if let port = run.ports.first {
+                    Text(verbatim: ":\(port)")
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Theme.text3)
+                }
             }
             .padding(.horizontal, 7)
             .frame(height: 22)

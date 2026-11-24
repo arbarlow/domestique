@@ -162,7 +162,7 @@ struct MarkdownView: View {
 
     var body: some View {
         let blocks = MarkdownParser.parse(text)
-        VStack(alignment: .leading, spacing: compact ? 6 : 11) {
+        VStack(alignment: .leading, spacing: compact ? 9 : 16) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { b, block in
                 BlockView(block: block, compact: compact, spanID: spanID.map { "\($0)#\(b)" })
             }
@@ -176,7 +176,9 @@ private struct BlockView: View {
     let compact: Bool
     let spanID: String?
 
-    private var bodySize: CGFloat { compact ? 13 : 13.5 }
+    private var bodySize: CGFloat { compact ? 13 : 14 }
+    /// 14pt on a 24pt line (13 on 21 when compact), matching Conductor's prose rhythm.
+    private var proseSpacing: CGFloat { Theme.lineSpacing(size: bodySize, lineHeight: compact ? 21 : 24) }
 
     @ViewBuilder
     private func inlineText(
@@ -201,15 +203,15 @@ private struct BlockView: View {
     var body: some View {
         switch block {
         case .heading(let level, let text):
-            inlineText(text, size: level == 1 ? 19 : level == 2 ? 16 : 14, weight: .semibold, color: Theme.text)
+            inlineText(text, size: level == 1 ? 18 : level == 2 ? 15.5 : 14.5, weight: .semibold, color: Theme.text)
                 .padding(.top, compact ? 0 : 6)
         case .paragraph(let text):
-            inlineText(text, size: bodySize, lineSpacing: 3.5)
+            inlineText(text, size: bodySize, lineSpacing: proseSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         case .code(let lang, let code):
             CodeBlockView(language: lang, code: code, spanID: spanID)
         case .list(let ordered, let items):
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: compact ? 3 : 5) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Group {
@@ -221,7 +223,7 @@ private struct BlockView: View {
                         }
                         .foregroundStyle(Theme.text2)
                         .frame(minWidth: 12, alignment: .trailing)
-                        inlineText(item.text, part: ".\(i)", size: bodySize, lineSpacing: 3)
+                        inlineText(item.text, part: ".\(i)", size: bodySize, lineSpacing: proseSpacing)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .font(.system(size: bodySize))

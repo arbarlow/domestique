@@ -13,10 +13,6 @@ struct SidebarView: View {
             // Header: traffic lights live on the left of this row.
             HStack(spacing: 2) {
                 Spacer()
-                IconButton(
-                    symbol: "house", help: "Home",
-                    active: app.selectedWorkspaceID == nil && app.selectedRepoID == nil && app.settingsRoute == nil
-                ) { app.showHome() }
                 IconButton(symbol: "sidebar.left", help: "Hide sidebar (⌘\\)") { app.sidebarVisible = false }
             }
             .padding(.horizontal, 10)
@@ -24,28 +20,6 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
-                    HoverRow(height: 30, action: newWorkspace) {
-                        Label {
-                            HStack {
-                                Text("New workspace")
-                                Spacer()
-                                Text("⌘N").font(Theme.small).foregroundStyle(Theme.text3)
-                            }
-                        } icon: {
-                            Image(systemName: "square.and.pencil")
-                        }
-                        .font(Theme.ui)
-                        .foregroundStyle(Theme.text)
-                    }
-                    .disabled(app.repositories.isEmpty)
-
-                    Text("Workspaces")
-                        .font(Theme.small)
-                        .foregroundStyle(Theme.text3)
-                        .padding(.horizontal, 8)
-                        .padding(.top, 18)
-                        .padding(.bottom, 4)
-
                     ForEach(app.repositories) { repo in
                         RepoSection(
                             repo: repo,
@@ -65,6 +39,7 @@ struct SidebarView: View {
                     }
                 }
                 .padding(.horizontal, 8)
+                .padding(.top, 6)
                 .padding(.bottom, 12)
             }
             .scrollIndicators(.never)
@@ -76,12 +51,6 @@ struct SidebarView: View {
 
     private func toggle(_ set: inout Set<UUID>, _ id: UUID) {
         if set.contains(id) { set.remove(id) } else { set.insert(id) }
-    }
-
-    private func newWorkspace() {
-        let repo = app.selectedRepo ?? app.repositories.first
-        guard let repo else { return app.promptAddRepository() }
-        Task { await app.createWorkspace(in: repo) }
     }
 }
 
@@ -119,8 +88,8 @@ private struct RepoSection: View {
                         }
                     }
                 Text(repo.title)
-                    .font(Theme.uiMedium)
-                    .foregroundStyle(Theme.text)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Theme.textSoft)
                     .lineLimit(1)
                 if repo.shipMode == .trunk {
                     Text("trunk")
@@ -236,10 +205,27 @@ struct RepoMonogram: View {
     }
 }
 
+/// How much a sidebar workspace row shows (Settings → Appearance).
+enum SidebarDensity: String, CaseIterable, Identifiable {
+    /// Two lines: the chat title, then what the worktree is doing right now.
+    case comfortable
+    /// One line per workspace.
+    case compact
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .comfortable: "Comfortable"
+        case .compact: "Compact"
+        }
+    }
+    static let storageKey = "dq.sidebarDensity"
+}
+
 struct WorkspaceRow: View {
     @Environment(AppModel.self) private var app
     let workspace: Workspace
     @State private var hovering = false
+    @AppStorage(SidebarDensity.storageKey) private var density: SidebarDensity = .comfortable
 
     private var isArchiving: Bool { app.archiving.contains(workspace.id) }
 
@@ -251,8 +237,12 @@ struct WorkspaceRow: View {
     var body: some View {
         let model = app.existingModel(for: workspace.id)
         let selected = app.selectedWorkspaceID == workspace.id
-        HoverRow(selected: selected, height: 32, action: { app.selectedWorkspaceID = workspace.id }) {
-            HStack(spacing: 8) {
+        let comfortable = density == .comfortable
+        HoverRow(
+            selected: selected, height: comfortable ? 50 : 32,
+            action: { if !isArchiving { app.selectedWorkspaceID = workspace.id } }
+        ) {
+            HStack(alignment: comfortable ? .top : .center, spacing: 9) {
                 Group {
                     if isArchiving {
                         Spinner(size: 11)
@@ -260,42 +250,59 @@ struct WorkspaceRow: View {
                         WorkspaceGlyph(workspace: workspace, model: model)
                     }
                 }
-                .frame(width: 16)
-                Text(title(model))
-                    .font(workspace.hasUnread ? Theme.uiMedium : Theme.ui)
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if workspace.isSandbox, !workspace.isArchived { MachineGlyph(workspace: workspace) }
-                if let server = workspace.host, server.provider == .server, !workspace.isArchived {
-                    ServerGlyph(name: server.machineName ?? "Server")
-                }
-                Spacer(minLength: 6)
-                if showsArchive {
-                    // Reserves room for the archive button overlaid below.
-                    Color.clear.frame(width: 18, height: 18)
-                } else if let model, !model.diffFiles.isEmpty {
-                    DiffCount(additions: model.diffStat.additions, deletions: model.diffStat.deletions)
-                } else if workspace.hasUnread {
-                    Circle().fill(Theme.running).frame(width: 6, height: 6)
+                .frame(width: 16, height: comfortable ? 17 : nil)
+                VStack(alignment: .leading, spacing: 2) {
+                    titleLine(model)
+                    if comfortable { WorkspaceStatusLine(workspace: workspace, model: model, archiving: isArchiving) }
                 }
             }
+            .padding(.vertical, comfortable ? 7 : 0)
         }
-        .overlay(alignment: .trailing) {
+        .opacity(isArchiving ? 0.6 : 1)
+        .allowsHitTesting(!isArchiving)
+        .overlay(alignment: comfortable ? .topTrailing : .trailing) {
             if showsArchive {
                 IconButton(symbol: "archivebox", help: "Archive \(workspace.name)", size: 11.5) {
                     Task { await app.archive(workspace) }
                 }
                 .padding(.trailing, 4)
+                .padding(.top, comfortable ? 3 : 0)
             }
         }
         .onHover { hovering = $0 }
         .help("\(workspace.name) · \(workspace.branch)")
         .contextMenu { WorkspaceContextMenu(workspace: workspace) }
         .padding(.leading, 8)
+        .animation(.snappy(duration: 0.2), value: density)
+    }
+
+    private func titleLine(_ model: WorkspaceModel?) -> some View {
+        HStack(spacing: 6) {
+            Text(title(model))
+                .font(workspace.hasUnread ? Theme.uiMedium : Theme.ui)
+                .foregroundStyle(app.selectedWorkspaceID == workspace.id || workspace.hasUnread ? Theme.text : Theme.textSoft)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if workspace.isSandbox, !workspace.isArchived { MachineGlyph(workspace: workspace) }
+            if let server = workspace.host, server.provider == .server, !workspace.isArchived {
+                ServerGlyph(name: server.machineName ?? "Server")
+            }
+            Spacer(minLength: 6)
+            if showsArchive {
+                // Reserves room for the archive button overlaid on top.
+                Color.clear.frame(width: 18, height: 16)
+            } else if let model, !model.diffFiles.isEmpty {
+                DiffCount(additions: model.diffStat.additions, deletions: model.diffStat.deletions)
+            } else if workspace.hasUnread {
+                Circle().fill(Theme.running).frame(width: 6, height: 6)
+            }
+        }
     }
 
     private func title(_ model: WorkspaceModel?) -> String {
+        if density == .comfortable, isArchiving || workspace.state == .creating || workspace.state == .settingUp {
+            return workspace.name.capitalized
+        }
         if isArchiving { return "Archiving \(workspace.name)…" }
         switch workspace.state {
         case .creating:
@@ -310,6 +317,78 @@ struct WorkspaceRow: View {
             if let t = tab?.title, t != "New chat" { return t }
             return workspace.name.capitalized
         }
+    }
+}
+
+/// The second line of a comfortable sidebar row: what this worktree is doing right now.
+/// Colour only where it's a status you act on (needs you, failing checks, failure).
+private struct WorkspaceStatusLine: View {
+    @Environment(AppModel.self) private var app
+    let workspace: Workspace
+    let model: WorkspaceModel?
+    let archiving: Bool
+
+    var body: some View {
+        let (text, tone) = status
+        HStack(spacing: 5) {
+            if tone == .serving {
+                Circle().fill(Theme.added).frame(width: 5, height: 5)
+            }
+            Text(text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .contentTransition(.opacity)
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(color(tone))
+        .shimmering(tone == .live)
+        .animation(.easeInOut(duration: 0.2), value: text)
+    }
+
+    private enum Tone { case quiet, live, serving, attention, problem }
+
+    private func color(_ tone: Tone) -> Color {
+        switch tone {
+        case .quiet, .live, .serving: Theme.text3
+        case .attention: Theme.warning
+        case .problem: Theme.removed
+        }
+    }
+
+    private var status: (String, Tone) {
+        if archiving { return ("Archiving…", .live) }
+        switch workspace.state {
+        case .creating, .settingUp:
+            return (app.creationSteps[workspace.id] ?? "Setting up…", .live)
+        case .failed(let why):
+            return (why, .problem)
+        case .archived:
+            return ("Archived · \(workspace.branch)", .quiet)
+        case .ready:
+            break
+        }
+        if model?.needsAttention == true { return ("Waiting for you", .attention) }
+        if model?.isAgentRunning == true { return (model?.liveActivity ?? "Working…", .live) }
+        if model?.supervisor?.anyRunning == true {
+            if let port = model?.openTargets.first?.port { return ("Running · :\(port)", .serving) }
+            return ("Running", .serving)
+        }
+        if let pr = model?.prStatus {
+            let n = "PR #\(pr.pr.number)"
+            switch pr.pr.state {
+            case .merged: return ("\(n) merged", .quiet)
+            case .closed: return ("\(n) closed", .quiet)
+            case .open:
+                switch pr.overall {
+                case .failing: return ("\(n) · checks failing", .problem)
+                case .pending: return ("\(n) · checks running", .quiet)
+                case .passing: return ("\(n) · checks passing", .quiet)
+                case .none: return (n, .quiet)
+                }
+            }
+        }
+        if workspace.prNumber == nil, workspace.isPushedToTrunk { return ("Pushed to \(workspace.baseBranch)", .quiet) }
+        return (workspace.branch, .quiet)
     }
 }
 

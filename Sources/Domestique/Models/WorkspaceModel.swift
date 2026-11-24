@@ -150,6 +150,55 @@ final class WorkspaceModel {
         guard let link = app.link(for: workspace) else { return false }
         return workspace?.tabs.contains { chats[$0.id] == nil && link.isSessionRunning($0.id) } ?? false
     }
+    /// Messages in this workspace's open chats that contain `query`, newest first, for ⌘K.
+    func searchChats(_ query: String, limit: Int = 4) -> [(tabID: UUID, tabTitle: String, text: String, date: Date)] {
+        guard query.count >= 2, let ws = workspace else { return [] }
+        var hits: [(tabID: UUID, tabTitle: String, text: String, date: Date)] = []
+        for tab in ws.tabs {
+            guard let chat = chats[tab.id] else { continue }
+            for item in chat.items.reversed() {
+                let text: String
+                switch item.kind {
+                case .assistant(let t), .user(let t): text = t
+                default: continue
+                }
+                guard let range = text.range(of: query, options: .caseInsensitive) else { continue }
+                hits.append((tab.id, tab.title, Self.snippet(text, around: range), item.timestamp))
+                if hits.count >= limit * 3 { break }
+            }
+        }
+        return Array(hits.sorted { $0.date > $1.date }.prefix(limit))
+    }
+
+    /// About 90 characters of `text` around `range`, on one line.
+    private static func snippet(_ text: String, around range: Range<String.Index>) -> String {
+        let start = text.index(range.lowerBound, offsetBy: -40, limitedBy: text.startIndex) ?? text.startIndex
+        let end = text.index(range.upperBound, offsetBy: 50, limitedBy: text.endIndex) ?? text.endIndex
+        let body = text[start..<end].replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+        return (start > text.startIndex ? "…" : "") + body.trimmingCharacters(in: .whitespaces) + (end < text.endIndex ? "…" : "")
+    }
+
+    /// What a running agent is doing right now ("Reading HealthKitStore.swift"), for the sidebar.
+    /// The selected chat wins; otherwise any chat that's running.
+    var liveActivity: String? {
+        // Read existing chats only: `selectedChat` would create (and load) one as a side effect.
+        let selected = (workspace?.selectedTabID ?? workspace?.tabs.first?.id).flatMap { chats[$0] }
+        let running = [selected].compactMap { $0 }.filter(\.isRunning) + chats.values.filter(\.isRunning)
+        guard let chat = running.first else { return nil }
+        for item in chat.items.reversed() {
+            switch item.kind {
+            case .tool(let call) where call.status == .running:
+                return call.activityLine(basePath: workspace?.path)
+            case .tool, .assistant:
+                return chat.status ?? "Thinking…"
+            default:
+                continue
+            }
+        }
+        return chat.status ?? "Working…"
+    }
+
     var needsAttention: Bool {
         if let link = app.link(for: workspace),
             workspace?.tabs.contains(where: { chats[$0.id] == nil && link.isSessionAwaiting($0.id) }) == true

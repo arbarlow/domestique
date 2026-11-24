@@ -473,10 +473,12 @@ enum SpanStyle {
     private static func runFont(base: NSFont, intent: InlinePresentationIntent?) -> NSFont {
         guard let intent else { return base }
         if intent.contains(.code) { return .monospacedSystemFont(ofSize: base.pointSize - 0.5, weight: .regular) }
-        var traits: NSFontDescriptor.SymbolicTraits = []
-        if intent.contains(.stronglyEmphasized) { traits.insert(.bold) }
-        if intent.contains(.emphasized) { traits.insert(.italic) }
-        guard !traits.isEmpty else { return base }
-        return NSFont(descriptor: base.fontDescriptor.withSymbolicTraits(traits), size: base.pointSize) ?? base
+        var font = base
+        // Semibold rather than bold: emphasis by weight that doesn't shout.
+        if intent.contains(.stronglyEmphasized) { font = .systemFont(ofSize: base.pointSize, weight: .semibold) }
+        if intent.contains(.emphasized) {
+            font = NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(.italic), size: font.pointSize) ?? font
+        }
+        return font
     }
 }
