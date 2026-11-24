@@ -183,7 +183,7 @@ struct ComposerView: View {
         .padding(.horizontal, 28)
         .padding(.bottom, 18)
         .padding(.top, 2)
-        .frame(maxWidth: Theme.contentWidth)
+        .frame(maxWidth: Theme.chatWidth)
         .frame(maxWidth: .infinity)
         .onAppear { focusSoon() }
         .onChange(of: app.composerFocusRequest) { focusSoon() }
@@ -582,7 +582,7 @@ private struct QueuedMessagesView: View {
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
             .padding(.horizontal, 42)
             .padding(.bottom, -6)
-            .frame(maxWidth: Theme.contentWidth)
+            .frame(maxWidth: Theme.chatWidth)
             .frame(maxWidth: .infinity)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }

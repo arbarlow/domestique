@@ -73,6 +73,8 @@ enum Theme {
     static let rowRadius: CGFloat = 7
     static let cardRadius: CGFloat = 12
     static let contentWidth: CGFloat = 760
+    /// Max width of the chat column (transcript, composer, trays). It shrinks with the window below this.
+    static let chatWidth: CGFloat = 900
 
     private static func dyn(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(

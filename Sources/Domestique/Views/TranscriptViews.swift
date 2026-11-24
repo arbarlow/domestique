@@ -118,7 +118,7 @@ struct TranscriptView: View {
             .padding(.horizontal, 28)
             .padding(.top, 22)
             .padding(.bottom, 32)
-            .frame(maxWidth: Theme.contentWidth)
+            .frame(maxWidth: Theme.chatWidth)
             .frame(maxWidth: .infinity)
         }
         .defaultScrollAnchor(.bottom)

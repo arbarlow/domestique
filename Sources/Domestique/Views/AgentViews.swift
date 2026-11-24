@@ -227,7 +227,7 @@ struct AgentsTray: View {
             .background(Theme.raised, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 0.5))
             .padding(.horizontal, 28)
-            .frame(maxWidth: Theme.contentWidth)
+            .frame(maxWidth: Theme.chatWidth)
             .frame(maxWidth: .infinity)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
