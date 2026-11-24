@@ -198,6 +198,8 @@ final class AppModel {
     var selectedWorkspaceID: UUID? {
         get { state.selectedWorkspaceID }
         set {
+            // A workspace being archived is closed off: it can't be reopened while teardown runs.
+            if let newValue, archiving.contains(newValue) { return }
             settingsRoute = nil
             composerFocusRequest += 1
             if let newValue, let ws = workspace(newValue) { selectedRepoID = ws.repoID }
@@ -238,7 +240,7 @@ final class AppModel {
     }
 
     var selectedWorkspaceModel: WorkspaceModel? {
-        guard let id = selectedWorkspaceID, workspace(id) != nil else { return nil }
+        guard let id = selectedWorkspaceID, workspace(id) != nil, !archiving.contains(id) else { return nil }
         return model(for: id)
     }
 
@@ -729,6 +731,9 @@ final class AppModel {
     func archive(_ ws: Workspace) async {
         guard let repo = repo(ws.repoID), archiving.insert(ws.id).inserted else { return }
         defer { archiving.remove(ws.id) }
+        // Close it off straight away: move to another workspace (or the project home) while
+        // teardown runs. The sidebar keeps showing it as "Archiving…" until it's done.
+        if selectedWorkspaceID == ws.id { selectedWorkspaceID = nextSelectable(in: repo, after: ws.id) }
         if let m = existingModel(for: ws.id) {
             await m.prepareForArchive()
         }
@@ -758,8 +763,13 @@ final class AppModel {
             $0.closedTabs = nil
         }
         if selectedWorkspaceID == ws.id {
-            selectedWorkspaceID = activeWorkspaces(in: repo).first?.id
+            selectedWorkspaceID = nextSelectable(in: repo, after: ws.id)
         }
+    }
+
+    /// Where selection goes when `id` closes: another active workspace not mid-archive, else the project home.
+    private func nextSelectable(in repo: Repository, after id: UUID) -> UUID? {
+        activeWorkspaces(in: repo).first { $0.id != id && !archiving.contains($0.id) }?.id
     }
 
     func deleteArchived(_ ws: Workspace) async {
