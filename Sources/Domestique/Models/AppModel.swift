@@ -314,8 +314,17 @@ final class AppModel {
 
     func updateWorkspace(_ id: UUID, _ mutate: (inout Workspace) -> Void) {
         guard let i = state.workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let before = state.workspaces[i].state
         mutate(&state.workspaces[i])
         scheduleSave()
+        noticeCreated(id, from: before, to: state.workspaces[i].state)
+    }
+
+    /// Chats open while a workspace is being created hold what's sent until its worktree exists.
+    private func noticeCreated(_ id: UUID, from before: WorkspaceState, to after: WorkspaceState) {
+        guard before == .creating, after != .creating else { return }
+        let failed = if case .failed = after { true } else { false }
+        existingModel(for: id)?.workspaceCreated(failed: failed)
     }
 
     func updateRepo(_ id: UUID, _ mutate: (inout Repository) -> Void) {
@@ -330,8 +339,10 @@ final class AppModel {
         var copy = state.workspaces[i]
         mutate(&copy)
         guard copy != state.workspaces[i] else { return }
+        let before = state.workspaces[i].state
         state.workspaces[i] = copy
         scheduleSave()
+        noticeCreated(id, from: before, to: copy.state)
     }
 
     func updateRepoIfChanged(_ id: UUID, _ mutate: (inout Repository) -> Void) {

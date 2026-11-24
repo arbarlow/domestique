@@ -195,6 +195,7 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
+        if chat.waitingForWorkspace { return "Start typing — it sends as soon as the worktree is ready" }
         if chat.isRunning { return "Queue a follow-up… (⌘↩ to steer now)" }
         switch chat.tab?.provider {
         case .codex: return "Work with Codex"
@@ -560,7 +561,7 @@ private struct SendButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!stop && empty)
-        .help(stop ? "Stop (⌘.)" : chat.isRunning ? "Queue (↩) · steer now (⌘↩) · newline (⇧↩)" : "Send (↩) · newline (⇧↩)")
+        .help(stop ? "Stop (⌘.)" : chat.waitingForWorkspace ? "Send once the worktree is ready (↩)" : chat.isRunning ? "Queue (↩) · steer now (⌘↩) · newline (⇧↩)" : "Send (↩) · newline (⇧↩)")
     }
 }
 
@@ -609,9 +610,11 @@ private struct QueuedRow: View {
                 .onTapGesture { chat.editQueued(message.id) }
                 .help("Edit")
             HStack(spacing: 2) {
-                Button("Steer") { chat.steer(message.id) }
-                    .buttonStyle(.softCompact)
-                    .help("Send into the running turn now")
+                if !chat.waitingForWorkspace {
+                    Button("Steer") { chat.steer(message.id) }
+                        .buttonStyle(.softCompact)
+                        .help("Send into the running turn now")
+                }
                 IconButton(symbol: "xmark", help: "Remove from queue", size: 9) {
                     chat.removeQueued(message.id)
                 }

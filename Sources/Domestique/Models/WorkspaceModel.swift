@@ -134,6 +134,11 @@ final class WorkspaceModel {
         return c
     }
 
+    /// Creation finished (or failed): chats that were typed into meanwhile can go.
+    func workspaceCreated(failed: Bool) {
+        for chat in chats.values { chat.workspaceCreated(failed: failed) }
+    }
+
     var selectedChat: ChatModel? {
         guard let ws = workspace, let tid = ws.selectedTabID ?? ws.tabs.first?.id else { return nil }
         return chat(for: tid)

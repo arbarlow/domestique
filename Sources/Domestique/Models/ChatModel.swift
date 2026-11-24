@@ -56,6 +56,12 @@ final class ChatModel {
     }
     private(set) var queued: [QueuedMessage] = []
 
+    /// The workspace's worktree (or sandbox) doesn't exist yet. The chat is usable already, but
+    /// anything sent waits in `queued` until creation finishes; see `workspaceCreated(failed:)`.
+    var waitingForWorkspace: Bool { workspace.workspace?.state == .creating }
+    /// Model / effort / permission changes made while waiting, pushed to the server session once it's ready.
+    @ObservationIgnored private var settingsChangedWhileWaiting = false
+
     @ObservationIgnored private var index: [String: Int] = [:]
     @ObservationIgnored private var session: (any AgentSession)?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -217,7 +223,7 @@ final class ChatModel {
         let files = attachments
         draft = ""
         attachments = []
-        if isRunning, !steer {
+        if waitingForWorkspace || (isRunning && !steer) {
             queued.append(QueuedMessage(text: text, attachments: files))
         } else {
             send(text: text, attachments: files)
@@ -226,7 +232,7 @@ final class ChatModel {
 
     /// Send a queued follow-up into the running turn right away.
     func steer(_ id: UUID) {
-        guard let i = queued.firstIndex(where: { $0.id == id }) else { return }
+        guard !waitingForWorkspace, let i = queued.firstIndex(where: { $0.id == id }) else { return }
         let m = queued.remove(at: i)
         send(text: m.text, attachments: m.attachments)
     }
@@ -245,7 +251,7 @@ final class ChatModel {
 
     /// The turn ended: everything queued goes out together as the next message.
     private func sendQueued() {
-        guard !queued.isEmpty, !isRunning else { return }
+        guard !queued.isEmpty, !isRunning, !waitingForWorkspace else { return }
         let all = queued
         queued = []
         let text = all.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -260,6 +266,34 @@ final class ChatModel {
         let text = all.map(\.text).filter { !$0.isEmpty }
         draft = (text + (draft.isEmpty ? [] : [draft])).joined(separator: "\n\n")
         attachments = all.flatMap(\.attachments) + attachments
+    }
+
+    /// The workspace left `.creating`: send what was typed meanwhile, or hand it back if creation failed.
+    func workspaceCreated(failed: Bool) {
+        guard !failed else {
+            settingsChangedWhileWaiting = false
+            restoreQueuedToDraft()
+            return
+        }
+        guard viaServer, settingsChangedWhileWaiting, let tab else {
+            sendQueued()
+            return
+        }
+        settingsChangedWhileWaiting = false
+        var u = Proto_UpdateSession()
+        u.sessionID = tabID.protoID
+        u.model = tab.model ?? ""
+        u.effort = tab.effort ?? ""
+        u.permissionMode = tab.permissionMode.proto
+        let req = u
+        let link = self.link!
+        Task {
+            // Settings first, so the first message runs with them.
+            do { _ = try await link.ready().updateSession(req) } catch {
+                self.upsert(TranscriptItem(id: "error-\(UUID())", kind: .error(text: error.localizedDescription)))
+            }
+            self.sendQueued()
+        }
     }
 
     func send(text: String, attachments: [AgentAttachment] = []) {
@@ -604,6 +638,11 @@ final class ChatModel {
     }
 
     private func updateSession(_ update: Proto_UpdateSession) {
+        // The session may not be open on the server yet; the tab already holds the change.
+        if waitingForWorkspace {
+            settingsChangedWhileWaiting = true
+            return
+        }
         var u = update
         u.sessionID = tabID.protoID
         let req = u

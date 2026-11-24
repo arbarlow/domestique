@@ -12,31 +12,16 @@ struct WorkspaceDetailView: View {
                 ChatTabBar(model: model, workspace: ws)
                 Hairline()
                 if ws.isSandbox, ws.state == .ready { MachineBanner(workspace: ws) }
-                if ws.state == .ready || ws.state == .settingUp, let timeline = app.creationTimelines[ws.id] {
+                if [.creating, .settingUp, .ready].contains(ws.state), let timeline = app.creationTimelines[ws.id] {
                     CreationSummaryBar(timeline: timeline) { app.creationTimelines[ws.id] = nil }
+                } else if ws.state == .creating {
+                    CreatingBar(title: creatingTitle(ws), detail: creatingDetail(ws))
                 }
                 switch ws.state {
-                case .creating where ws.serverID != nil:
-                    ProgressPlaceholder(
-                        title: "Creating on \(ws.host?.machineName ?? "Server")",
-                        detail: app.creationSteps[ws.id] ?? "Cloning \(model.repo?.name ?? "the repo") and branching \(ws.branch)")
-                case .creating where ws.isSandbox || ws.path.hasPrefix("/home/user"):
-                    if let timeline = app.creationTimelines[ws.id] {
-                        CreationChecklist(title: "Creating a boat.dev workspace", timeline: timeline)
-                    } else {
-                        ProgressPlaceholder(
-                            title: "Creating a boat.dev workspace",
-                            detail: "Starting a sandbox and cloning \(model.repo?.name ?? "the repo")")
-                    }
-                case .settingUp where ws.isRemote:
-                    if let chat = model.selectedChat {
-                        ChatView(chat: chat, workspaceModel: model).id(chat.tabID)
-                    }
-                case .creating:
-                    ProgressPlaceholder(title: "Creating worktree", detail: "Fetching origin/\(ws.baseBranch) and branching \(ws.branch)")
                 case .failed(let message):
                     FailedPlaceholder(message: message, workspace: ws)
                 default:
+                    // Usable while it's still being created: messages wait until the worktree exists.
                     if let chat = model.selectedChat {
                         ChatView(chat: chat, workspaceModel: model)
                             .id(chat.tabID)
@@ -49,6 +34,18 @@ struct WorkspaceDetailView: View {
             model.refreshDiff()
             if model.workspace?.prNumber != nil || model.shipMode == .pullRequest { model.refreshPR() }
         }
+    }
+
+    private func creatingTitle(_ ws: Workspace) -> String {
+        if ws.serverID != nil { return "Creating on \(ws.host?.machineName ?? "Server")" }
+        if ws.isSandbox || ws.path.hasPrefix("/home/user") { return "Creating a boat.dev workspace" }
+        return "Creating worktree"
+    }
+
+    private func creatingDetail(_ ws: Workspace) -> String {
+        if let step = app.creationSteps[ws.id] { return step }
+        if ws.isSandbox || ws.path.hasPrefix("/home/user") { return "Starting a sandbox and cloning \(model.repo?.name ?? "the repo")" }
+        return "Fetching origin/\(ws.baseBranch) and branching \(ws.branch)"
     }
 }
 
@@ -339,19 +336,6 @@ private struct ChatTabItem: View {
 
 // MARK: - Placeholders
 
-struct ProgressPlaceholder: View {
-    let title: String
-    let detail: String
-    var body: some View {
-        VStack(spacing: 12) {
-            Spinner(size: 20)
-            Text(title).font(Theme.bodyMedium).foregroundStyle(Theme.text)
-            Text(detail).font(Theme.ui).foregroundStyle(Theme.text2).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 /// Every stage of creating a workspace: what's done, what's running, and how long each took.
 struct CreationStageList: View {
     let timeline: CreationTimeline
@@ -402,22 +386,26 @@ struct CreationStageList: View {
     }
 }
 
-/// Fills the workspace while its sandbox is being created.
-struct CreationChecklist: View {
+/// Above the chat while the worktree is being made. The chat already works; sends wait for this.
+struct CreatingBar: View {
     let title: String
-    let timeline: CreationTimeline
+    let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).font(Theme.bodyMedium).foregroundStyle(Theme.text)
-            CreationStageList(timeline: timeline)
+        HStack(spacing: 8) {
+            Spinner(size: 10)
+            Text(title).font(Theme.smallMedium).foregroundStyle(Theme.text)
+            Text(detail).font(Theme.small).foregroundStyle(Theme.text2).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
         }
-        .frame(width: 420)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Theme.sunken)
+        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 
-/// Above the chat once the workspace is usable: setup's progress, then where the time went.
+/// Above the chat while the workspace is created and set up: setup's progress, then where the time went.
 struct CreationSummaryBar: View {
     let timeline: CreationTimeline
     let onDismiss: () -> Void
