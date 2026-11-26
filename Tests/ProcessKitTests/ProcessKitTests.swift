@@ -125,6 +125,40 @@ func testEnv(port: Int = 0) -> [String: String] {
         #expect(await waitFor(5) { !PortScanner.isPortListening(port) })
     }
 
+    /// `make run` → `go run` → a server that drains on SIGTERM: the leader dies at once, the server
+    /// keeps its port. Stop has to finish the job, and a quick start again mustn't find the port taken.
+    @Test func stopKillsChildThatOutlivesLeader() async throws {
+        let port = PortAllocator.allocate(used: [], in: 47000...47999)
+        let server = "import signal,time,http.server as h; signal.signal(signal.SIGTERM, lambda *a: time.sleep(60)); "
+            + "h.HTTPServer(('127.0.0.1', \(port)), h.SimpleHTTPRequestHandler).serve_forever()"
+        let run = TaskRun(
+            // The leader exits on SIGTERM straight away (like make) and leaves python behind.
+            config: TaskConfig(
+                id: "srv", command: "trap 'exit 0' TERM; python3 -c \"\(server)\" & wait", kind: .service,
+                readyPort: "\(port)"),
+            workspacePath: NSTemporaryDirectory(), environment: testEnv(port: port))
+        run.start()
+        let pid = try #require(run.pid)
+        #expect(await waitFor(15) { run.state == .ready })
+
+        run.stop()
+        #expect(await waitFor(5) { run.state == .stopped })
+        #expect(await waitFor(6) { kill(-pid, 0) != 0 })
+        #expect(await waitFor(2) { !PortScanner.isPortListening(port) })
+
+        // Starting straight after a stop clears whatever is still draining.
+        run.start()
+        #expect(await waitFor(15) { run.state == .ready })
+        let second = try #require(run.pid)
+        run.stop()
+        #expect(await waitFor(5) { run.state == .stopped })
+        #expect(kill(-second, 0) == 0)  // still draining, SIGKILL not due yet
+        run.start()
+        #expect(await waitFor(1) { kill(-second, 0) != 0 })
+        #expect(await waitFor(15) { run.state == .ready })
+        run.killNow()
+    }
+
     @Test func readyPatternAndRestart() async {
         let run = TaskRun(
             config: TaskConfig(id: "svc", command: "echo 'Server listening on 1234'; sleep 30", kind: .service, readyPattern: "listening on \\d+"),

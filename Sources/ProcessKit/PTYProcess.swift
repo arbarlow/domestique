@@ -64,6 +64,12 @@ final class PTYProcess: @unchecked Sendable {
         guard openpty(&master, &slave, nil, nil, &ws) == 0 else {
             throw SpawnError(message: "openpty failed: \(String(cString: strerror(errno)))")
         }
+        // Keep both ends out of anything else the app forks. SwiftTerm's terminals use forkpty+execve,
+        // which inherits every fd without CLOEXEC: a shell holding a copy of this master keeps the pty
+        // alive after we close it, so a dev server we stopped blocks forever writing to a full pty
+        // instead of getting EIO, and never reaches its shutdown (port stays bound).
+        _ = fcntl(master, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(slave, F_SETFD, FD_CLOEXEC)
         // Don't echo anything we might write; output-only.
         var tio = termios()
         if tcgetattr(slave, &tio) == 0 {

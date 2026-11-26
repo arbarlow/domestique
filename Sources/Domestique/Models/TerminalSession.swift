@@ -67,6 +67,7 @@ final class TerminalSession: Identifiable {
             view.startProcess(
                 executable: shell, args: ["-l"], environment: pairs,
                 execName: "-" + (shell as NSString).lastPathComponent, currentDirectory: cwd)
+            markMasterCloseOnExec()
         }
     }
 
@@ -86,12 +87,20 @@ final class TerminalSession: Identifiable {
                 view.startProcess(
                     executable: cmd.executable, args: cmd.arguments, environment: local.map { "\($0.key)=\($0.value)" },
                     execName: nil, currentDirectory: cmd.cwd)
+                markMasterCloseOnExec()
             } catch {
                 startError = error.localizedDescription
                 view.feed(text: "\r\nCouldn't connect: \(error.localizedDescription)\r\n")
                 exited = true
             }
         }
+    }
+
+    /// SwiftTerm leaves its pty master inheritable, so the next terminal's shell would hold this
+    /// one open (closing the tab then wouldn't hang its shell up).
+    private func markMasterCloseOnExec() {
+        let fd = view.process?.childfd ?? -1
+        if fd >= 0 { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
     }
 
     func terminate() {

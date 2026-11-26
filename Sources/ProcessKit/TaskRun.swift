@@ -123,6 +123,13 @@ public final class TaskRun: Identifiable {
 
     public func start() {
         guard !state.isActive else { return }
+        // Stopped moments ago and something from the old run is still draining (its SIGKILL is
+        // pending): it'd hold the ports this run is about to bind.
+        if let pending = killTask {
+            pending.cancel()
+            killTask = nil
+            if let process, process.groupAlive { process.signalGroup(SIGKILL) }
+        }
         lines.removeAll()
         ports = []
         stopRequested = false
@@ -227,10 +234,11 @@ public final class TaskRun: Identifiable {
         guard let process else { return }  // remote run still connecting: start() sees stopRequested
         process.signalGroup(SIGTERM)
         killTask?.cancel()
-        killTask = Task {
+        killTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
             if process.groupAlive { process.signalGroup(SIGKILL) }
+            self?.killTask = nil
         }
     }
 
@@ -254,7 +262,7 @@ public final class TaskRun: Identifiable {
 
     /// Synchronous SIGKILL of the whole group (app termination).
     public func killNow() {
-        guard let process, state.isActive else { return }
+        guard let process, state.isActive || killTask != nil else { return }
         stopRequested = true
         if !host.isLocal { killRemoteSession("KILL") }
         process.signalGroup(SIGKILL)
@@ -348,8 +356,6 @@ public final class TaskRun: Identifiable {
         guard gen == generation else { return }
         pollTask?.cancel()
         pollTask = nil
-        killTask?.cancel()
-        killTask = nil
         exitCode = code
         endedAt = .now
         ports = []
@@ -364,9 +370,22 @@ public final class TaskRun: Identifiable {
             state = code == 0 ? .stopped : .failed(exitCode: code)
             success = code == 0
         }
-        if let process, kind == .service, process.groupAlive {
-            // Leader died; don't leave orphaned dev servers holding ports.
-            process.signalGroup(SIGTERM)
+        // The leader (the shell, make, go run…) usually exits at once on SIGTERM, while the server
+        // under it may trap SIGTERM and drain for a long time with the port still bound. Whatever is
+        // left of the group gets SIGKILL after the grace period. A stop() already armed killTask.
+        if let process, process.groupAlive, stopRequested || kind == .service {
+            if !stopRequested { process.signalGroup(SIGTERM) }
+            if killTask == nil {
+                killTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(3))
+                    guard !Task.isCancelled else { return }
+                    if process.groupAlive { process.signalGroup(SIGKILL) }
+                    self?.killTask = nil
+                }
+            }
+        } else {
+            killTask?.cancel()
+            killTask = nil
         }
         resumeWaiters(success)
     }
