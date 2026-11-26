@@ -128,34 +128,38 @@ func testEnv(port: Int = 0) -> [String: String] {
     /// `make run` → `go run` → a server that drains on SIGTERM: the leader dies at once, the server
     /// keeps its port. Stop has to finish the job, and a quick start again mustn't find the port taken.
     @Test func stopKillsChildThatOutlivesLeader() async throws {
-        let port = PortAllocator.allocate(used: [], in: 46000...46999)  // own range: tests run in parallel
+        let port = PortAllocator.allocate(used: [], in: 46000...46999)
         let server = "import signal,time,http.server as h; signal.signal(signal.SIGTERM, lambda *a: time.sleep(60)); "
             + "h.HTTPServer(('127.0.0.1', \(port)), h.SimpleHTTPRequestHandler).serve_forever()"
+        var env = testEnv(port: port)
+        // Pinned: the scenario is about process groups, not about which shell CI happens to export.
+        env["SHELL"] = "/bin/zsh"
         let run = TaskRun(
             // The leader exits on SIGTERM straight away (like make) and leaves python behind.
             config: TaskConfig(
                 id: "srv", command: "trap 'exit 0' TERM; python3 -c \"\(server)\" & wait", kind: .service,
                 readyPort: "\(port)"),
-            workspacePath: NSTemporaryDirectory(), environment: testEnv(port: port))
+            workspacePath: NSTemporaryDirectory(), environment: env)
+        func status() -> Comment { "state \(run.state), output: \(run.lines.map(\.text).joined(separator: " | "))" }
         run.start()
         let pid = try #require(run.pid)
-        #expect(await waitFor(15) { run.state == .ready })
+        #expect(await waitFor(15) { run.state == .ready }, status())
 
         run.stop()
-        #expect(await waitFor(5) { run.state == .stopped })
+        #expect(await waitFor(5) { run.state == .stopped }, status())
         #expect(await waitFor(6) { kill(-pid, 0) != 0 })
         #expect(await waitFor(2) { !PortScanner.isPortListening(port) })
 
         // Starting straight after a stop clears whatever is still draining.
         run.start()
-        #expect(await waitFor(15) { run.state == .ready })
+        #expect(await waitFor(15) { run.state == .ready }, status())
         let second = try #require(run.pid)
         run.stop()
-        #expect(await waitFor(5) { run.state == .stopped })
-        #expect(kill(-second, 0) == 0)  // still draining, SIGKILL not due yet
+        #expect(await waitFor(5) { run.state == .stopped }, status())
+        #expect(kill(-second, 0) == 0, "still draining, SIGKILL not due yet")
         run.start()
         #expect(await waitFor(1) { kill(-second, 0) != 0 })
-        #expect(await waitFor(15) { run.state == .ready })
+        #expect(await waitFor(15) { run.state == .ready }, status())
         run.killNow()
     }
 
