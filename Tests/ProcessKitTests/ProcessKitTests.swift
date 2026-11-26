@@ -128,7 +128,7 @@ func testEnv(port: Int = 0) -> [String: String] {
     /// `make run` → `go run` → a server that drains on SIGTERM: the leader dies at once, the server
     /// keeps its port. Stop has to finish the job, and a quick start again mustn't find the port taken.
     @Test func stopKillsChildThatOutlivesLeader() async throws {
-        let port = PortAllocator.allocate(used: [], in: 47000...47999)
+        let port = PortAllocator.allocate(used: [], in: 46000...46999)  // own range: tests run in parallel
         let server = "import signal,time,http.server as h; signal.signal(signal.SIGTERM, lambda *a: time.sleep(60)); "
             + "h.HTTPServer(('127.0.0.1', \(port)), h.SimpleHTTPRequestHandler).serve_forever()"
         let run = TaskRun(
