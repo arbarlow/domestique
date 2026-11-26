@@ -129,8 +129,11 @@ func testEnv(port: Int = 0) -> [String: String] {
     /// keeps its port. Stop has to finish the job, and a quick start again mustn't find the port taken.
     @Test func stopKillsChildThatOutlivesLeader() async throws {
         let port = PortAllocator.allocate(used: [], in: 46000...46999)
-        let server = "import signal,time,http.server as h; signal.signal(signal.SIGTERM, lambda *a: time.sleep(60)); "
-            + "h.HTTPServer(('127.0.0.1', \(port)), h.SimpleHTTPRequestHandler).serve_forever()"
+        // A bare socket, not http.server: its server_bind does a reverse-DNS lookup before listen(),
+        // which can hang on CI runners.
+        let server = "import signal,socket,time; signal.signal(signal.SIGTERM, lambda *a: time.sleep(60)); "
+            + "s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); "
+            + "s.bind(('127.0.0.1', \(port))); s.listen()\nwhile True: s.accept()[0].close()"
         var env = testEnv(port: port)
         // Pinned: the scenario is about process groups, not about which shell CI happens to export.
         env["SHELL"] = "/bin/zsh"
@@ -140,18 +143,7 @@ func testEnv(port: Int = 0) -> [String: String] {
                 id: "srv", command: "trap 'exit 0' TERM; python3 -c \"\(server)\" & wait", kind: .service,
                 readyPort: "\(port)"),
             workspacePath: NSTemporaryDirectory(), environment: env)
-        func status() -> Comment {
-            let ps = Process()
-            ps.executableURL = URL(fileURLWithPath: "/bin/sh")
-            ps.arguments = ["-c", "which python3; python3 --version; ps -o pid,ppid,pgid,stat,command -g \(run.pid ?? 0)"]
-            let pipe = Pipe()
-            ps.standardOutput = pipe
-            ps.standardError = pipe
-            try? ps.run()
-            ps.waitUntilExit()
-            let procs = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            return "state \(run.state), output: \(run.lines.map(\.text).joined(separator: " | "))\n\(procs)"
-        }
+        func status() -> Comment { "state \(run.state), output: \(run.lines.map(\.text).joined(separator: " | "))" }
         run.start()
         let pid = try #require(run.pid)
         #expect(await waitFor(15) { run.state == .ready }, status())
