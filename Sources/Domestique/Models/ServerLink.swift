@@ -455,6 +455,7 @@ final class ServerLink {
         w.id = ws.id.protoID
         w.repositoryID = ws.repoID.protoID
         w.name = ws.name
+        w.title = ws.title ?? ""
         w.branch = ws.branch
         w.path = ws.path
         w.baseBranch = ws.baseBranch
@@ -537,10 +538,12 @@ final class ServerLink {
                 createdAt: Date(timeIntervalSince1970: Double(w.createdAtMs) / 1000), tabs: tabs,
                 selectedTabID: tabs.first?.id)
             ws.host = workspaceHost
+            ws.title = w.title.isEmpty ? nil : w.title
             app.adoptWorkspace(ws)
         } else {
             app.updateWorkspaceIfChanged(id) { ws in
                 ws.name = w.name
+                if !w.title.isEmpty { ws.title = w.title }
                 ws.branch = w.branch
                 ws.path = w.path
                 ws.baseBranch = w.baseBranch

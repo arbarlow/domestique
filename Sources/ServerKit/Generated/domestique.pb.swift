@@ -2570,6 +2570,10 @@ public nonisolated struct Proto_Workspace: Sendable {
 
   public var hasUnread_p: Bool = false
 
+  /// Short free-text name written by an AI from the first prompt, e.g. "Auto-name workspaces". Shown
+  /// instead of `name` when set; `name` stays the folder-safe id. Empty until named.
+  public var title: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -7605,7 +7609,7 @@ nonisolated extension Proto_RemoveRepository: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Proto_Workspace: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Workspace"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}repository_id\0\u{1}name\0\u{1}branch\0\u{1}path\0\u{3}base_branch\0\u{3}base_commit\0\u{3}port_base\0\u{1}state\0\u{1}failure\0\u{3}created_at_ms\0\u{3}pr_number\0\u{3}pr_url\0\u{3}has_unread\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}repository_id\0\u{1}name\0\u{1}branch\0\u{1}path\0\u{3}base_branch\0\u{3}base_commit\0\u{3}port_base\0\u{1}state\0\u{1}failure\0\u{3}created_at_ms\0\u{3}pr_number\0\u{3}pr_url\0\u{3}has_unread\0\u{1}title\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7627,6 +7631,7 @@ nonisolated extension Proto_Workspace: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 12: try { try decoder.decodeSingularInt32Field(value: &self.prNumber) }()
       case 13: try { try decoder.decodeSingularStringField(value: &self.prURL) }()
       case 14: try { try decoder.decodeSingularBoolField(value: &self.hasUnread_p) }()
+      case 15: try { try decoder.decodeSingularStringField(value: &self.title) }()
       default: break
       }
     }
@@ -7675,6 +7680,9 @@ nonisolated extension Proto_Workspace: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if self.hasUnread_p != false {
       try visitor.visitSingularBoolField(value: self.hasUnread_p, fieldNumber: 14)
     }
+    if !self.title.isEmpty {
+      try visitor.visitSingularStringField(value: self.title, fieldNumber: 15)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -7693,6 +7701,7 @@ nonisolated extension Proto_Workspace: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.prNumber != rhs.prNumber {return false}
     if lhs.prURL != rhs.prURL {return false}
     if lhs.hasUnread_p != rhs.hasUnread_p {return false}
+    if lhs.title != rhs.title {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

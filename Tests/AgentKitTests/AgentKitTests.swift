@@ -77,3 +77,14 @@ import Testing
         #expect(info.overageDisabledReason == "out_of_credits")
     }
 }
+
+@Suite struct ChatNamerTests {
+    @Test func parsesNamesAndTidiesThem() {
+        let a = ChatNamer.parse(#"{"workspace": "Auto-name worktrees", "chat": "Name chats from prompts"}"#)
+        #expect(a?.workspace == "Auto-name worktrees" && a?.chat == "Name chats from prompts")
+        let b = ChatNamer.parse("```json\n{\"workspace\": \"\\\"Fix login.\\\"\", \"chat\": \"  Flaky   login test. \"}\n```")
+        #expect(b?.workspace == "Fix login" && b?.chat == "Flaky login test")
+        #expect(ChatNamer.parse("sorry, I can't") == nil)
+        #expect(ChatNamer.clean("A very long name that keeps going and going past the limit", max: 20).count == 20)
+    }
+}

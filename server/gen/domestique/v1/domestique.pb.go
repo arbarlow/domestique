@@ -4938,11 +4938,14 @@ type Workspace struct {
 	PortBase int32          `protobuf:"varint,8,opt,name=port_base,json=portBase,proto3" json:"port_base,omitempty"`
 	State    WorkspaceState `protobuf:"varint,9,opt,name=state,proto3,enum=domestique.v1.WorkspaceState" json:"state,omitempty"`
 	// Set when state is FAILED.
-	Failure       string `protobuf:"bytes,10,opt,name=failure,proto3" json:"failure,omitempty"`
-	CreatedAtMs   int64  `protobuf:"varint,11,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
-	PrNumber      int32  `protobuf:"varint,12,opt,name=pr_number,json=prNumber,proto3" json:"pr_number,omitempty"`
-	PrUrl         string `protobuf:"bytes,13,opt,name=pr_url,json=prUrl,proto3" json:"pr_url,omitempty"`
-	HasUnread     bool   `protobuf:"varint,14,opt,name=has_unread,json=hasUnread,proto3" json:"has_unread,omitempty"`
+	Failure     string `protobuf:"bytes,10,opt,name=failure,proto3" json:"failure,omitempty"`
+	CreatedAtMs int64  `protobuf:"varint,11,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
+	PrNumber    int32  `protobuf:"varint,12,opt,name=pr_number,json=prNumber,proto3" json:"pr_number,omitempty"`
+	PrUrl       string `protobuf:"bytes,13,opt,name=pr_url,json=prUrl,proto3" json:"pr_url,omitempty"`
+	HasUnread   bool   `protobuf:"varint,14,opt,name=has_unread,json=hasUnread,proto3" json:"has_unread,omitempty"`
+	// Short free-text name written by an AI from the first prompt, e.g. "Auto-name workspaces". Shown
+	// instead of `name` when set; `name` stays the folder-safe id. Empty until named.
+	Title         string `protobuf:"bytes,15,opt,name=title,proto3" json:"title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5073,6 +5076,13 @@ func (x *Workspace) GetHasUnread() bool {
 		return x.HasUnread
 	}
 	return false
+}
+
+func (x *Workspace) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
 }
 
 type WorkspaceList struct {
@@ -10411,7 +10421,7 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x04 \x01(\tR\x02id\"7\n" +
 	"\x10RemoveRepository\x12#\n" +
-	"\rrepository_id\x18\x01 \x01(\tR\frepositoryId\"\xa5\x03\n" +
+	"\rrepository_id\x18\x01 \x01(\tR\frepositoryId\"\xbb\x03\n" +
 	"\tWorkspace\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rrepository_id\x18\x02 \x01(\tR\frepositoryId\x12\x12\n" +
@@ -10430,7 +10440,8 @@ const file_domestique_v1_domestique_proto_rawDesc = "" +
 	"\tpr_number\x18\f \x01(\x05R\bprNumber\x12\x15\n" +
 	"\x06pr_url\x18\r \x01(\tR\x05prUrl\x12\x1d\n" +
 	"\n" +
-	"has_unread\x18\x0e \x01(\bR\thasUnread\"I\n" +
+	"has_unread\x18\x0e \x01(\bR\thasUnread\x12\x14\n" +
+	"\x05title\x18\x0f \x01(\tR\x05title\"I\n" +
 	"\rWorkspaceList\x128\n" +
 	"\n" +
 	"workspaces\x18\x01 \x03(\v2\x18.domestique.v1.WorkspaceR\n" +

@@ -99,6 +99,8 @@ public struct Workspace: Codable, Sendable, Identifiable, Hashable {
     public var repoID: UUID
     /// Short human name, e.g. "galibier". Also the worktree directory name.
     public var name: String
+    /// Free-text name an AI wrote from the first prompt, e.g. "Auto-name workspaces". nil until named.
+    public var title: String?
     public var branch: String
     public var path: String
     public var baseBranch: String

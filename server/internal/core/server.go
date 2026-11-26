@@ -56,7 +56,10 @@ type Options struct {
 	Executables map[domestiquev1.Provider]string
 	// Writes the --mcp-config file for this server's own worktrees and returns its path ("" = no servers).
 	McpConfigFile func() (string, error)
-	Log           *slog.Logger
+	// Writes short names for a workspace and a chat from a session's first prompt (see autoName).
+	// nil = chats keep the first line of the prompt and workspaces keep their climb name.
+	Namer func(ctx context.Context, prompt string) (workspace, chat string, err error)
+	Log   *slog.Logger
 }
 
 type Server struct {
@@ -82,6 +85,9 @@ type Server struct {
 	closing map[string]bool
 	// creation goroutines, so Shutdown can wait.
 	wg sync.WaitGroup
+	// Cancelled by Shutdown; bounds background naming.
+	bg       context.Context
+	cancelBg context.CancelFunc
 }
 
 func New(opts Options) (*Server, error) {
@@ -109,6 +115,7 @@ func New(opts Options) (*Server, error) {
 		repos: map[string]*domestiquev1.Repository{}, workspaces: map[string]*domestiquev1.Workspace{}, sessions: map[string]*Session{}, sessionMeta: map[string]*domestiquev1.Session{},
 		closing: map[string]bool{},
 	}
+	c.bg, c.cancelBg = context.WithCancel(context.Background())
 	id, err := c.store.ServerID(context.Background())
 	if err != nil {
 		return nil, err
@@ -185,6 +192,7 @@ func (c *Server) load() error {
 
 // Shutdown stops every agent. Workspaces and transcripts stay on disk.
 func (c *Server) Shutdown() {
+	c.cancelBg()
 	c.mu.Lock()
 	sessions := make([]*Session, 0, len(c.sessions))
 	for _, r := range c.sessions {
@@ -745,7 +753,7 @@ func (c *Server) ImportWorkspace(req *domestiquev1.ImportWorkspace) (*domestique
 	ws := &domestiquev1.Workspace{
 		Id: in.Id, RepositoryId: repo.Id, Name: in.Name, Branch: in.Branch, Path: in.Path,
 		BaseBranch: in.BaseBranch, BaseCommit: in.BaseCommit, PortBase: in.PortBase, State: in.State,
-		CreatedAtMs: in.CreatedAtMs,
+		CreatedAtMs: in.CreatedAtMs, Title: in.Title,
 	}
 	switch ws.State {
 	case domestiquev1.WorkspaceState_WORKSPACE_STATE_ARCHIVED, domestiquev1.WorkspaceState_WORKSPACE_STATE_READY:

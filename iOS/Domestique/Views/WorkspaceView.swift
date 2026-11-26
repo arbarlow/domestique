@@ -127,7 +127,7 @@ struct WorkspaceView: View {
         } label: {
             VStack(spacing: 0) {
                 HStack(spacing: 4) {
-                    Text(workspace?.name ?? "Workspace").font(.headline)
+                    Text(workspace.map { $0.title.isEmpty ? $0.name : $0.title } ?? "Workspace").font(.headline)
                     if sessions.count > 1 {
                         Image(systemName: "chevron.down.circle.fill")
                             .font(.caption)

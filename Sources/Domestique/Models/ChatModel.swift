@@ -89,6 +89,22 @@ final class ChatModel {
 
     var tab: ChatTab? { workspace.workspace?.tabs.first { $0.id == tabID } }
 
+    /// Replaces the placeholder title with an AI-written one (unless the tab was renamed meanwhile), and
+    /// names the workspace if nothing has yet.
+    private func autoName(from prompt: String, placeholder: String) {
+        Task { [weak self] in
+            guard let names = await ChatNamer.names(for: prompt), let self else { return }
+            self.workspace.app.updateWorkspace(self.workspace.id) { ws in
+                if !names.chat.isEmpty, let i = ws.tabs.firstIndex(where: { $0.id == self.tabID }),
+                    ws.tabs[i].title == placeholder
+                {
+                    ws.tabs[i].title = names.chat
+                }
+                if !names.workspace.isEmpty, ws.title?.isEmpty ?? true { ws.title = names.workspace }
+            }
+        }
+    }
+
     private func updateTab(_ mutate: (inout ChatTab) -> Void) {
         workspace.app.updateWorkspace(workspace.id) { ws in
             guard let i = ws.tabs.firstIndex(where: { $0.id == tabID }) else { return }
@@ -301,6 +317,10 @@ final class ChatModel {
         if items.isEmpty, tab?.title == "New chat" {
             let title = text.split(separator: "\n").first.map { String($0.prefix(40)) } ?? "Chat"
             updateTab { $0.title = title }
+            // The server names its own sessions (and their workspace); chats run here get named here.
+            if !viaServer, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                autoName(from: text, placeholder: title)
+            }
         }
         let display = SentAttachments.displayText(text, filenames: attachments.map(\.filename))
         // Keep the images so the sent message can still show them (servers keep only the names).

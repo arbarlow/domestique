@@ -96,7 +96,9 @@ func (r *Session) Send(ctx context.Context, text string, atts []agent.Attachment
 		r.mu.Unlock()
 		return fmt.Errorf("session is closed")
 	}
-	if r.meta.LastSeq == 0 && (r.meta.Title == "" || r.meta.Title == "New chat") {
+	firstPrompt := r.meta.LastSeq == 0 && (r.meta.Title == "" || r.meta.Title == "New chat")
+	if firstPrompt {
+		// A placeholder until autoName replaces it (or for good, without a namer).
 		title := strings.SplitN(strings.TrimSpace(text), "\n", 2)[0]
 		if len([]rune(title)) > 40 {
 			title = string([]rune(title)[:40])
@@ -105,6 +107,9 @@ func (r *Session) Send(ctx context.Context, text string, atts []agent.Attachment
 			title = "Chat"
 		}
 		r.meta.Title = title
+		if strings.TrimSpace(text) != "" {
+			go r.server.autoName(r, title, text)
+		}
 	}
 	display := text
 	if len(atts) > 0 {

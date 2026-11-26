@@ -33,6 +33,8 @@ type env struct {
 	tcpAddr  string
 	cancel   context.CancelFunc
 	done     chan struct{}
+	// Options.Namer for the next start (nil = no auto-naming).
+	namer func(ctx context.Context, prompt string) (string, string, error)
 }
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -98,6 +100,7 @@ func (e *env) start() {
 	server, err := core.New(core.Options{
 		Name: "test-server", Version: "test", Store: st, Agents: reg, Log: quietLog(),
 		WorkspacesRoot: filepath.Join(e.dir, "ws"), ReposRoot: filepath.Join(e.dir, "repos"), BranchPrefix: "tc",
+		Namer: e.namer,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -256,11 +256,7 @@ private struct ProjectWorkspaceRow: View {
         .contextMenu { WorkspaceContextMenu(workspace: workspace) }
     }
 
-    private var title: String {
-        let tab = workspace.tabs.first { $0.id == workspace.selectedTabID } ?? workspace.tabs.first
-        if let t = tab?.title, t != "New chat" { return t }
-        return workspace.name.capitalized
-    }
+    private var title: String { workspace.displayTitle }
 }
 
 private struct PullRequestRow: View {

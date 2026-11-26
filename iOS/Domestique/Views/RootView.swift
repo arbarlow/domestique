@@ -265,13 +265,14 @@ struct WorkspaceRow: View {
 
     private var sessions: [Proto_Session] { server.sessions(in: workspace.id) }
 
-    /// The chat's title once it has one, like the Mac sidebar; the workspace's name until then.
+    /// Like the Mac sidebar: the AI-written workspace title, else a chat's title, else the climb name.
     private var title: String {
         switch workspace.state {
         case .creating: return "Creating \(workspace.name)…"
         case .settingUp: return "Setting up \(workspace.name)…"
         case .failed: return "\(workspace.name) (failed)"
         default:
+            if !workspace.title.isEmpty { return workspace.title }
             let named = sessions.first { !$0.title.isEmpty && $0.title != "New chat" }
             return named?.title ?? workspace.name.capitalized
         }

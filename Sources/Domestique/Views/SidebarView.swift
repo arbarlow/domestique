@@ -270,7 +270,7 @@ struct WorkspaceRow: View {
             }
         }
         .onHover { hovering = $0 }
-        .help("\(workspace.name) · \(workspace.branch)")
+        .help("\(workspace.displayTitle) · \(workspace.branch)")
         .contextMenu { WorkspaceContextMenu(workspace: workspace) }
         .padding(.leading, 8)
         .animation(.snappy(duration: 0.2), value: density)
@@ -313,9 +313,7 @@ struct WorkspaceRow: View {
         case .settingUp: return "Setting up \(workspace.name)…"
         case .failed: return "\(workspace.name) (failed)"
         default:
-            let tab = workspace.tabs.first { $0.id == workspace.selectedTabID } ?? workspace.tabs.first
-            if let t = tab?.title, t != "New chat" { return t }
-            return workspace.name.capitalized
+            return workspace.displayTitle
         }
     }
 }

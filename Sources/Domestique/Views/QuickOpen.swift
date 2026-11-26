@@ -273,8 +273,9 @@ private struct QuickOpenRow: View {
 }
 
 extension Workspace {
-    /// What the sidebar calls it: the current chat's title, else the workspace name.
+    /// What the sidebar calls it: its AI-written title, else the current chat's title, else its climb name.
     var displayTitle: String {
+        if let title, !title.isEmpty { return title }
         let tab = tabs.first { $0.id == selectedTabID } ?? tabs.first
         if let t = tab?.title, t != "New chat" { return t }
         return name.capitalized

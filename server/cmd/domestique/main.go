@@ -189,6 +189,9 @@ func serve(args []string) error {
 		Name: cfg.Name, Version: version, Store: st, Agents: reg, WorkspacesRoot: cfg.WorkspacesRoot,
 		ReposRoot: cfg.ReposRoot, BranchPrefix: cfg.BranchPrefix, PortStart: cfg.Ports.Start, PortEnd: cfg.Ports.End, Executables: execs, Log: log,
 		McpConfigFile: func() (string, error) { return mcpServers.WriteFile(filepath.Join(cfg.home, "mcp.json")) },
+		Namer: func(ctx context.Context, prompt string) (string, string, error) {
+			return claude.Names(ctx, execs[domestiquev1.Provider_PROVIDER_CLAUDE], prompt)
+		},
 	})
 	if err != nil {
 		return err

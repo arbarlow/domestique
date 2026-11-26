@@ -475,6 +475,9 @@ message Workspace {
   int32 pr_number = 12;
   string pr_url = 13;
   bool has_unread = 14;
+  // Short free-text name written by an AI from the first prompt, e.g. "Auto-name workspaces". Shown
+  // instead of `name` when set; `name` stays the folder-safe id. Empty until named.
+  string title = 15;
 }
 
 message WorkspaceList {
