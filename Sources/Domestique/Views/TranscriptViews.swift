@@ -98,6 +98,18 @@ struct Turn: Identifiable {
 struct TranscriptView: View {
     let chat: ChatModel
     @State private var selection = TranscriptSelection()
+    @State private var position = ScrollPosition(edge: .bottom)
+
+    private var lastUserID: String? {
+        chat.items.last(where: { if case .user = $0.kind { true } else { false } })?.id
+    }
+
+    /// The lazy stack only knows estimated heights for rows it hasn't laid out, so the first jump can
+    /// land short of the end; a second one on the next runloop turn settles on the real bottom.
+    private func scrollToBottom() {
+        position.scrollTo(edge: .bottom)
+        DispatchQueue.main.async { position.scrollTo(edge: .bottom) }
+    }
 
     var body: some View {
         let turns = Turn.build(chat.items, running: chat.isRunning).filter(\.hasContent)
@@ -124,6 +136,13 @@ struct TranscriptView: View {
         }
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .scrollPosition($position)
+        // The size-change anchor only holds the bottom if we're already there; a new message of yours
+        // should always come into view, even after scrolling up to read earlier turns.
+        .onChange(of: lastUserID) { old, new in
+            guard old != nil, new != nil else { return }
+            scrollToBottom()
+        }
         .scrollContentBackground(.hidden)
         .environment(\.transcriptSelection, selection)
         .onAppear { selection.start() }
