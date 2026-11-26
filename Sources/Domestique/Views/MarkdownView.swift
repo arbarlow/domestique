@@ -9,7 +9,10 @@ enum MarkdownBlock: Hashable {
     case list(ordered: Bool, items: [ListItem])
     case quote(String)
     case rule
-    case table(rows: [[String]])
+    /// The header is `rows[0]`; every row has exactly `alignments.count` cells.
+    case table(rows: [[String]], alignments: [ColumnAlignment])
+
+    enum ColumnAlignment: Hashable { case leading, center, trailing }
 
     struct ListItem: Hashable {
         var text: String
@@ -80,18 +83,24 @@ enum MarkdownParser {
                 blocks.append(.quote(quote.joined(separator: "\n")))
                 continue
             }
-            if trimmed.hasPrefix("|"), i + 1 < lines.count, lines[i + 1].contains("---") {
-                flushParagraph()
-                var rows: [[String]] = []
-                while i < lines.count, lines[i].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
-                    let row = lines[i].trimmingCharacters(in: .whitespaces)
-                    let cells = row.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast()
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-                    if !cells.allSatisfy({ $0.allSatisfy { "-: ".contains($0) } }) { rows.append(Array(cells)) }
-                    i += 1
+            if trimmed.contains("|"), i + 1 < lines.count, var alignments = tableDelimiter(lines[i + 1]) {
+                let header = tableCells(trimmed)
+                // GFM wants the delimiter row to match the header exactly; while it streams in it can be short.
+                if alignments.count <= header.count {
+                    flushParagraph()
+                    alignments += Array(repeating: .leading, count: header.count - alignments.count)
+                    var rows = [header]
+                    i += 2
+                    while i < lines.count {
+                        let row = lines[i].trimmingCharacters(in: .whitespaces)
+                        guard row.contains("|"), !row.hasPrefix("```"), !row.hasPrefix("~~~") else { break }
+                        let cells = tableCells(row)
+                        rows.append(Array((cells + Array(repeating: "", count: max(0, header.count - cells.count))).prefix(header.count)))
+                        i += 1
+                    }
+                    blocks.append(.table(rows: rows, alignments: alignments))
+                    continue
                 }
-                blocks.append(.table(rows: rows))
-                continue
             }
             if let item = listItem(line) {
                 flushParagraph()
@@ -117,6 +126,57 @@ enum MarkdownParser {
         }
         flushParagraph()
         return blocks
+    }
+
+    /// The cells of a table row: outer pipes are optional, `\\|` is a literal pipe, and a pipe inside a code
+    /// span doesn't split (agents write `a|b` far more often than they mean a column break there).
+    static func tableCells(_ line: String) -> [String] {
+        var row = Substring(line.trimmingCharacters(in: .whitespaces))
+        if row.hasPrefix("|") { row = row.dropFirst() }
+        if row.hasSuffix("|"), !row.hasSuffix("\\|") { row = row.dropLast() }
+
+        func split(respectingCode: Bool) -> [String]? {
+            var cells: [String] = []
+            var cell = ""
+            var escaped = false
+            var inCode = false
+            for ch in row {
+                if escaped {
+                    if ch != "|" { cell.append("\\") }
+                    cell.append(ch)
+                    escaped = false
+                } else if ch == "\\" {
+                    escaped = true
+                } else if ch == "`" {
+                    inCode.toggle()
+                    cell.append(ch)
+                } else if ch == "|", !(respectingCode && inCode) {
+                    cells.append(cell.trimmingCharacters(in: .whitespaces))
+                    cell = ""
+                } else {
+                    cell.append(ch)
+                }
+            }
+            if escaped { cell.append("\\") }
+            if respectingCode, inCode { return nil }  // an unclosed backtick mustn't swallow the rest of the row
+            cells.append(cell.trimmingCharacters(in: .whitespaces))
+            return cells
+        }
+        return split(respectingCode: true) ?? split(respectingCode: false) ?? []
+    }
+
+    /// The column alignments a delimiter row (`| :--- | :---: | ---: |`) declares, or nil if it isn't one.
+    static func tableDelimiter(_ line: String) -> [MarkdownBlock.ColumnAlignment]? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.contains("|"), trimmed.contains("-") else { return nil }
+        var alignments: [MarkdownBlock.ColumnAlignment] = []
+        for cell in tableCells(trimmed) {
+            let left = cell.hasPrefix(":"), right = cell.hasSuffix(":")
+            let dashes = cell.dropFirst(left ? 1 : 0).dropLast(right && cell.count > 1 ? 1 : 0)
+            guard !dashes.isEmpty, dashes.allSatisfy({ $0 == "-" }) else { return nil }
+            alignments.append(left && right ? .center : right ? .trailing : .leading)
+        }
+        return alignments
     }
 
     private static func listItem(_ line: String) -> (item: MarkdownBlock.ListItem, ordered: Bool)? {
@@ -180,24 +240,11 @@ private struct BlockView: View {
     /// 14pt on a 24pt line (13 on 21 when compact), matching Conductor's prose rhythm.
     private var proseSpacing: CGFloat { Theme.lineSpacing(size: bodySize, lineHeight: compact ? 21 : 24) }
 
-    @ViewBuilder
     private func inlineText(
         _ text: String, part: String = "", size: CGFloat, weight: NSFont.Weight = .regular, color: Color? = nil,
         lineSpacing: CGFloat = 0
-    ) -> some View {
-        if let spanID {
-            let span = SpanText(
-                id: spanID + part,
-                text: SpanStyle.attributed(
-                    MarkdownParser.inline(text), font: .systemFont(ofSize: size, weight: weight),
-                    color: NSColor(color ?? Theme.text), lineSpacing: lineSpacing))
-            span.spanBaseline(span)
-        } else {
-            Text(MarkdownParser.inline(text))
-                .font(.system(size: size, weight: weight == .regular ? .regular : weight == .medium ? .medium : .semibold))
-                .foregroundStyle(color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.foreground))
-                .lineSpacing(lineSpacing)
-        }
+    ) -> InlineText {
+        InlineText(text: text, spanID: spanID.map { $0 + part }, size: size, weight: weight, color: color, lineSpacing: lineSpacing)
     }
 
     var body: some View {
@@ -237,22 +284,189 @@ private struct BlockView: View {
             }
         case .rule:
             Hairline().padding(.vertical, 4)
-        case .table(let rows):
-            ScrollView(.horizontal, showsIndicators: false) {
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { r, row in
-                        GridRow {
-                            ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
-                                inlineText(cell, part: ".\(r).\(c)", size: 13, weight: r == 0 ? .medium : .regular, color: Theme.text)
-                            }
-                        }
-                        if r == 0 { Hairline().gridCellUnsizedAxes(.horizontal) }
+        case .table(let rows, let alignments):
+            TableBlockView(rows: rows, alignments: alignments, compact: compact, spanID: spanID)
+        }
+    }
+}
+
+/// One run of inline markdown: a selectable `SpanText` inside the transcript, plain `Text` elsewhere.
+private struct InlineText: View {
+    let text: String
+    let spanID: String?
+    let size: CGFloat
+    var weight: NSFont.Weight = .regular
+    var color: Color?
+    var lineSpacing: CGFloat = 0
+
+    var body: some View {
+        if let spanID {
+            let span = SpanText(
+                id: spanID,
+                text: SpanStyle.attributed(
+                    MarkdownParser.inline(text), font: .systemFont(ofSize: size, weight: weight),
+                    color: NSColor(color ?? Theme.text), lineSpacing: lineSpacing))
+            span.spanBaseline(span)
+        } else {
+            Text(MarkdownParser.inline(text))
+                .font(.system(size: size, weight: weight == .regular ? .regular : weight == .medium ? .medium : .semibold))
+                .foregroundStyle(color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.foreground))
+                .lineSpacing(lineSpacing)
+        }
+    }
+}
+
+// MARK: - Tables
+
+/// A markdown table that fits the column it's in: columns wrap rather than run off the edge, and only when even
+/// wrapped they can't fit (lots of columns) does the table scroll sideways.
+private struct TableBlockView: View {
+    let rows: [[String]]
+    let alignments: [MarkdownBlock.ColumnAlignment]
+    let compact: Bool
+    let spanID: String?
+    /// The width the table may use, measured outside the scroll view (which proposes no width to its content).
+    @State private var available: CGFloat?
+    @State private var contentWidth: CGFloat = 0
+
+    private var overflows: Bool { contentWidth > (available ?? .infinity) + 0.5 }
+
+    var body: some View {
+        let columns = alignments.count
+        let size: CGFloat = compact ? 12.5 : 13
+        let spacing = Theme.lineSpacing(size: size, lineHeight: compact ? 18 : 19)
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(maxWidth: .infinity).frame(height: 0)
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { available = $0 }
+            ScrollView(.horizontal) {
+                TableLayout(columns: columns, alignments: alignments, available: available) {
+                    Rectangle().fill(Theme.sunken.opacity(0.7))
+                        .layoutValue(key: TableSlotKey.self, value: .header)
+                    ForEach(0..<rows.count * columns, id: \.self) { i in
+                        let r = i / columns, c = i % columns
+                        InlineText(
+                            text: rows[r][c], spanID: spanID.map { "\($0).\(r).\(c)" }, size: size,
+                            weight: r == 0 ? .medium : .regular, color: Theme.text, lineSpacing: spacing
+                        )
+                        .layoutValue(key: TableSlotKey.self, value: .cell(row: r, column: c))
+                    }
+                    ForEach(0..<max(rows.count - 1, 0), id: \.self) { r in
+                        Rectangle().fill(r == 0 ? Theme.border : Theme.hairline)
+                            .layoutValue(key: TableSlotKey.self, value: .rule(below: r))
                     }
                 }
-                .padding(12)
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { contentWidth = $0 }
             }
-            .background(Theme.raised, in: RoundedRectangle(cornerRadius: 10))
+            .scrollIndicators(overflows ? .automatic : .hidden)
+            .scrollDisabled(!overflows)
+            .frame(width: available.map { contentWidth > 0 ? min(contentWidth, $0) : $0 })
+            .background(Theme.raised)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 0.5))
+        }
+    }
+}
+
+private enum TableSlot: Equatable {
+    case header
+    case cell(row: Int, column: Int)
+    case rule(below: Int)
+}
+
+private struct TableSlotKey: LayoutValueKey {
+    static let defaultValue = TableSlot.header
+}
+
+/// Lays cells out in a grid whose columns share the width the way an HTML table's do: columns that fit at their
+/// natural width keep it, the rest split what's left and wrap. Also places the header fill and row rules.
+struct TableLayout: Layout {
+    let columns: Int
+    let alignments: [MarkdownBlock.ColumnAlignment]
+    var available: CGFloat?
+    var padding = CGSize(width: 12, height: 7)
+    /// Below this a column stops getting narrower and the table overflows instead.
+    var minimumColumn: CGFloat = 64
+
+    private struct Geometry {
+        var widths: [CGFloat]
+        var heights: [CGFloat]
+        var size: CGSize
+    }
+
+    private func geometry(_ subviews: Subviews, proposedWidth: CGFloat?) -> Geometry {
+        var cells: [(row: Int, column: Int, view: LayoutSubview)] = []
+        for view in subviews {
+            if case .cell(let r, let c) = view[TableSlotKey.self] { cells.append((r, c, view)) }
+        }
+        let rowCount = (cells.map(\.row).max() ?? -1) + 1
+        var ideal = Array(repeating: CGFloat(0), count: columns)
+        for cell in cells { ideal[cell.column] = max(ideal[cell.column], cell.view.sizeThatFits(.unspecified).width) }
+
+        let limit = (available ?? proposedWidth ?? .infinity) - CGFloat(columns) * padding.width * 2
+        let widths = Self.fit(ideal, into: limit, minimum: minimumColumn)
+        var heights = Array(repeating: CGFloat(0), count: rowCount)
+        for cell in cells {
+            let height = cell.view.sizeThatFits(ProposedViewSize(width: widths[cell.column], height: nil)).height
+            heights[cell.row] = max(heights[cell.row], ceil(height))
+        }
+        let size = CGSize(
+            width: widths.reduce(0, +) + CGFloat(columns) * padding.width * 2,
+            height: heights.reduce(0, +) + CGFloat(rowCount) * padding.height * 2)
+        return Geometry(widths: widths, heights: heights, size: size)
+    }
+
+    /// Water-filling: columns no wider than an even share of the room keep their natural width; the others split
+    /// what remains evenly, but never below `minimum` (or their natural width, if that's narrower).
+    static func fit(_ ideal: [CGFloat], into limit: CGFloat, minimum: CGFloat) -> [CGFloat] {
+        guard ideal.reduce(0, +) > limit else { return ideal }
+        var widths = ideal
+        var open = Set(ideal.indices)
+        var remaining = max(limit, 0)
+        while !open.isEmpty {
+            let share = remaining / CGFloat(open.count)
+            let fitting = open.filter { ideal[$0] <= share }
+            if fitting.isEmpty {
+                for c in open { widths[c] = share }
+                break
+            }
+            for c in fitting {
+                remaining -= ideal[c]
+                open.remove(c)
+            }
+        }
+        return widths.indices.map { max(floor(widths[$0]), min(ideal[$0], minimum)) }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        geometry(subviews, proposedWidth: proposal.width).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let g = geometry(subviews, proposedWidth: proposal.width)
+        var xs: [CGFloat] = [0], ys: [CGFloat] = [0]
+        for w in g.widths { xs.append(xs.last! + w + padding.width * 2) }
+        for h in g.heights { ys.append(ys.last! + h + padding.height * 2) }
+
+        for view in subviews {
+            switch view[TableSlotKey.self] {
+            case .header:
+                guard g.heights.count > 0 else { continue }
+                view.place(
+                    at: bounds.origin, proposal: ProposedViewSize(width: g.size.width, height: ys[1]))
+            case .rule(let r):
+                guard r + 1 < ys.count else { continue }
+                view.place(
+                    at: CGPoint(x: bounds.minX, y: bounds.minY + ys[r + 1]), anchor: .leading,
+                    proposal: ProposedViewSize(width: g.size.width, height: 1))
+            case .cell(let r, let c):
+                let width = g.widths[c]
+                let used = min(view.sizeThatFits(ProposedViewSize(width: width, height: nil)).width, width)
+                let slack = width - used
+                let offset = alignments[c] == .trailing ? slack : alignments[c] == .center ? slack / 2 : 0
+                view.place(
+                    at: CGPoint(x: bounds.minX + xs[c] + padding.width + offset, y: bounds.minY + ys[r] + padding.height),
+                    proposal: ProposedViewSize(width: width, height: nil))
+            }
         }
     }
 }

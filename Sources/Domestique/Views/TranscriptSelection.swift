@@ -280,7 +280,7 @@ extension MarkdownParser {
                     let marker = item.checked.map { $0 ? "[x] " : "[ ] " } ?? (ordered ? "\(i + 1). " : "- ")
                     out.append(Segment(id: "\(id).\(i)", text: plain(item.text), lead: (i == 0 ? "\n\n" : "\n") + indent + marker))
                 }
-            case .table(let rows):
+            case .table(let rows, _):
                 for (r, row) in rows.enumerated() {
                     for (c, cell) in row.enumerated() {
                         let lead = c > 0 ? "\t" : r == 0 ? "\n\n" : "\n"
@@ -320,6 +320,8 @@ struct SpanText: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: SpanTextView, context: Context) -> CGSize? {
         guard let container = view.textContainer, let layout = view.layoutManager else { return nil }
+        // SwiftUI can measure before `updateNSView` has run; measure the text we'll show, not what's there.
+        if view.textStorage?.isEqual(to: text) != true { view.textStorage?.setAttributedString(text) }
         // TextKit treats a zero width as "no limit" and, for very wide containers, can report the container's
         // width as the used width. Either way a nil, zero or infinite proposal would stretch the view to all
         // the room it's given instead of hugging its text, so measure against a wide but finite container.
@@ -328,7 +330,13 @@ struct SpanText: NSViewRepresentable {
         container.size = NSSize(width: wraps ? proposed : unbounded, height: .greatestFiniteMagnitude)
         layout.ensureLayout(for: container)
         let used = layout.usedRect(for: container)
-        return CGSize(width: ceil(used.width), height: ceil(used.height))
+        // The width from the laid-out lines only: with no text, the used rect is the empty extra line fragment,
+        // which spans the whole container and would make an empty table cell claim 20,000pt.
+        var width: CGFloat = 0
+        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, lineUsed, _, _, _ in
+            width = max(width, lineUsed.maxX)
+        }
+        return CGSize(width: ceil(width), height: ceil(used.height))
     }
 
     /// Where the first line's baseline sits, measured from the top. An NSView has no text baselines SwiftUI
