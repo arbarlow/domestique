@@ -104,7 +104,7 @@ struct ComposerView: View {
     @Bindable var chat: ChatModel
     @FocusState private var focused: Bool
     @State private var draftHeight: CGFloat = 34
-    /// About 14 lines of body text; taller drafts scroll inside the composer.
+    /// About 11 lines of text; taller drafts scroll inside the composer.
     private static let maxDraftHeight: CGFloat = 250
 
     var body: some View {
@@ -124,7 +124,9 @@ struct ComposerView: View {
             ScrollView(.vertical) {
                 TextField(placeholder, text: $chat.draft, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(Theme.body)
+                    // Same type as a sent message (14pt on a 22pt line), so the draft reads like the chat.
+                    .font(.system(size: 14))
+                    .lineSpacing(Theme.lineSpacing(size: 14, lineHeight: 22))
                     .focused($focused)
                     .onSubmit { chat.send() }
                     .onKeyPress(.return, phases: .down) { press in
