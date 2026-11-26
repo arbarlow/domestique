@@ -140,7 +140,18 @@ func testEnv(port: Int = 0) -> [String: String] {
                 id: "srv", command: "trap 'exit 0' TERM; python3 -c \"\(server)\" & wait", kind: .service,
                 readyPort: "\(port)"),
             workspacePath: NSTemporaryDirectory(), environment: env)
-        func status() -> Comment { "state \(run.state), output: \(run.lines.map(\.text).joined(separator: " | "))" }
+        func status() -> Comment {
+            let ps = Process()
+            ps.executableURL = URL(fileURLWithPath: "/bin/sh")
+            ps.arguments = ["-c", "which python3; python3 --version; ps -o pid,ppid,pgid,stat,command -g \(run.pid ?? 0)"]
+            let pipe = Pipe()
+            ps.standardOutput = pipe
+            ps.standardError = pipe
+            try? ps.run()
+            ps.waitUntilExit()
+            let procs = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            return "state \(run.state), output: \(run.lines.map(\.text).joined(separator: " | "))\n\(procs)"
+        }
         run.start()
         let pid = try #require(run.pid)
         #expect(await waitFor(15) { run.state == .ready }, status())
