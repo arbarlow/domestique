@@ -20,8 +20,10 @@ struct DockView: View {
                         if let term = model.terminals.first(where: { $0.id == id }) {
                             TerminalHost(session: term)
                                 .id(term.id)
-                                .padding(.leading, 8)
-                                .padding(.top, 4)
+                                .padding(.leading, 12)
+                                .padding(.trailing, 4)
+                                .padding(.top, 8)
+                                .padding(.bottom, 14)
                         } else {
                             RunPane(model: model)
                         }

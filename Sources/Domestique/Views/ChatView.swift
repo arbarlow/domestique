@@ -588,6 +588,8 @@ private struct QueuedMessagesView: View {
                     QueuedRow(chat: chat, message: m)
                 }
             }
+            // Matches the overlap below so the last row keeps its padding under the composer.
+            .padding(.bottom, 6)
             .background(Theme.sunken, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
             .padding(.horizontal, 42)

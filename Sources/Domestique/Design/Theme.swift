@@ -31,6 +31,8 @@ enum Theme {
     static let userBubbleText = text
     /// The composer's round send button.
     static let sendButton = dyn(light: 0x2C2C30, dark: 0x4A4A4E)
+    /// Fill for primary (prominent) buttons: Accept, Send, Restart to Update.
+    static let primary = sendButton
     static let added = dyn(light: 0x3E8E58, dark: 0x5DBB74)
     static let removed = dyn(light: 0xC9575E, dark: 0xF07A7F)
     static let addedBG = dyn(light: 0x1A7F37, dark: 0x3FB950, lightAlpha: 0.09, darkAlpha: 0.14)
@@ -129,13 +131,13 @@ struct SoftButtonStyle: ButtonStyle {
     var compact = false
     /// Red label, for actions that remove or delete something.
     var destructive = false
-    /// Fill for prominent buttons; defaults to the near-black `userBubble`.
+    /// Fill for prominent buttons; defaults to the near-black `Theme.primary`.
     var fill: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         SoftButtonBody(
             configuration: configuration, prominent: prominent, compact: compact, destructive: destructive,
-            fill: fill ?? Theme.userBubble)
+            fill: fill ?? Theme.primary)
     }
 
     private struct SoftButtonBody: View {
