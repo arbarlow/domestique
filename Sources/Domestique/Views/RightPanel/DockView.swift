@@ -20,10 +20,10 @@ struct DockView: View {
                         if let term = model.terminals.first(where: { $0.id == id }) {
                             TerminalHost(session: term)
                                 .id(term.id)
-                                .padding(.leading, 12)
-                                .padding(.trailing, 4)
-                                .padding(.top, 8)
-                                .padding(.bottom, 14)
+                                .padding(.leading, 16)
+                                .padding(.trailing, 8)
+                                .padding(.top, 12)
+                                .padding(.bottom, 18)
                         } else {
                             RunPane(model: model)
                         }
@@ -534,33 +534,46 @@ private struct MergedLogView: View {
         var id: Int { line.id }
     }
 
+    @State private var position = ScrollPosition(edge: .bottom)
+
+    /// Scrolls to the content's bottom edge (so the bottom padding stays visible), repeated over the
+    /// next couple of runloop turns: the lazy stack only knows estimated heights for rows it hasn't
+    /// laid out, so the first jump can land short of the real end.
+    private func scrollToBottom() {
+        position.scrollTo(edge: .bottom)
+        DispatchQueue.main.async {
+            position.scrollTo(edge: .bottom)
+            DispatchQueue.main.async { position.scrollTo(edge: .bottom) }
+        }
+    }
+
     var body: some View {
         let entries = merged()
         let names = runs.count == 1 ? [""] : runs.map { "[\($0.id)] " }
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(entries) { e in
-                        Text(tagged(names[e.run], color: tagPalette[e.run % tagPalette.count], line: e.line))
-                            .font(.system(size: 11.5, design: .monospaced))
-                            .foregroundStyle(Theme.text)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id(e.id)
-                    }
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                ForEach(entries) { e in
+                    Text(tagged(names[e.run], color: tagPalette[e.run % tagPalette.count], line: e.line))
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .textSelection(.enabled)
             }
-            .onChange(of: entries.last?.id) { _, id in
-                if follow, let id { proxy.scrollTo(id, anchor: .bottom) }
-            }
-            .onChange(of: follow) { _, on in
-                if on, let id = entries.last?.id { proxy.scrollTo(id, anchor: .bottom) }
-            }
-            .onAppear {
-                if let id = entries.last?.id { proxy.scrollTo(id, anchor: .bottom) }
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 18)
+            .textSelection(.enabled)
+        }
+        .defaultScrollAnchor(.bottom)
+        .scrollPosition($position)
+        .onChange(of: entries.last?.id) { _, id in
+            if follow, id != nil { scrollToBottom() }
+        }
+        .onChange(of: follow) { _, on in
+            if on { scrollToBottom() }
+        }
+        .onAppear {
+            if !entries.isEmpty { scrollToBottom() }
         }
     }
 
