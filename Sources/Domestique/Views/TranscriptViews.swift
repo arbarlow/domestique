@@ -104,11 +104,15 @@ struct TranscriptView: View {
         chat.items.last(where: { if case .user = $0.kind { true } else { false } })?.id
     }
 
-    /// The lazy stack only knows estimated heights for rows it hasn't laid out, so the first jump can
-    /// land short of the end; a second one on the next runloop turn settles on the real bottom.
+    /// The lazy stack only knows estimated heights for rows it hasn't laid out, so a jump can land
+    /// short of (or past) the real end and show blank space until a scroll forces layout. Repeating it
+    /// over the next couple of runloop turns lets the stack measure the rows it lands on and settle.
     private func scrollToBottom() {
         position.scrollTo(edge: .bottom)
-        DispatchQueue.main.async { position.scrollTo(edge: .bottom) }
+        DispatchQueue.main.async {
+            position.scrollTo(edge: .bottom)
+            DispatchQueue.main.async { position.scrollTo(edge: .bottom) }
+        }
     }
 
     var body: some View {
@@ -143,9 +147,18 @@ struct TranscriptView: View {
             guard old != nil, new != nil else { return }
             scrollToBottom()
         }
+        // Switching to a tab rebuilds this view, and a tab's history arrives in one batch after it
+        // appears. Either way the default bottom anchor works from estimated row heights and can leave
+        // the viewport over blank space, so settle on the real bottom explicitly.
+        .onChange(of: chat.items.isEmpty) { _, empty in
+            if !empty { scrollToBottom() }
+        }
         .scrollContentBackground(.hidden)
         .environment(\.transcriptSelection, selection)
-        .onAppear { selection.start() }
+        .onAppear {
+            selection.start()
+            if !chat.items.isEmpty { scrollToBottom() }
+        }
         .onDisappear { selection.stop() }
     }
 }
